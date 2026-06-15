@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -17,13 +16,6 @@ func Open(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Connection pool settings to prevent exhausting MariaDB connections under load
-	db.SetMaxOpenConns(50)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
