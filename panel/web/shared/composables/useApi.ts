@@ -34,6 +34,11 @@ export interface UseApiReturn {
 /** Module-level CSRF token storage (shared across all useApi instances) */
 let csrfToken: string = ''
 
+/** Get the current CSRF token value */
+export function getCsrfToken(): string {
+  return csrfToken
+}
+
 /**
  * Composable for making API requests with consistent loading state,
  * error handling, CSRF token management, and authentication failure detection.
