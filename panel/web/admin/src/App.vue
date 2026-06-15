@@ -669,7 +669,12 @@ async function setNodeEnabled(node: NodeItem, enabled: boolean) {
   } catch (err) { error.value = friendlyError(err) } finally { busy.value = false }
 }
 function serviceLabel(node: NodeItem, key: string) {
-  return node.services?.find((service) => service.service === key)?.status || node.status_metrics?.[`${key}_status` as keyof NodeStatus] || 'unknown'
+  const raw = node.services?.find((service) => service.service === key)?.status || node.status_metrics?.[`${key}_status` as keyof NodeStatus] || 'unknown'
+  const s = String(raw).toLowerCase()
+  if (s === 'active' || s === 'running') return 'running'
+  if (s === 'inactive' || s === 'dead' || s === 'stopped') return 'stopped'
+  if (s === 'failed' || s === 'error') return 'failed'
+  return s
 }
 function bps(value?: number) {
   const n = Number(value || 0)
