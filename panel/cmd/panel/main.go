@@ -17,6 +17,8 @@ import (
 	"koris-next/panel/internal/config"
 	"koris-next/panel/internal/db"
 	"koris-next/panel/internal/notify"
+	"koris-next/panel/internal/ratelimit"
+	"koris-next/panel/internal/sessions"
 )
 
 func dbNameFromDSN(dsn string) string {
@@ -103,6 +105,12 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 	startWorker(database)
+
+	// Start session enforcer (kills excess connections every 30s)
+	enforcer := sessions.NewEnforcer(database)
+	enforcer.Start()
+	log.Println("[main] session enforcer started")
+
 	srv := api.New(database, cfg)
 
 	// Start Telegram bot
@@ -132,5 +140,8 @@ func main() {
 	}
 
 	log.Printf("panel listening on %s", cfg.Addr)
-	log.Fatal(http.ListenAndServe(cfg.Addr, mux))
+
+	// Rate limiter: 10 requests/sec per IP, burst 30
+	limiter := ratelimit.New(10, 30)
+	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(mux)))
 }
