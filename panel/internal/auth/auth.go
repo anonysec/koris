@@ -104,23 +104,25 @@ func ReadSession(r *http.Request, cookieName, secret string) (string, bool) {
 	return username, username != ""
 }
 
-func SetSession(w http.ResponseWriter, cookieName, username, secret string) {
+func SetSession(w http.ResponseWriter, cookieName, username, secret string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    MakeSession(username, secret, 24*time.Hour),
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(24 * time.Hour),
 	})
 }
 
-func ClearSession(w http.ResponseWriter, cookieName string) {
+func ClearSession(w http.ResponseWriter, cookieName string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
@@ -129,7 +131,7 @@ func ClearSession(w http.ResponseWriter, cookieName string) {
 
 func sign(payload, secret string) string {
 	if secret == "" {
-		secret = "koris-next-dev-session-secret"
+		panic("auth: session secret must not be empty (config validation should prevent this)")
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(payload))

@@ -15,6 +15,7 @@ import (
 	"koris-next/panel/internal/api"
 	"koris-next/panel/internal/bot"
 	"koris-next/panel/internal/config"
+	"koris-next/panel/internal/csrf"
 	"koris-next/panel/internal/db"
 	"koris-next/panel/internal/notify"
 	"koris-next/panel/internal/ratelimit"
@@ -82,7 +83,10 @@ func startWorker(db *sql.DB) {
 				if dbname == "" {
 					dbname = "radius_next"
 				}
-				cmd := exec.Command("mysqldump", "-u", user, "-p"+pass, dbname)
+				// Use MYSQL_PWD environment variable instead of -p flag to prevent
+				// password exposure in process list (visible via ps aux or /proc/*/cmdline).
+				cmd := exec.Command("mysqldump", "-u", user, dbname)
+				cmd.Env = append(os.Environ(), "MYSQL_PWD="+pass)
 				out, err := os.Create(file)
 				if err == nil {
 					cmd.Stdout = out
@@ -142,6 +146,10 @@ func main() {
 	log.Printf("panel listening on %s", cfg.Addr)
 
 	// Rate limiter: 10 requests/sec per IP, burst 30
-	limiter := ratelimit.New(10, 30)
-	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(mux)))
+	limiter := ratelimit.New(10, 30, cfg.TrustedProxies)
+
+	// CSRF middleware: between rate limiter and route handler
+	csrfProtected := csrf.Middleware(cfg.SessionSecret, mux)
+
+	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(csrfProtected)))
 }

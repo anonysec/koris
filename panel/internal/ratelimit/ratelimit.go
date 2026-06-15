@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -12,14 +13,31 @@ type visitor struct {
 }
 
 type Limiter struct {
-	visitors map[string]*visitor
-	mu       sync.Mutex
-	rate     float64 // tokens per second
-	burst    int
+	visitors       map[string]*visitor
+	mu             sync.Mutex
+	rate           float64 // tokens per second
+	burst          int
+	trustedProxies map[string]bool
+	trustedCIDRs   []*net.IPNet
 }
 
-func New(rate float64, burst int) *Limiter {
-	l := &Limiter{visitors: make(map[string]*visitor), rate: rate, burst: burst}
+func New(rate float64, burst int, trustedProxies []string) *Limiter {
+	proxies := make(map[string]bool)
+	var cidrs []*net.IPNet
+	for _, p := range trustedProxies {
+		if _, cidr, err := net.ParseCIDR(p); err == nil {
+			cidrs = append(cidrs, cidr)
+		} else {
+			proxies[p] = true
+		}
+	}
+	l := &Limiter{
+		visitors:       make(map[string]*visitor),
+		rate:           rate,
+		burst:          burst,
+		trustedProxies: proxies,
+		trustedCIDRs:   cidrs,
+	}
 	go l.cleanup()
 	return l
 }
@@ -58,12 +76,40 @@ func (l *Limiter) Allow(ip string) bool {
 	return true
 }
 
+func (l *Limiter) isTrustedProxy(ip string) bool {
+	if l.trustedProxies[ip] {
+		return true
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, cidr := range l.trustedCIDRs {
+		if cidr.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *Limiter) clientIP(r *http.Request) string {
+	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if remoteIP == "" {
+		remoteIP = r.RemoteAddr
+	}
+	if l.isTrustedProxy(remoteIP) {
+		if fwd := r.Header.Get("X-Real-IP"); fwd != "" {
+			if ip := net.ParseIP(fwd); ip != nil {
+				return fwd
+			}
+		}
+	}
+	return remoteIP
+}
+
 func (l *Limiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := r.RemoteAddr
-		if fwd := r.Header.Get("X-Real-IP"); fwd != "" {
-			ip = fwd
-		}
+		ip := l.clientIP(r)
 		if !l.Allow(ip) {
 			http.Error(w, `{"ok":false,"error":"rate_limit_exceeded"}`, http.StatusTooManyRequests)
 			return
