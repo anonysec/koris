@@ -127,6 +127,9 @@ export const useAuthStore = defineStore('auth', () => {
    */
   async function login(username: string, password: string): Promise<boolean> {
     try {
+      // Preflight: ensure CSRF token is available on fresh sessions
+      await get<any>('/api/health').catch(() => null)
+
       const res = await post<LoginResponse>('/api/auth/admin', {
         username,
         password,
@@ -176,6 +179,9 @@ export const useAuthStore = defineStore('auth', () => {
     setup_key?: string
   }): Promise<boolean> {
     try {
+      // Preflight: ensure CSRF token is available on fresh sessions
+      await get<any>('/api/health').catch(() => null)
+
       const res = await post<SetupResponse>('/api/setup/owner', params)
 
       user.value = {
