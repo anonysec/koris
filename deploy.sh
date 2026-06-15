@@ -50,6 +50,15 @@ copy_dir "$PROJECT_DIR/panel/web/admin/www" "$INSTALL_DIR/web/admin/www"
 copy_dir "$PROJECT_DIR/panel/web/portal/www" "$INSTALL_DIR/web/portal/www"
 
 echo "[deploy] Restarting panel service..."
+# Update version in panel.env so the running binary picks it up
+if [ -f /etc/panel/panel.env ]; then
+  if grep -q '^PANEL_VERSION=' /etc/panel/panel.env; then
+    sed -i "s|^PANEL_VERSION=.*|PANEL_VERSION='${VERSION}'|" /etc/panel/panel.env
+  else
+    echo "PANEL_VERSION='${VERSION}'" >> /etc/panel/panel.env
+  fi
+  echo "[deploy] Updated PANEL_VERSION to ${VERSION} in panel.env"
+fi
 sudo systemctl daemon-reload
 sudo systemctl restart panel.service
 
