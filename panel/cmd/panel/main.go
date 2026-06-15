@@ -1,0 +1,88 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"koris-next/panel/internal/api"
+	"koris-next/panel/internal/config"
+	"koris-next/panel/internal/db"
+)
+
+func dbNameFromDSN(dsn string) string {
+	parts := strings.Split(dsn, "/")
+	if len(parts) >= 2 {
+		dbPart := parts[len(parts)-1]
+		if i := strings.Index(dbPart, "?"); i != -1 {
+			return dbPart[:i]
+		}
+		return dbPart
+	}
+	return ""
+}
+
+func mysqlCredsFromDSN(dsn string) (user, pass, db string) {
+	at := strings.Index(dsn, "@")
+	if at == -1 {
+		return "", "", ""
+	}
+	creds := dsn[:at]
+	colon := strings.Index(creds, ":")
+	if colon != -1 {
+		user = creds[:colon]
+		pass = creds[colon+1:]
+	}
+	db = dbNameFromDSN(dsn)
+	return
+}
+
+func startWorker(db *sql.DB) {
+	ticker := time.NewTicker(time.Minute)
+	go func() {
+		for t := range ticker.C {
+			_, _ = db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`)
+			_, _ = db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`)
+			_, _ = db.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Stalled session' WHERE acctstoptime IS NULL AND acctupdatetime < (NOW() - INTERVAL 5 MINUTE)`)
+			_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+			if t.Hour() == 2 && t.Minute() == 0 {
+				dir := "/var/backups/koris-next"
+				_ = os.MkdirAll(dir, 0755)
+				file := filepath.Join(dir, fmt.Sprintf("db-%s.sql.gz", t.Format("2006-01-02")))
+				user, pass, dbname := mysqlCredsFromDSN(os.Getenv("PANEL_DB_DSN"))
+				if dbname == "" {
+					dbname = "radius_next"
+				}
+				cmd := exec.Command("mysqldump", "-u", user, "-p"+pass, dbname)
+				out, err := os.Create(file)
+				if err == nil {
+					cmd.Stdout = out
+					_ = cmd.Run()
+					_ = out.Close()
+				}
+			}
+		}
+	}()
+}
+
+func main() {
+	cfg := config.Load()
+	database, err := db.Open(cfg.DBDSN)
+	if err != nil {
+		log.Fatalf("db: %v", err)
+	}
+	migDir := os.Getenv("PANEL_MIGRATIONS")
+	if err := db.Migrate(database, migDir); err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
+	startWorker(database)
+	srv := api.New(database, cfg)
+	log.Printf("panel listening on %s", cfg.Addr)
+	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Routes()))
+}

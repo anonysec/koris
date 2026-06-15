@@ -1,0 +1,16 @@
+[Unit]
+Description=Koris Next Panel
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/panel/panel.env
+ExecStart=/usr/local/bin/panel
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/opt/koris-next
+
+[Install]
+WantedBy=multi-user.target

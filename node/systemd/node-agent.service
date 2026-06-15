@@ -1,0 +1,16 @@
+[Unit]
+Description=Koris Next Node Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/panel-node/node.env
+ExecStart=/usr/local/bin/panel-node
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/opt/koris-next
+
+[Install]
+WantedBy=multi-user.target
