@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/csv"
@@ -11,6 +12,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -415,7 +417,7 @@ func (s *Server) setupOwner(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	auth.SetSession(w, auth.AdminCookieName, in.Username, s.Config.SessionSecret)
+	auth.SetSession(w, auth.AdminCookieName, in.Username, s.Config.SessionSecret, s.Config.SecureCookies)
 	writeJSON(w, map[string]any{"ok": true, "username": in.Username, "role": "owner"})
 }
 
@@ -442,7 +444,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
 		return
 	}
-	auth.SetSession(w, auth.AdminCookieName, in.Username, s.Config.SessionSecret)
+	auth.SetSession(w, auth.AdminCookieName, in.Username, s.Config.SessionSecret, s.Config.SecureCookies)
 	role := "admin"
 	_ = s.DB.QueryRow(`SELECT role FROM admins WHERE username=? LIMIT 1`, in.Username).Scan(&role)
 	writeJSON(w, map[string]any{"ok": true, "username": in.Username, "role": role})
@@ -466,7 +468,7 @@ func (s *Server) adminLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	auth.ClearSession(w, auth.AdminCookieName)
+	auth.ClearSession(w, auth.AdminCookieName, s.Config.SecureCookies)
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -486,13 +488,19 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 	in.Username = strings.TrimSpace(in.Username)
 	var pw string
 	err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, in.Username).Scan(&pw)
-	if err != nil || pw != in.Password {
+	if err != nil {
+		// Perform dummy comparison to prevent timing-based user enumeration
+		subtle.ConstantTimeCompare([]byte("dummy-value-padding"), []byte(in.Password))
+		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(pw), []byte(in.Password)) != 1 {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
 		return
 	}
 	_, _ = s.DB.Exec(`INSERT IGNORE INTO customers(username,sub_token) VALUES(?,?)`, in.Username, auth.RandomToken(24))
 	_, _ = s.DB.Exec(`INSERT IGNORE INTO wallets(username,credit) VALUES(?,0)`, in.Username)
-	auth.SetSession(w, auth.CustomerCookieName, in.Username, s.Config.SessionSecret)
+	auth.SetSession(w, auth.CustomerCookieName, in.Username, s.Config.SessionSecret, s.Config.SecureCookies)
 	writeJSON(w, map[string]any{"ok": true, "username": in.Username})
 }
 
@@ -501,7 +509,7 @@ func (s *Server) customerLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	auth.ClearSession(w, auth.CustomerCookieName)
+	auth.ClearSession(w, auth.CustomerCookieName, s.Config.SecureCookies)
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -2163,13 +2171,11 @@ func validNodeTaskAction(action string) bool {
 	}
 }
 
+// authNode authenticates a node request.
+// Token is read ONLY from the X-Node-Token header. The request body is never consumed,
+// allowing downstream handlers to read it for their own purposes.
 func (s *Server) authNode(r *http.Request) (int64, bool) {
 	token := r.Header.Get("X-Node-Token")
-	if token == "" {
-		var in struct{ Token string `json:"token"` }
-		_ = json.NewDecoder(r.Body).Decode(&in)
-		token = in.Token
-	}
 	if token == "" {
 		return 0, false
 	}
@@ -2190,7 +2196,7 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			return true
+			return s.checkWSOrigin(r)
 		},
 	}
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -3748,7 +3754,7 @@ func (s *Server) portalPassword(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid_old_password"})
 		return
 	}
-	if currentPw != in.OldPassword {
+	if subtle.ConstantTimeCompare([]byte(currentPw), []byte(in.OldPassword)) != 1 {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid_old_password"})
 		return
 	}
@@ -5627,4 +5633,50 @@ func (s *Server) panelSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 	}
+}
+
+
+// checkWSOrigin validates the WebSocket Origin header against allowed origins.
+// Empty Origin is allowed (same-origin requests from some browsers).
+// The configured PublicBase and AllowedOrigins are checked.
+func (s *Server) checkWSOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // Same-origin requests may not send Origin
+	}
+
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	originHost := originURL.Host
+
+	// Check against PublicBase
+	if s.Config.PublicBase != "" {
+		if pubURL, err := url.Parse(s.Config.PublicBase); err == nil {
+			if pubURL.Host != "" && strings.EqualFold(pubURL.Host, originHost) {
+				return true
+			}
+		}
+	}
+
+	// Check against AllowedOrigins list
+	for _, allowed := range s.Config.AllowedOrigins {
+		if allowedURL, err := url.Parse(allowed); err == nil {
+			if strings.EqualFold(allowedURL.Host, originHost) {
+				return true
+			}
+		}
+		// Also allow direct host comparison
+		if strings.EqualFold(allowed, originHost) || strings.EqualFold(allowed, origin) {
+			return true
+		}
+	}
+
+	// Check if origin matches the request's Host header (same-origin)
+	if strings.EqualFold(originHost, r.Host) {
+		return true
+	}
+
+	return false
 }
