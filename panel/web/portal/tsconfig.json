@@ -14,7 +14,15 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "preserve"
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@koris/ui/*": ["../shared/components/*"],
+      "@koris/composables/*": ["../shared/composables/*"],
+      "@koris/types/*": ["../shared/types/*"],
+      "@koris/styles/*": ["../shared/styles/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
   "references": []

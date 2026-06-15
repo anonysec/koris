@@ -1,0 +1,91 @@
+<template>
+  <span
+    class="k-avatar"
+    :style="avatarStyles"
+    :aria-label="`Avatar for ${name}`"
+    role="img"
+  >
+    <img
+      v-if="src"
+      :src="src"
+      :alt="name"
+      class="k-avatar__image"
+      @error="handleImageError"
+    />
+    <span v-else class="k-avatar__initials">{{ initials }}</span>
+  </span>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+
+export interface KAvatarProps {
+  name: string
+  size?: number
+  src?: string
+}
+
+const props = withDefaults(defineProps<KAvatarProps>(), {
+  size: 32,
+})
+
+const imgFailed = ref(false)
+
+const initials = computed(() => {
+  return props.name.slice(0, 2).toUpperCase()
+})
+
+function hashString(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return Math.abs(hash)
+}
+
+const gradientBackground = computed(() => {
+  const hash = hashString(props.name)
+  const hue1 = hash % 360
+  const hue2 = (hue1 + 45) % 360
+  return `linear-gradient(135deg, hsl(${hue1}, 60%, 45%), hsl(${hue2}, 70%, 55%))`
+})
+
+const avatarStyles = computed(() => ({
+  width: `${props.size}px`,
+  height: `${props.size}px`,
+  fontSize: `${Math.round(props.size * 0.38)}px`,
+  background: (!props.src || imgFailed.value) ? gradientBackground.value : 'transparent',
+}))
+
+function handleImageError() {
+  imgFailed.value = true
+}
+</script>
+
+<style scoped>
+.k-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.k-avatar__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.k-avatar__initials {
+  color: #fff;
+  font-family: var(--font-family);
+  font-weight: var(--font-semibold);
+  line-height: 1;
+  letter-spacing: var(--tracking-wide);
+}
+</style>
