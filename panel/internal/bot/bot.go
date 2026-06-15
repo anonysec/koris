@@ -7,7 +7,9 @@ package bot
 
 import (
 	"bytes"
+	crypto_rand "crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -650,9 +652,8 @@ func formatBytesBot(n int64) string {
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	for i := range b {
-		b[i] = "0123456789abcdef"[int(time.Now().UnixNano())%16]
-		time.Sleep(time.Nanosecond)
+	if _, err := crypto_rand.Read(b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
 	}
-	return string(b)
+	return hex.EncodeToString(b)
 }
