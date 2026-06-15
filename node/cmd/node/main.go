@@ -75,6 +75,7 @@ func main() {
 			"openvpn": serviceStatus("openvpn"),
 			"l2tp":    serviceStatus("xl2tpd"),
 			"ikev2":   serviceStatus("strongswan"),
+			"ssh":     serviceStatus("ssh"),
 		}
 		push := Push{
 			Token:         token,
@@ -170,6 +171,8 @@ func normalizeService(input string) string {
 		return "xl2tpd"
 	case "ikev2", "ipsec", "strongswan", "strongswan-starter":
 		return "strongswan"
+	case "ssh", "sshd", "ssh-tunnel", "dropbear":
+		return "ssh"
 	default:
 		return ""
 	}
@@ -215,15 +218,45 @@ func firstIP() string {
 }
 
 func serviceStatus(service string) string {
-	out, err := exec.Command("systemctl", "is-active", service).Output()
+	// Map logical names to systemd unit names
+	unitName := service
+	switch service {
+	case "ssh":
+		// Try sshd first (most distros), fallback to ssh (Debian/Ubuntu)
+		out, err := exec.Command("systemctl", "is-active", "sshd").Output()
+		if err == nil {
+			status := strings.TrimSpace(string(out))
+			if status == "active" {
+				return "running"
+			}
+		}
+		unitName = "ssh"
+	case "openvpn":
+		// Try openvpn@server first, fallback to openvpn
+		out, err := exec.Command("systemctl", "is-active", "openvpn@server").Output()
+		if err == nil {
+			status := strings.TrimSpace(string(out))
+			if status == "active" {
+				return "running"
+			}
+		}
+		unitName = "openvpn"
+	}
+	out, err := exec.Command("systemctl", "is-active", unitName).Output()
 	if err != nil {
-		return "inactive"
+		return "stopped"
 	}
 	status := strings.TrimSpace(string(out))
-	if status == "" {
-		return "unknown"
+	switch status {
+	case "active":
+		return "running"
+	case "inactive", "dead":
+		return "stopped"
+	case "failed":
+		return "failed"
+	default:
+		return status
 	}
-	return status
 }
 
 func cpuPercent() float64 {
