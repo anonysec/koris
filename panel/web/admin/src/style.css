@@ -58,7 +58,8 @@ button:disabled{cursor:not-allowed;opacity:.5}
 .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .card-head h4{font-size:14.5px;font-weight:600}
 .card-head .sub{font-size:11.5px;color:var(--muted);margin-top:1px}
-.stat-card{position:relative;overflow:hidden}
+.stat-card{position:relative;overflow:hidden;transition:transform .15s,border-color .15s}
+.stat-card:hover{transform:translateY(-2px);border-color:rgba(91,157,255,.2)}
 .stat-card .ic{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
 .stat-card .ic svg{width:18px;height:18px}
 .stat-card .lbl{font-size:11.5px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
