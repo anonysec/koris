@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+export GOTOOLCHAIN=local
+
 PROJECT_DIR="/root/koris-next"
 INSTALL_DIR="/opt/koris-next/panel"
 VERSION="$(cat "$PROJECT_DIR/VERSION" 2>/dev/null || echo next-dev)"
