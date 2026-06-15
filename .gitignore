@@ -1,11 +1,15 @@
 # Dependencies
 node_modules/
 
-# Build output (regenerated during deploy)
+# Build output (regenerated during deploy by npm run build)
+panel/web/admin/www/
+panel/web/portal/www/
 panel/web/admin/www/assets/
 panel/web/portal/www/assets/
 
 # Lock files (regenerated on npm install)
+panel/web/admin/package-lock.json
+panel/web/portal/package-lock.json
 package-lock.json
 
 # Go build artifacts
