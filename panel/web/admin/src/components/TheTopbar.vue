@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Breadcrumb } from '@koris/types/components'
+import { useI18n } from '@koris/composables/useI18n'
+import type { Locale } from '@koris/composables/useI18n'
+
+const { locale, setLocale } = useI18n()
 
 export interface Props {
   title: string
@@ -127,6 +131,18 @@ function handleSearchKeyup(event: KeyboardEvent) {
         <kbd v-show="showSearchBar" class="search-shortcut">⌘K</kbd>
       </div>
 
+      <!-- Language Switcher -->
+      <div class="lang-switcher" role="group" aria-label="Language switcher">
+        <button
+          v-for="lang in (['en', 'fa', 'zh'] as Locale[])"
+          :key="lang"
+          :class="['lang-btn', { 'lang-btn--active': locale === lang }]"
+          @click="setLocale(lang)"
+        >
+          {{ lang === 'en' ? 'EN' : lang === 'fa' ? 'FA' : 'ZH' }}
+        </button>
+      </div>
+
       <!-- Realtime connection status -->
       <div
         :class="['status-dot', { offline: !realtimeConnected }]"
@@ -239,40 +255,39 @@ function handleSearchKeyup(event: KeyboardEvent) {
   gap: var(--space-3, 12px);
 }
 
-/* Search box */
+/* Search box - styled to match KInput design system */
 .search-box {
   display: flex;
   align-items: center;
   gap: var(--space-2, 8px);
-  background: var(--color-surface, #0b1120);
-  border: 1px solid var(--color-border, #28333f);
-  padding: var(--space-2, 8px);
-  border-radius: var(--radius-lg, 10px);
-  width: 38px;
-  height: 38px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  width: 36px;
+  height: 36px;
   overflow: hidden;
   cursor: pointer;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 0.2s;
+              border-color var(--duration-normal, 0.15s) var(--ease-default, ease),
+              box-shadow var(--duration-normal, 0.15s) var(--ease-default, ease);
 }
 
 .search-box--expanded {
   width: 240px;
-  padding: var(--space-2, 8px) var(--space-3, 12px);
   cursor: text;
 }
 
 .search-box:focus-within {
-  border-color: rgba(37, 99, 235, 0.5);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
 
 .search-box svg {
   width: 16px;
   height: 16px;
   min-width: 16px;
-  color: var(--color-muted, #8b98a5);
+  color: var(--color-muted);
   flex-shrink: 0;
 }
 
@@ -280,8 +295,9 @@ function handleSearchKeyup(event: KeyboardEvent) {
   background: none;
   border: none;
   outline: none;
-  color: var(--color-text, #e6edf3);
-  font-size: var(--text-sm, 12.5px);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-family: var(--font-family);
   width: 100%;
   min-height: unset;
   padding: 0;
@@ -294,15 +310,15 @@ function handleSearchKeyup(event: KeyboardEvent) {
 }
 
 .search-box input::placeholder {
-  color: rgba(139, 152, 165, 0.5);
+  color: var(--color-muted);
 }
 
 .search-shortcut {
   font-size: 10px;
-  color: var(--color-muted, #8b98a5);
+  color: var(--color-muted);
   background: var(--color-surface-2, #1e2630);
-  border: 1px solid var(--color-border, #28333f);
-  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 2px 5px;
   font-family: var(--font-mono, monospace);
   white-space: nowrap;
@@ -370,6 +386,40 @@ function handleSearchKeyup(event: KeyboardEvent) {
 .icon-btn svg {
   width: 16px;
   height: 16px;
+}
+
+/* Language Switcher */
+.lang-switcher {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+.lang-btn {
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border: none;
+  background: var(--color-surface, #0b1120);
+  color: var(--color-muted, #8b98a5);
+  font-size: var(--text-xs, 11px);
+  font-weight: var(--font-medium, 500);
+  cursor: pointer;
+  transition: all var(--duration-fast, 0.12s);
+}
+
+.lang-btn:not(:last-child) {
+  border-right: 1px solid var(--color-border, #28333f);
+}
+
+.lang-btn:hover {
+  color: var(--color-text, #e6edf3);
+  background: var(--color-surface-2, #1e2630);
+}
+
+.lang-btn--active {
+  color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.1);
 }
 
 </style>

@@ -163,7 +163,7 @@ export const useNodesStore = defineStore('nodes', () => {
   // No onUnauthorized handler — the router guard handles auth redirects.
   // This prevents race conditions where a 401 during initial data load
   // would clear auth state and cause a redirect loop after login.
-  const { get, post, patch, error } = useApi()
+  const { get, post, patch, del, error } = useApi()
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
@@ -370,6 +370,27 @@ export const useNodesStore = defineStore('nodes', () => {
     }
   }
 
+  /**
+   * Delete a node.
+   * DELETE /api/nodes/:id → { ok }
+   *
+   * On success, reloads the nodes list.
+   * On error, preserves existing data.
+   */
+  async function deleteNode(nodeId: number): Promise<boolean> {
+    loading.value = true
+    try {
+      await del<NodeMutationResponse>(`/api/nodes/${nodeId}`)
+      await loadNodes()
+      return true
+    } catch {
+      // Preserve existing data on error (Requirement 3.4)
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   return {
     // State
@@ -390,6 +411,7 @@ export const useNodesStore = defineStore('nodes', () => {
     createNode,
     rotateNodeToken,
     updateNode,
+    deleteNode,
     createNodeTask,
     updateVpnSettings,
     saveNodeVpnConfig,

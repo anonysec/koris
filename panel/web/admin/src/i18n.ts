@@ -1,7 +1,7 @@
-import { ref } from 'vue'
+import { registerMessages, useI18n } from '@koris/composables/useI18n'
+import type { Locale } from '@koris/composables/useI18n'
 
-export type Locale = 'en' | 'fa' | 'zh'
-export const locale = ref<Locale>('en')
+export type { Locale }
 
 const messages: Record<Locale, Record<string, string>> = {
   en: {
@@ -264,8 +264,10 @@ const messages: Record<Locale, Record<string, string>> = {
   }
 }
 
-export function t(key: string): string {
-  return messages[locale.value]?.[key] || messages.en[key] || key
-}
+// Register all admin translation bundles with the shared i18n system
+registerMessages(messages)
 
-export function setLocale(l: Locale) { locale.value = l }
+// Re-export from the shared composable so any component importing from '@/i18n'
+// gets the single canonical state (no dual locale refs).
+const { t, locale, setLocale } = useI18n()
+export { t, locale, setLocale }
