@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useNodesStore } from '@/stores/nodes'
+import { useToast } from '@koris/composables/useToast'
 import KTabs from '@koris/ui/KTabs.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
@@ -8,8 +9,10 @@ import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
+import KSelect from '@koris/ui/KSelect.vue'
 
 const store = useNodesStore()
+const toast = useToast()
 const activeTab = ref('nodes')
 const showAddForm = ref(false)
 const creating = ref(false)
@@ -26,14 +29,58 @@ const nodeForm = ref({
   domain: '',
 })
 
-const protocols = ['OpenVPN', 'L2TP', 'IKEv2', 'SSH'] as const
 
+// ─── Protocol Defaults & Config State ────────────────────────────────────────
+const PROTOCOL_DEFAULTS: Record<string, any> = {
+  openvpn: { port: 1194, network: '10.8.0.0/24', enabled: true, extra_json: { transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
+  l2tp: { port: 1701, network: '10.9.0.0/24', enabled: true, extra_json: { psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
+  ikev2: { port: 500, network: '10.10.0.0/24', enabled: true, extra_json: { psk: '', cert_id: null, dns1: '8.8.8.8', dns2: '8.8.4.4' } },
+  ssh: { port: 2222, network: '', enabled: true, extra_json: { listen_address: '0.0.0.0', key_type: 'ed25519' } },
+}
+
+const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh'] as const
+const protocolIcons: Record<string, string> = {
+  openvpn: '🔐',
+  l2tp: '🔒',
+  ikev2: '🛡️',
+  ssh: '🖥️',
+}
+const protocolLabels: Record<string, string> = {
+  openvpn: 'OpenVPN',
+  l2tp: 'L2TP',
+  ikev2: 'IKEv2',
+  ssh: 'SSH',
+}
+
+const editingConfig = ref<{ nodeId: number; protocol: string } | null>(null)
+const configForm = ref<any>({})
+const savingConfig = ref(false)
+
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatBps(bps: number): string {
   if (bps < 1000) return `${bps} bps`
   if (bps < 1000000) return `${(bps / 1000).toFixed(1)} Kbps`
   return `${(bps / 1000000).toFixed(1)} Mbps`
 }
 
+function getServiceStatus(node: any, protocol: string): string {
+  const metrics = node.status_metrics
+  if (!metrics) return 'unknown'
+  if (protocol === 'openvpn') return metrics.openvpn_status || 'unknown'
+  if (protocol === 'l2tp') return metrics.l2tp_status || 'unknown'
+  if (protocol === 'ikev2') return metrics.ikev2_status || 'unknown'
+  if (protocol === 'ssh') return metrics.ssh_status || 'unknown'
+  return 'unknown'
+}
+
+function getNodeConfig(nodeId: number, protocol: string) {
+  const configs = store.vpnConfigs[nodeId]
+  if (!configs) return null
+  return configs.find(c => c.protocol === protocol) || null
+}
+
+// ─── Node CRUD ───────────────────────────────────────────────────────────────
 async function handleCreateNode() {
   creating.value = true
   const token = await store.createNode({
@@ -54,20 +101,67 @@ async function toggleNode(id: number, currentStatus: string) {
   await store.updateNode(id, enable)
 }
 
-function getServiceStatus(node: any, protocol: string): string {
-  const key = protocol.toLowerCase().replace('openvpn', 'openvpn').replace('l2tp', 'l2tp').replace('ikev2', 'ikev2')
-  const metrics = node.status_metrics
-  if (!metrics) return 'unknown'
-  if (key === 'openvpn') return metrics.openvpn_status || 'unknown'
-  if (key === 'l2tp') return metrics.l2tp_status || 'unknown'
-  if (key === 'ikev2') return metrics.ikev2_status || 'unknown'
-  return 'unknown'
+
+// ─── Protocol Config Handlers ────────────────────────────────────────────────
+function startEdit(nodeId: number, protocol: string, currentConfig: any) {
+  editingConfig.value = { nodeId, protocol }
+  if (currentConfig) {
+    configForm.value = {
+      protocol: currentConfig.protocol,
+      port: currentConfig.port,
+      network: currentConfig.network,
+      enabled: currentConfig.enabled,
+      extra_json: { ...(currentConfig.extra_json || {}) },
+    }
+  } else {
+    const defaults = PROTOCOL_DEFAULTS[protocol]
+    configForm.value = {
+      protocol,
+      port: defaults.port,
+      network: defaults.network,
+      enabled: defaults.enabled,
+      extra_json: { ...defaults.extra_json },
+    }
+  }
 }
+
+function cancelEdit() {
+  editingConfig.value = null
+  configForm.value = {}
+}
+
+async function saveConfig() {
+  if (!editingConfig.value) return
+  savingConfig.value = true
+  const { nodeId } = editingConfig.value
+  await store.saveNodeVpnConfig(nodeId, configForm.value)
+  await store.loadNodeVpnConfigs(nodeId)
+  editingConfig.value = null
+  configForm.value = {}
+  savingConfig.value = false
+  toast.success('Configuration saved')
+}
+
+async function toggleProtocol(nodeId: number, protocol: string, currentConfig: any, newEnabled: boolean) {
+  const config = currentConfig
+    ? { protocol: currentConfig.protocol, port: currentConfig.port, network: currentConfig.network, enabled: newEnabled, extra_json: currentConfig.extra_json }
+    : { protocol, ...PROTOCOL_DEFAULTS[protocol], enabled: newEnabled }
+  await store.saveNodeVpnConfig(nodeId, config)
+  await store.loadNodeVpnConfigs(nodeId)
+}
+
+// ─── Load configs when Cores tab is activated ────────────────────────────────
+watch(activeTab, (tab) => {
+  if (tab === 'cores') {
+    store.list.forEach(node => store.loadNodeVpnConfigs(node.id))
+  }
+})
 
 onMounted(() => {
   store.loadNodes()
 })
 </script>
+
 
 <template>
   <div class="page nodes-view">
@@ -111,6 +205,7 @@ onMounted(() => {
       </form>
     </div>
 
+
     <KTabs v-model="activeTab" :tabs="tabs" aria-label="Nodes navigation">
       <!-- Nodes Tab -->
       <template #nodes>
@@ -133,7 +228,6 @@ onMounted(() => {
                 </div>
                 <span class="node-card__ip text-muted">{{ node.public_ip }}</span>
               </div>
-
               <div class="node-card__metrics">
                 <div class="metric-row">
                   <span class="metric-row__label">CPU</span>
@@ -161,7 +255,6 @@ onMounted(() => {
                   <span class="text-muted" style="margin-left:var(--space-3)">TX:</span> {{ formatBps(node.status_metrics?.tx_bps ?? 0) }}
                 </div>
               </div>
-
               <div class="node-card__actions">
                 <KButton variant="ghost" size="sm" @click="toggleNode(node.id, node.status)">
                   {{ node.status === 'online' ? 'Disable' : 'Enable' }}
@@ -172,7 +265,8 @@ onMounted(() => {
         </div>
       </template>
 
-      <!-- Cores Tab -->
+
+      <!-- Cores Tab: Protocol Configuration -->
       <template #cores>
         <div class="cores-content">
           <KEmptyState
@@ -185,9 +279,154 @@ onMounted(() => {
             <div v-for="node in store.list" :key="node.id" class="core-node-section">
               <h4 class="core-node-title">{{ node.name }}</h4>
               <div class="protocol-cards">
-                <div v-for="proto in protocols" :key="proto" class="protocol-card">
-                  <span class="protocol-card__name">{{ proto }}</span>
-                  <KStatusPill :status="getServiceStatus(node, proto)" size="sm" />
+                <div
+                  v-for="proto in protocolList"
+                  :key="proto"
+                  class="protocol-card"
+                  :class="{ 'protocol-card--disabled': getNodeConfig(node.id, proto)?.enabled === false }"
+                >
+                  <!-- Protocol Summary Row -->
+                  <div class="protocol-card__header">
+                    <div class="protocol-card__info">
+                      <span class="protocol-card__icon">{{ protocolIcons[proto] }}</span>
+                      <span class="protocol-card__name">{{ protocolLabels[proto] }}</span>
+                    </div>
+                    <div class="protocol-card__meta">
+                      <span class="protocol-card__port text-muted">
+                        Port {{ getNodeConfig(node.id, proto)?.port ?? PROTOCOL_DEFAULTS[proto].port }}
+                      </span>
+                      <span v-if="getNodeConfig(node.id, proto)?.network || PROTOCOL_DEFAULTS[proto].network" class="protocol-card__network text-muted">
+                        {{ getNodeConfig(node.id, proto)?.network || PROTOCOL_DEFAULTS[proto].network }}
+                      </span>
+                    </div>
+                    <div class="protocol-card__controls">
+                      <KStatusPill :status="getServiceStatus(node, proto)" size="sm" />
+                      <label class="toggle-switch">
+                        <input
+                          type="checkbox"
+                          :checked="getNodeConfig(node.id, proto)?.enabled ?? PROTOCOL_DEFAULTS[proto].enabled"
+                          @change="toggleProtocol(node.id, proto, getNodeConfig(node.id, proto), ($event.target as HTMLInputElement).checked)"
+                        />
+                        <span class="toggle-switch__slider" />
+                      </label>
+                      <KButton variant="ghost" size="sm" @click="startEdit(node.id, proto, getNodeConfig(node.id, proto))">
+                        Edit
+                      </KButton>
+                    </div>
+                  </div>
+
+
+                  <!-- Inline Edit Form -->
+                  <div
+                    v-if="editingConfig && editingConfig.nodeId === node.id && editingConfig.protocol === proto"
+                    class="protocol-form"
+                  >
+                    <div class="protocol-form__grid">
+                      <KFormField :name="`${proto}-port`" label="Port">
+                        <template #default="{ fieldId }">
+                          <KInput :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
+                        </template>
+                      </KFormField>
+                      <KFormField :name="`${proto}-network`" label="Network">
+                        <template #default="{ fieldId }">
+                          <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
+                        </template>
+                      </KFormField>
+
+                      <!-- OpenVPN specific fields -->
+                      <template v-if="proto === 'openvpn'">
+                        <KFormField :name="`${proto}-transport`" label="Transport">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-cipher`" label="Cipher">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.cipher" :options="[{ label: 'AES-256-GCM', value: 'AES-256-GCM' }, { label: 'AES-128-GCM', value: 'AES-128-GCM' }, { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-tls`" label="TLS Mode">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.tls_mode" :options="[{ label: 'tls-crypt', value: 'tls-crypt' }, { label: 'tls-auth', value: 'tls-auth' }, { label: 'none', value: 'none' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-dns1`" label="DNS 1">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-dns2`" label="DNS 2">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                          </template>
+                        </KFormField>
+                      </template>
+
+
+                      <!-- L2TP specific fields -->
+                      <template v-if="proto === 'l2tp'">
+                        <KFormField :name="`${proto}-psk`" label="Pre-Shared Key">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-auth`" label="Auth Method">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-dns1`" label="DNS 1">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-dns2`" label="DNS 2">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                          </template>
+                        </KFormField>
+                      </template>
+
+                      <!-- IKEv2 specific fields -->
+                      <template v-if="proto === 'ikev2'">
+                        <KFormField :name="`${proto}-psk`" label="Pre-Shared Key">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-dns1`" label="DNS 1">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-dns2`" label="DNS 2">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                          </template>
+                        </KFormField>
+                      </template>
+
+                      <!-- SSH specific fields -->
+                      <template v-if="proto === 'ssh'">
+                        <KFormField :name="`${proto}-listen`" label="Listen Address">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.listen_address" placeholder="0.0.0.0" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-keytype`" label="Key Type">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.key_type" :options="[{ label: 'ed25519', value: 'ed25519' }, { label: 'rsa', value: 'rsa' }, { label: 'ecdsa', value: 'ecdsa' }]" />
+                          </template>
+                        </KFormField>
+                      </template>
+                    </div>
+
+
+                    <div class="protocol-form__actions">
+                      <KButton variant="ghost" size="sm" @click="cancelEdit">Cancel</KButton>
+                      <KButton variant="primary" size="sm" :loading="savingConfig" @click="saveConfig">Save</KButton>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -197,6 +436,7 @@ onMounted(() => {
     </KTabs>
   </div>
 </template>
+
 
 <style scoped>
 .nodes-view { display: flex; flex-direction: column; gap: var(--space-5); }
@@ -221,6 +461,7 @@ onMounted(() => {
 .node-card__name { margin: 0; font-size: var(--text-base); font-weight: var(--font-semibold); }
 .node-card__ip { font-size: var(--text-xs); }
 
+
 .node-card__metrics { display: flex; flex-direction: column; gap: var(--space-2); }
 .metric-row { display: flex; align-items: center; gap: var(--space-2); }
 .metric-row__label { font-size: var(--text-xs); color: var(--color-muted); width: 32px; }
@@ -233,12 +474,88 @@ onMounted(() => {
 
 .node-card__actions { border-top: 1px solid var(--color-border); padding-top: var(--space-2); }
 
+/* ─── Cores / Protocol Cards ─────────────────────────────────────────────── */
 .cores-grid { display: flex; flex-direction: column; gap: var(--space-5); }
-.core-node-section {}
-.core-node-title { margin: 0 0 var(--space-2); font-size: var(--text-sm); font-weight: var(--font-semibold); }
-.protocol-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-2); }
-.protocol-card { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
-.protocol-card__name { font-size: var(--text-sm); font-weight: var(--font-medium); }
+.core-node-title { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: var(--font-semibold); }
+.protocol-cards { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.protocol-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: opacity 0.2s ease;
+}
+.protocol-card--disabled { opacity: 0.5; }
+
+
+.protocol-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.protocol-card__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 120px;
+}
+.protocol-card__icon { font-size: var(--text-lg); }
+.protocol-card__name { font-size: var(--text-sm); font-weight: var(--font-semibold); }
+.protocol-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+}
+.protocol-card__port { font-size: var(--text-xs); }
+.protocol-card__network { font-size: var(--text-xs); }
+.protocol-card__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Toggle Switch */
+.toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-switch__slider {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--color-border);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+.toggle-switch__slider::before {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+.toggle-switch input:checked + .toggle-switch__slider { background: var(--color-primary); }
+.toggle-switch input:checked + .toggle-switch__slider::before { transform: translateX(16px); }
+
+
+/* Protocol Form */
+.protocol-form {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.protocol-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+.protocol-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
 
 .text-muted { color: var(--color-muted); }
 .text-sm { font-size: var(--text-sm); }
