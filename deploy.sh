@@ -81,7 +81,7 @@ sudo systemctl restart panel.service
 sleep 2
 
 PANEL_ADDR="$(grep -E '^PANEL_ADDR=' /etc/panel/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)"
-PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8088}"
+PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8080}"
 
 echo "[deploy] Running health check on http://${PANEL_ADDR}/api/health ..."
 if curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null 2>&1; then
@@ -107,11 +107,11 @@ systemctl is-active panel 2>/dev/null || echo "  panel service status unknown"
 # Quick health check with timeout
 echo ""
 echo "[deploy] Health check response:"
-curl -s --max-time 5 http://127.0.0.1:${PANEL_PORT:-8088}/api/health 2>/dev/null || echo "  (health check failed or timed out)"
+curl -s --max-time 5 "http://${PANEL_ADDR}/api/health" 2>/dev/null || echo "  (health check failed or timed out)"
 
 echo ""
 echo "[deploy] Diagnostics endpoint:"
-curl -s --max-time 10 http://127.0.0.1:${PANEL_PORT:-8088}/api/diagnostics/status 2>/dev/null || echo "  (diagnostics not available - may need auth)"
+curl -s --max-time 10 "http://${PANEL_ADDR}/api/diagnostics/status" 2>/dev/null || echo "  (diagnostics not available - may need auth)"
 
 echo ""
 echo "=== [deploy] End of diagnostics ==="
