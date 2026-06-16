@@ -76,6 +76,9 @@ func startWorker(db *sql.DB) {
 			}
 			_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
 
+			// PAYG Billing: deduct from wallet based on usage for pay-as-you-go plans
+			processPaygBilling(db)
+
 			if t.Hour() == 2 && t.Minute() == 0 {
 				dir := "/var/backups/koris-next"
 				_ = os.MkdirAll(dir, 0755)
@@ -97,6 +100,111 @@ func startWorker(db *sql.DB) {
 			}
 		}
 	}()
+}
+
+// processPaygBilling deducts wallet credit for customers on pay-as-you-go plans
+// based on data usage (per GB) and time (per day).
+func processPaygBilling(db *sql.DB) {
+	type paygCustomer struct {
+		ID               int64
+		Username         string
+		PlanID           int64
+		PricePerGB       float64
+		PricePerDay      float64
+		DisconnectOnZero bool
+		Credit           float64
+	}
+
+	rows, err := db.Query(`
+		SELECT c.id, c.username, p.id, p.price_per_gb, p.price_per_day, p.disconnect_on_zero, w.credit
+		FROM customers c
+		JOIN plans p ON p.id = c.plan_id AND p.billing_type = 'payg'
+		JOIN wallets w ON w.username = c.username
+		WHERE c.status = 'active' AND c.deleted_at IS NULL
+	`)
+	if err != nil {
+		log.Printf("[worker] payg billing query: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var customers []paygCustomer
+	for rows.Next() {
+		var c paygCustomer
+		var disconn int
+		if err := rows.Scan(&c.ID, &c.Username, &c.PlanID, &c.PricePerGB, &c.PricePerDay, &disconn, &c.Credit); err != nil {
+			log.Printf("[worker] payg scan: %v", err)
+			continue
+		}
+		c.DisconnectOnZero = disconn == 1
+		customers = append(customers, c)
+	}
+
+	for _, c := range customers {
+		// Get last deduction time for this user
+		var lastDeduction time.Time
+		err := db.QueryRow(`SELECT COALESCE(MAX(created_at), '2000-01-01') FROM payg_deductions WHERE username = ?`, c.Username).Scan(&lastDeduction)
+		if err != nil {
+			log.Printf("[worker] payg last deduction for %s: %v", c.Username, err)
+			continue
+		}
+
+		// Calculate data used since last deduction (in bytes from radacct)
+		var dataUsedBytes int64
+		err = db.QueryRow(`
+			SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0)
+			FROM radacct
+			WHERE username = ? AND (acctstarttime >= ? OR (acctstoptime IS NULL AND acctupdatetime >= ?))
+		`, c.Username, lastDeduction, lastDeduction).Scan(&dataUsedBytes)
+		if err != nil {
+			log.Printf("[worker] payg data usage for %s: %v", c.Username, err)
+			continue
+		}
+
+		// Calculate days since last deduction
+		daysSinceLastDeduction := time.Since(lastDeduction).Hours() / 24.0
+
+		// Calculate charges
+		dataGB := float64(dataUsedBytes) / (1024 * 1024 * 1024)
+		dataCharge := dataGB * c.PricePerGB
+		timeCharge := daysSinceLastDeduction * c.PricePerDay
+		totalCharge := dataCharge + timeCharge
+
+		// Only deduct if charge is meaningful (> $0.001)
+		if totalCharge < 0.001 {
+			continue
+		}
+
+		balanceBefore := c.Credit
+		balanceAfter := balanceBefore - totalCharge
+
+		// Deduct from wallet
+		_, err = db.Exec(`UPDATE wallets SET credit = credit - ? WHERE username = ?`, totalCharge, c.Username)
+		if err != nil {
+			log.Printf("[worker] payg wallet deduct for %s: %v", c.Username, err)
+			continue
+		}
+
+		// Record data deduction if applicable
+		if dataCharge > 0.001 {
+			_, _ = db.Exec(`INSERT INTO payg_deductions(customer_id, username, plan_id, deduction_type, amount, usage_value, balance_before, balance_after) VALUES(?,?,?,?,?,?,?,?)`,
+				c.ID, c.Username, c.PlanID, "data", dataCharge, dataGB, balanceBefore, balanceAfter)
+		}
+
+		// Record time deduction if applicable
+		if timeCharge > 0.001 {
+			_, _ = db.Exec(`INSERT INTO payg_deductions(customer_id, username, plan_id, deduction_type, amount, usage_value, balance_before, balance_after) VALUES(?,?,?,?,?,?,?,?)`,
+				c.ID, c.Username, c.PlanID, "time", timeCharge, daysSinceLastDeduction, balanceBefore, balanceAfter)
+		}
+
+		// If wallet credit <= 0 and disconnect_on_zero, limit the customer
+		if balanceAfter <= 0 && c.DisconnectOnZero {
+			_, _ = db.Exec(`UPDATE customers SET status = 'limited' WHERE id = ? AND status = 'active'`, c.ID)
+			// Disconnect active sessions
+			_, _ = db.Exec(`UPDATE radacct SET acctstoptime = NOW(), acctterminatecause = 'PAYG-Zero-Balance' WHERE username = ? AND acctstoptime IS NULL`, c.Username)
+			log.Printf("[worker] payg: disconnected %s (zero balance)", c.Username)
+		}
+	}
 }
 
 func main() {
