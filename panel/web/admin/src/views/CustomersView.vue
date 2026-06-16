@@ -2,41 +2,53 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
+import { useRealtimeStore } from '@/stores/realtime'
 import type { BulkActionRequest } from '@/stores/customers'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
+import KAvatar from '@koris/ui/KAvatar.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
 
 const router = useRouter()
 const store = useCustomersStore()
+const realtime = useRealtimeStore()
 const { confirm } = useConfirm()
 const toast = useToast()
 
 const searchQuery = ref('')
-const activeTab = ref<string>('all')
+const activeStatusTab = ref<string>('all')
+const currentMainTab = ref<string>('customers')
 
-/** Tracks selected customer IDs for bulk actions (Requirement 2.1) */
+/** Tracks selected customer IDs for bulk actions */
 const selectedIds = ref<number[]>([])
 
 /** Whether all currently displayed rows are selected */
 const isAllSelected = computed(() => {
-  if (store.paginatedList.length === 0) return false
-  return store.paginatedList.every((c: any) => selectedIds.value.includes(c.id))
+  if (tableData.value.length === 0) return false
+  return tableData.value.every((c: any) => selectedIds.value.includes(c.id))
 })
 
 /** Whether at least one customer is selected (controls toolbar visibility) */
 const hasSelection = computed(() => selectedIds.value.length > 0)
 
+/** Page-level navigation tabs: Customers | Archived | Resellers */
+const mainTabs = [
+  { key: 'customers', label: 'Customers' },
+  { key: 'archived', label: 'Archived' },
+  { key: 'resellers', label: 'Resellers' },
+]
+
+/** Status filter tabs (only shown when main tab is "customers") */
 const statusTabs = [
   { key: 'all', label: 'All' },
-  { key: 'active', label: 'Online' },
+  { key: 'active', label: 'Active' },
+  { key: 'online', label: 'Online' },
   { key: 'limited', label: 'Limited' },
   { key: 'disabled', label: 'Disabled' },
   { key: 'expired', label: 'Expired' },
-  { key: 'archived', label: 'Archived' },
 ]
 
 const columns = [
@@ -46,7 +58,35 @@ const columns = [
   { key: 'plan', label: 'Plan', sortable: true },
   { key: 'credit', label: 'Credit', sortable: true, align: 'right' as const },
   { key: 'created_at', label: 'Created', sortable: true },
+  { key: 'actions', label: 'Actions', sortable: false, align: 'center' as const, width: '80px' },
 ]
+
+/** Set of usernames currently online (from live sessions) */
+const onlineUsernames = computed(() => {
+  return new Set(realtime.liveSessions.map((s) => s.username))
+})
+
+/** The data shown in the table depends on which main tab + status filter is active */
+const tableData = computed(() => {
+  if (currentMainTab.value === 'archived') {
+    // Show deleted/archived customers
+    const query = searchQuery.value.trim().toLowerCase()
+    if (!query) return store.deleted
+    return store.deleted.filter(
+      (c: any) =>
+        c.username.toLowerCase().includes(query) ||
+        c.display_name.toLowerCase().includes(query)
+    )
+  }
+
+  // For "customers" main tab, apply status filter
+  if (activeStatusTab.value === 'online') {
+    // Filter by live session presence (real online state)
+    return store.paginatedList.filter((c: any) => onlineUsernames.value.has(c.username))
+  }
+
+  return store.paginatedList
+})
 
 const debouncedSearch = useDebounceFn((val: string) => {
   store.filters.search = val
@@ -58,9 +98,27 @@ function onSearchInput(e: Event) {
   debouncedSearch(val)
 }
 
+function setMainTab(tabKey: string) {
+  if (tabKey === 'resellers') {
+    router.push({ name: 'resellers' })
+    return
+  }
+  currentMainTab.value = tabKey
+  // Reset status filter when switching main tabs
+  if (tabKey === 'archived') {
+    store.filters.status = 'all'
+    activeStatusTab.value = 'all'
+  }
+}
+
 function setStatusFilter(status: string) {
-  activeTab.value = status
-  store.filters.status = status as any
+  activeStatusTab.value = status
+  if (status === 'online') {
+    // "Online" uses live session data, so set store filter to 'all' and filter client-side
+    store.filters.status = 'all'
+  } else {
+    store.filters.status = status as any
+  }
   store.pagination.page = 1
 }
 
@@ -70,6 +128,27 @@ function handleRowClick(row: any) {
 
 function handleNewUser() {
   router.push({ name: 'customer-detail', params: { id: 'new' } })
+}
+
+/**
+ * Delete a single customer with confirmation dialog.
+ */
+async function deleteCustomer(id: number, username: string) {
+  const confirmed = await confirm({
+    title: 'Delete Customer',
+    message: `Are you sure you want to delete "${username}"? This action cannot be undone.`,
+    variant: 'danger',
+    icon: '⚠',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  })
+  if (!confirmed) return
+  const success = await store.archiveCustomer(id)
+  if (success) {
+    toast.success(`Customer "${username}" deleted successfully.`)
+  } else {
+    toast.error(`Failed to delete "${username}".`)
+  }
 }
 
 /**
@@ -88,13 +167,12 @@ function clearSelection() {
 }
 
 /**
- * Execute a bulk action. For delete, shows a confirmation dialog first (Requirement 2.6).
- * Displays toast with success/failure summary from BulkActionResponse (Requirement 2.7).
+ * Execute a bulk action. For delete, shows a confirmation dialog first.
+ * Displays toast with success/failure summary from BulkActionResponse.
  */
 async function executeBulkAction(action: BulkActionRequest['action']) {
   if (selectedIds.value.length === 0) return
 
-  // For delete actions, show confirmation dialog with count (Requirement 2.6)
   if (action === 'delete') {
     const confirmed = await confirm({
       title: 'Delete Customers',
@@ -145,7 +223,19 @@ onMounted(() => {
       <KButton variant="primary" icon="+" @click="handleNewUser">New User</KButton>
     </header>
 
-    <!-- Bulk Action Toolbar (visible when selection > 0) — Requirement 2.1 -->
+    <!-- Page-level sub-tab navigation: Customers | Archived | Resellers -->
+    <nav class="main-tabs" aria-label="Customer section navigation">
+      <button
+        v-for="tab in mainTabs"
+        :key="tab.key"
+        :class="['main-tab', { 'main-tab--active': currentMainTab === tab.key }]"
+        @click="setMainTab(tab.key)"
+      >
+        {{ tab.label }}
+      </button>
+    </nav>
+
+    <!-- Bulk Action Toolbar (visible when selection > 0) -->
     <Transition name="bulk-toolbar">
       <div v-if="hasSelection" class="bulk-toolbar" role="toolbar" aria-label="Bulk actions">
         <span class="bulk-toolbar__count">{{ selectedIds.length }} selected</span>
@@ -159,24 +249,29 @@ onMounted(() => {
       </div>
     </Transition>
 
-    <!-- Status Tabs -->
-    <nav class="status-tabs" aria-label="Customer status filter">
+    <!-- Status Filter Tabs (only visible on "Customers" main tab) -->
+    <nav v-if="currentMainTab === 'customers'" class="status-tabs" aria-label="Customer status filter">
       <button
         v-for="tab in statusTabs"
         :key="tab.key"
-        :class="['status-tab', { 'status-tab--active': activeTab === tab.key }]"
+        :class="['status-tab', { 'status-tab--active': activeStatusTab === tab.key }]"
         @click="setStatusFilter(tab.key)"
       >
         {{ tab.label }}
       </button>
     </nav>
 
+    <!-- Archived header (when viewing archived tab) -->
+    <div v-if="currentMainTab === 'archived'" class="archived-header">
+      <p class="archived-description">Deleted customers that have been archived. These users no longer have VPN access.</p>
+    </div>
+
     <!-- Search -->
     <div class="search-bar">
       <input
         type="search"
         class="search-input"
-        placeholder="Search customers..."
+        :placeholder="currentMainTab === 'archived' ? 'Search archived...' : 'Search customers...'"
         :value="searchQuery"
         @input="onSearchInput"
         aria-label="Search customers"
@@ -186,7 +281,7 @@ onMounted(() => {
     <!-- Data Table -->
     <KDataTable
       :columns="columns"
-      :data="store.paginatedList"
+      :data="tableData"
       :loading="store.loading"
       :page-size="store.pagination.pageSize"
       row-key="id"
@@ -194,6 +289,14 @@ onMounted(() => {
       @row-click="handleRowClick"
       @selection-change="onSelectionChange"
     >
+      <!-- Username cell with avatar -->
+      <template #cell-username="{ row, value }">
+        <div class="username-cell">
+          <KAvatar :name="row.display_name || value" size="sm" />
+          <span class="username-cell__text">{{ value }}</span>
+          <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" />
+        </div>
+      </template>
       <template #cell-status="{ value }">
         <KStatusPill :status="value" size="sm" />
       </template>
@@ -205,6 +308,20 @@ onMounted(() => {
       <template #cell-created_at="{ value }">
         {{ value?.slice(0, 10) }}
       </template>
+      <!-- Actions column with per-row delete button -->
+      <template #cell-actions="{ row }">
+        <button
+          class="action-btn action-btn--delete"
+          title="Delete customer"
+          aria-label="Delete customer"
+          @click.stop="deleteCustomer(row.id, row.username)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 011.334-1.334h2.666a1.333 1.333 0 011.334 1.334V4m2 0v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4h9.334z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6.667 7.333v4M9.333 7.333v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </template>
     </KDataTable>
   </div>
 </template>
@@ -215,7 +332,36 @@ onMounted(() => {
 .page-header { display: flex; align-items: center; justify-content: space-between; }
 .page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
 
-/* Bulk Action Toolbar — Requirement 2.1 */
+/* Main page-level tabs (Customers | Archived | Resellers) */
+.main-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.main-tab {
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: none;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all var(--duration-fast);
+}
+
+.main-tab:hover {
+  color: var(--color-text);
+}
+
+.main-tab--active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* Bulk Action Toolbar */
 .bulk-toolbar {
   display: flex;
   align-items: center;
@@ -269,17 +415,135 @@ onMounted(() => {
   transform: translateY(-8px);
 }
 
+/* Status filter tabs */
 .status-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-2); overflow-x: auto; }
 .status-tab { padding: var(--space-2) var(--space-3); border: none; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--font-medium); cursor: pointer; border-radius: var(--radius-sm); transition: all var(--duration-fast); }
 .status-tab:hover { color: var(--color-text); background: var(--color-surface-2); }
 .status-tab--active { color: var(--color-primary); background: rgba(37, 99, 235, 0.1); }
 
+/* Archived header */
+.archived-header {
+  padding: var(--space-2) 0;
+}
+
+.archived-description {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+/* Search */
 .search-bar { max-width: 320px; }
 .search-input { width: 100%; padding: var(--space-2) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: var(--text-sm); outline: none; transition: border-color var(--duration-normal); }
 .search-input:focus { border-color: var(--color-primary); }
 
-.text-success { color: var(--color-success); }
-.text-danger { color: var(--color-danger); }
+/* Username cell with avatar */
+.username-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.username-cell__text {
+  font-weight: var(--font-medium);
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success, #22c55e);
+  flex-shrink: 0;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Per-row action buttons */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-muted);
+  transition: all var(--duration-fast);
+}
+
+.action-btn:hover {
+  background: var(--color-surface-2);
+}
+
+.action-btn--delete:hover {
+  color: var(--color-danger, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Checkbox styling override for KDataTable selectable */
+:deep(.k-table__checkbox) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--duration-fast);
+}
+
+:deep(.k-table__checkbox:hover) {
+  border-color: var(--color-primary);
+}
+
+:deep(.k-table__checkbox:checked) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+:deep(.k-table__checkbox:checked::after) {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+:deep(.k-table__checkbox:indeterminate) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+:deep(.k-table__checkbox:indeterminate::after) {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 3px;
+  width: 8px;
+  height: 2px;
+  background: #fff;
+  border-radius: 1px;
+}
+
+:deep(.k-table__checkbox:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.text-success { color: var(--color-success, #22c55e); }
+.text-danger { color: var(--color-danger, #ef4444); }
 
 @media (prefers-reduced-motion: reduce) {
   .bulk-toolbar-enter-active,
@@ -289,6 +553,9 @@ onMounted(() => {
   .bulk-toolbar-enter-from,
   .bulk-toolbar-leave-to {
     transform: none;
+  }
+  .online-dot {
+    animation: none;
   }
 }
 </style>
