@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
-import router from '@/router'
 import type { Ticket } from '@koris/types/entities'
 
 /**
@@ -60,14 +59,10 @@ export const usePortalTicketsStore = defineStore('portal-tickets', () => {
   const loading = ref(false)
 
   // ─── API composable ───────────────────────────────────────────────────────
-  const { get, post, error } = useApi({
-    onUnauthorized: () => {
-      // Clear tickets state and redirect to portal login
-      list.value = []
-      detail.value = null
-      router.push({ name: 'portal-login' })
-    },
-  })
+  // No onUnauthorized handler — the portal auth store and router guard handle
+  // auth redirects. This prevents race conditions where a 401 during initial
+  // data load would cause a redirect loop after login.
+  const { get, post, error } = useApi()
 
   // ─── Computed ─────────────────────────────────────────────────────────────
   const openTickets = computed(() =>

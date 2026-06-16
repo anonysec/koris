@@ -140,6 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
         credit: res.credit || 0,
       }
       isAuthenticated.value = true
+      initialized.value = true
       setupRequired.value = false
       return true
     } catch {
