@@ -7,11 +7,15 @@ import (
 )
 
 type Enforcer struct {
-	db *sql.DB
+	db   *sql.DB
+	done chan struct{}
 }
 
 func NewEnforcer(db *sql.DB) *Enforcer {
-	return &Enforcer{db: db}
+	return &Enforcer{
+		db:   db,
+		done: make(chan struct{}),
+	}
 }
 
 // EnforceConnLimit kills excess active sessions for users who exceed their connection limit.
@@ -56,12 +60,26 @@ func (e *Enforcer) EnforceConnLimit() {
 	}
 }
 
-// Start runs the enforcer every 30 seconds
+// Start runs the enforcer every 30 seconds.
+// The goroutine exits when Stop() is called.
 func (e *Enforcer) Start() {
 	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		// Run immediately on start
+		e.EnforceConnLimit()
 		for {
-			e.EnforceConnLimit()
-			time.Sleep(30 * time.Second)
+			select {
+			case <-ticker.C:
+				e.EnforceConnLimit()
+			case <-e.done:
+				return
+			}
 		}
 	}()
+}
+
+// Stop signals the enforcer goroutine to exit.
+func (e *Enforcer) Stop() {
+	close(e.done)
 }
