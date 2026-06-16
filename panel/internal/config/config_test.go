@@ -103,8 +103,9 @@ func TestLoad_DevModeEnvParsing(t *testing.T) {
 	}
 }
 
-func TestLoad_SecureCookies_TrueInProduction(t *testing.T) {
+func TestLoad_SecureCookies_FalseByDefault(t *testing.T) {
 	os.Unsetenv("PANEL_DEV_MODE")
+	os.Unsetenv("PANEL_SECURE_COOKIES")
 	os.Setenv("PANEL_SESSION_SECRET", "a-valid-session-secret-for-production-use")
 	os.Setenv("PANEL_DB_DSN", "user:pass@tcp(localhost)/db")
 	defer func() {
@@ -114,8 +115,44 @@ func TestLoad_SecureCookies_TrueInProduction(t *testing.T) {
 
 	cfg := Load()
 
+	if cfg.SecureCookies {
+		t.Error("expected SecureCookies to be false by default (reverse proxy compatibility)")
+	}
+}
+
+func TestLoad_SecureCookies_TrueWhenExplicitlySet(t *testing.T) {
+	os.Unsetenv("PANEL_DEV_MODE")
+	os.Setenv("PANEL_SECURE_COOKIES", "true")
+	os.Setenv("PANEL_SESSION_SECRET", "a-valid-session-secret-for-production-use")
+	os.Setenv("PANEL_DB_DSN", "user:pass@tcp(localhost)/db")
+	defer func() {
+		os.Unsetenv("PANEL_SECURE_COOKIES")
+		os.Unsetenv("PANEL_SESSION_SECRET")
+		os.Unsetenv("PANEL_DB_DSN")
+	}()
+
+	cfg := Load()
+
 	if !cfg.SecureCookies {
-		t.Error("expected SecureCookies to be true in production mode")
+		t.Error("expected SecureCookies to be true when PANEL_SECURE_COOKIES=true")
+	}
+}
+
+func TestLoad_SecureCookies_CaseInsensitive(t *testing.T) {
+	os.Unsetenv("PANEL_DEV_MODE")
+	os.Setenv("PANEL_SECURE_COOKIES", "TRUE")
+	os.Setenv("PANEL_SESSION_SECRET", "a-valid-session-secret-for-production-use")
+	os.Setenv("PANEL_DB_DSN", "user:pass@tcp(localhost)/db")
+	defer func() {
+		os.Unsetenv("PANEL_SECURE_COOKIES")
+		os.Unsetenv("PANEL_SESSION_SECRET")
+		os.Unsetenv("PANEL_DB_DSN")
+	}()
+
+	cfg := Load()
+
+	if !cfg.SecureCookies {
+		t.Error("expected SecureCookies to be true when PANEL_SECURE_COOKIES=TRUE (case insensitive)")
 	}
 }
 
@@ -123,6 +160,7 @@ func TestLoad_SecureCookies_FalseInDevMode(t *testing.T) {
 	os.Setenv("PANEL_DEV_MODE", "true")
 	os.Unsetenv("PANEL_SESSION_SECRET")
 	os.Unsetenv("PANEL_DB_DSN")
+	os.Unsetenv("PANEL_SECURE_COOKIES")
 	defer func() {
 		os.Unsetenv("PANEL_DEV_MODE")
 	}()
@@ -131,6 +169,24 @@ func TestLoad_SecureCookies_FalseInDevMode(t *testing.T) {
 
 	if cfg.SecureCookies {
 		t.Error("expected SecureCookies to be false in dev mode")
+	}
+}
+
+func TestLoad_SecureCookies_FalseWhenExplicitlyDisabled(t *testing.T) {
+	os.Unsetenv("PANEL_DEV_MODE")
+	os.Setenv("PANEL_SECURE_COOKIES", "false")
+	os.Setenv("PANEL_SESSION_SECRET", "a-valid-session-secret-for-production-use")
+	os.Setenv("PANEL_DB_DSN", "user:pass@tcp(localhost)/db")
+	defer func() {
+		os.Unsetenv("PANEL_SECURE_COOKIES")
+		os.Unsetenv("PANEL_SESSION_SECRET")
+		os.Unsetenv("PANEL_DB_DSN")
+	}()
+
+	cfg := Load()
+
+	if cfg.SecureCookies {
+		t.Error("expected SecureCookies to be false when PANEL_SECURE_COOKIES=false")
 	}
 }
 
