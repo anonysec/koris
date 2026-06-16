@@ -49,6 +49,12 @@ DB_PASS_DEFAULT="$(gen_secret 16)"
 read -rp "$(echo -e "${cyan}DB pass [auto]: ${plain}")" DB_PASS; DB_PASS="${DB_PASS:-$DB_PASS_DEFAULT}"
 SETUP_KEY="$(gen_secret 16)"
 SESSION_SECRET="$(gen_secret 32)"
+PANEL_SECRET="$(gen_secret 32)"
+
+# Input validation
+[[ ! "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]] && fatal "Invalid DB name (alphanumeric and underscore only)"
+[[ ! "$DB_USER" =~ ^[a-zA-Z0-9_]+$ ]] && fatal "Invalid DB user (alphanumeric and underscore only)"
+[[ ! "$PANEL_PORT" =~ ^[0-9]+$ ]] && fatal "Port must be numeric"
 
 echo ""
 info "Installing dependencies..."
@@ -134,6 +140,13 @@ cp -a "$INSTALL_DIR/panel/migrations" /opt/koris-next/panel/migrations 2>/dev/nu
 cp -a "$INSTALL_DIR/panel/web/admin/www" /opt/koris-next/panel/web/admin/www 2>/dev/null || true
 cp -a "$INSTALL_DIR/panel/web/portal/www" /opt/koris-next/panel/web/portal/www 2>/dev/null || true
 
+# VPN hook scripts
+if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then
+    mkdir -p /etc/openvpn/server
+    cp -f "$INSTALL_DIR/scripts/openvpn/"*.sh /etc/openvpn/server/ 2>/dev/null || true
+    chmod +x /etc/openvpn/server/*.sh 2>/dev/null || true
+fi
+
 # Config
 info "Writing configuration..."
 PANEL_ADDR="127.0.0.1:${PANEL_PORT}"
@@ -144,6 +157,7 @@ PANEL_DB_DSN='${DB_USER}:${DB_PASS}@tcp(127.0.0.1:3306)/${DB_NAME}?parseTime=tru
 PANEL_MIGRATIONS='/opt/koris-next/panel/migrations'
 PANEL_SETUP_KEY='${SETUP_KEY}'
 PANEL_SESSION_SECRET='${SESSION_SECRET}'
+PANEL_SECRET='${PANEL_SECRET}'
 PANEL_PUBLIC_BASE='/dashboard'
 PANEL_ADMIN_WEB_DIR='/opt/koris-next/panel/web/admin/www'
 PANEL_PORTAL_WEB_DIR='/opt/koris-next/panel/web/portal/www'

@@ -27,11 +27,28 @@ function handleStatClick(routeName: string) {
   router.push({ name: routeName })
 }
 
-const trafficChartData = computed(() =>
-  realtime.rxHistory.map((rx, i) => ({
-    label: `${i}`,
-    value: rx + (realtime.txHistory[i] || 0),
-  }))
+const trafficChartData = computed(() => {
+  // Compute cumulative data usage (bytes) from bps history.
+  // Each sample in rxHistory/txHistory is a bps value pushed every ~3 seconds.
+  // To convert to bytes transferred per interval: (bps * 3) / 8
+  let cumulative = 0
+  return realtime.rxHistory.map((rx, i) => {
+    const intervalBps = rx + (realtime.txHistory[i] || 0)
+    const intervalBytes = (intervalBps * 3) / 8
+    cumulative += intervalBytes
+    return {
+      label: `${i}`,
+      value: cumulative,
+    }
+  })
+})
+
+/** Total data transferred computed from live sessions */
+const totalDownloaded = computed(() =>
+  realtime.liveSessions.reduce((sum, s) => sum + (s.input_bytes || 0), 0)
+)
+const totalUploaded = computed(() =>
+  realtime.liveSessions.reduce((sum, s) => sum + (s.output_bytes || 0), 0)
 )
 
 const userStatusData = computed(() => {
@@ -61,14 +78,6 @@ function formatDuration(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60)
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
-
-function formatBps(bps: number): string {
-  if (!bps || bps <= 0) return '0 bps'
-  if (bps < 1024) return `${bps.toFixed(0)} bps`
-  if (bps < 1048576) return `${(bps / 1024).toFixed(1)} Kbps`
-  if (bps < 1073741824) return `${(bps / 1048576).toFixed(1)} Mbps`
-  return `${(bps / 1073741824).toFixed(2)} Gbps`
-}
 </script>
 
 <template>
@@ -87,7 +96,7 @@ function formatBps(bps: number): string {
     <!-- Charts Row -->
     <section class="charts-row">
       <div class="chart-panel chart-panel--traffic">
-        <h4 class="panel-title">Traffic Overview</h4>
+        <h4 class="panel-title">Data Usage</h4>
         <div v-if="trafficChartData.length > 2">
           <KChart
             type="area"
@@ -101,12 +110,12 @@ function formatBps(bps: number): string {
         <div v-else class="traffic-fallback">
           <div class="traffic-live">
             <div class="traffic-stat">
-              <span class="traffic-stat__label">↓ Download</span>
-              <span class="traffic-stat__value">{{ formatBps(realtime.stats.total_rx_bps) }}</span>
+              <span class="traffic-stat__label">Total Downloaded</span>
+              <span class="traffic-stat__value">{{ formatBytes(totalDownloaded) }}</span>
             </div>
             <div class="traffic-stat">
-              <span class="traffic-stat__label">↑ Upload</span>
-              <span class="traffic-stat__value">{{ formatBps(realtime.stats.total_tx_bps) }}</span>
+              <span class="traffic-stat__label">Total Uploaded</span>
+              <span class="traffic-stat__value">{{ formatBytes(totalUploaded) }}</span>
             </div>
           </div>
           <p class="traffic-note">Chart data loading... (updates every 3 seconds)</p>
