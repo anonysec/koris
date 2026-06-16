@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import type { Breadcrumb } from '@koris/types/components'
 
 export interface Props {
@@ -24,6 +25,26 @@ const emit = defineEmits<{
 }>()
 
 const searchQuery = defineModel<string>('searchQuery', { default: '' })
+
+const searchExpanded = ref(false)
+const searchHovered = ref(false)
+const searchFocused = ref(false)
+
+const showSearchBar = computed(() => {
+  return searchExpanded.value || searchHovered.value || searchFocused.value || searchQuery.value.length > 0
+})
+
+function onSearchFocus() {
+  searchFocused.value = true
+  searchExpanded.value = true
+}
+
+function onSearchBlur() {
+  searchFocused.value = false
+  if (!searchQuery.value) {
+    searchExpanded.value = false
+  }
+}
 
 function handleSearchKeyup(event: KeyboardEvent) {
   if (event.key === 'Enter') {
@@ -83,26 +104,27 @@ function handleSearchKeyup(event: KeyboardEvent) {
 
     <div class="topbar-right">
       <!-- Search box -->
-      <div class="search-box">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          aria-hidden="true"
-        >
+      <div
+        class="search-box"
+        :class="{ 'search-box--expanded': showSearchBar }"
+        @mouseenter="searchHovered = true"
+        @mouseleave="searchHovered = false"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4-4" />
         </svg>
         <input
+          v-show="showSearchBar"
           v-model="searchQuery"
           type="text"
           placeholder="Search..."
           aria-label="Search"
+          @focus="onSearchFocus"
+          @blur="onSearchBlur"
           @keyup="handleSearchKeyup"
-          @focus="emit('open-command-palette')"
         />
-        <kbd class="search-shortcut">Ctrl+K</kbd>
+        <kbd v-show="showSearchBar" class="search-shortcut">⌘K</kbd>
       </div>
 
       <!-- Realtime connection status -->
@@ -224,10 +246,21 @@ function handleSearchKeyup(event: KeyboardEvent) {
   gap: var(--space-2, 8px);
   background: var(--color-surface, #0b1120);
   border: 1px solid var(--color-border, #28333f);
-  padding: var(--space-2, 8px) var(--space-3, 12px);
+  padding: var(--space-2, 8px);
   border-radius: var(--radius-lg, 10px);
-  width: 220px;
-  transition: border-color var(--duration-normal, 0.15s) var(--ease-default, ease);
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s;
+}
+
+.search-box--expanded {
+  width: 240px;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  cursor: text;
 }
 
 .search-box:focus-within {
@@ -236,8 +269,9 @@ function handleSearchKeyup(event: KeyboardEvent) {
 }
 
 .search-box svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
   color: var(--color-muted, #8b98a5);
   flex-shrink: 0;
 }
@@ -251,6 +285,12 @@ function handleSearchKeyup(event: KeyboardEvent) {
   width: 100%;
   min-height: unset;
   padding: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease 0.1s;
+}
+
+.search-box--expanded input {
+  opacity: 1;
 }
 
 .search-box input::placeholder {
@@ -267,6 +307,12 @@ function handleSearchKeyup(event: KeyboardEvent) {
   font-family: var(--font-mono, monospace);
   white-space: nowrap;
   flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease 0.1s;
+}
+
+.search-box--expanded .search-shortcut {
+  opacity: 1;
 }
 
 /* Status dot */
