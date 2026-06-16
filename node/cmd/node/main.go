@@ -209,7 +209,7 @@ func main() {
 			TxBytes:       nowTx,
 			RxBps:         int64(float64(nowRx-lastRx) / dt),
 			TxBps:         int64(float64(nowTx-lastTx) / dt),
-			OnlineUsers:   0,
+			OnlineUsers:   onlineUsers(),
 			OpenVPNStatus: services["openvpn"],
 			L2TPStatus:    services["l2tp"],
 			IKEv2Status:   services["ikev2"],
@@ -422,10 +422,9 @@ func postJSON(client *http.Client, url, token string, v any, log *logger.Logger)
 	b, _ := json.Marshal(v)
 
 	log.Debug("sending request to panel", map[string]any{
-		"url":          url,
-		"method":       "POST",
-		"body_size":    len(b),
-		"request_body": string(b),
+		"url":       url,
+		"method":    "POST",
+		"body_size": len(b),
 	})
 
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
@@ -459,6 +458,34 @@ func postJSON(client *http.Client, url, token string, v any, log *logger.Logger)
 	})
 
 	return true, ""
+}
+
+// onlineUsers counts the number of connected OpenVPN clients by parsing the status file.
+// Returns 0 if the file does not exist or cannot be read.
+func onlineUsers() int {
+	b, err := os.ReadFile("/run/openvpn-status.log")
+	if err != nil {
+		return 0
+	}
+
+	lines := strings.Split(string(b), "\n")
+	count := 0
+	inClientList := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Common Name,") {
+			inClientList = true
+			continue
+		}
+		if strings.HasPrefix(line, "ROUTING TABLE") {
+			break
+		}
+		if inClientList && strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+
+	return count
 }
 
 func getenv(k, d string) string {
