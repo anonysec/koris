@@ -51,6 +51,11 @@ SETUP_KEY="$(gen_secret 16)"
 SESSION_SECRET="$(gen_secret 32)"
 PANEL_SECRET="$(gen_secret 32)"
 
+# Input validation
+[[ ! "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]] && fatal "Invalid DB name (alphanumeric and underscore only)"
+[[ ! "$DB_USER" =~ ^[a-zA-Z0-9_]+$ ]] && fatal "Invalid DB user (alphanumeric and underscore only)"
+[[ ! "$PANEL_PORT" =~ ^[0-9]+$ ]] && fatal "Port must be numeric"
+
 echo ""
 info "Installing dependencies..."
 export DEBIAN_FRONTEND=noninteractive
