@@ -24,7 +24,6 @@ const tabs = [
   { key: 'data-warnings', label: 'Data Warnings' },
   { key: 'telegram', label: 'Telegram Bot' },
   { key: 'certificates', label: 'Certificates' },
-  { key: 'vpn-settings', label: 'VPN Settings' },
   { key: 'audit-logs', label: 'Audit Logs' },
   { key: 'backup', label: 'Backup' },
 ]
@@ -80,52 +79,8 @@ async function saveThresholds(): Promise<void> {
   }
 }
 
-// VPN Settings form
-const vpnForm = ref({
-  openvpn_port: '',
-  openvpn_protocol: 'udp',
-  openvpn_network: '',
-  l2tp_network: '',
-  ikev2_network: '',
-  dns_1: '',
-  dns_2: '',
-})
-
-function populateVpnForm() {
-  const s = nodesStore.vpnSettings
-  if (s) {
-    vpnForm.value = {
-      openvpn_port: String(s.openvpn_port || ''),
-      openvpn_protocol: s.openvpn_protocol || 'udp',
-      openvpn_network: s.openvpn_network || '',
-      l2tp_network: s.l2tp_network || '',
-      ikev2_network: s.ikev2_network || '',
-      dns_1: s.dns_1 || '',
-      dns_2: s.dns_2 || '',
-    }
-  }
-}
-
-async function saveVpnSettings() {
-  saving.value = true
-  await nodesStore.updateVpnSettings({
-    openvpn_port: Number(vpnForm.value.openvpn_port),
-    openvpn_protocol: vpnForm.value.openvpn_protocol,
-    openvpn_network: vpnForm.value.openvpn_network,
-    l2tp_network: vpnForm.value.l2tp_network,
-    ikev2_network: vpnForm.value.ikev2_network,
-    dns_1: vpnForm.value.dns_1,
-    dns_2: vpnForm.value.dns_2,
-  })
-  saving.value = false
-}
-
 onMounted(async () => {
-  await Promise.all([
-    nodesStore.loadVpnSettings(),
-    loadThresholds(),
-  ])
-  populateVpnForm()
+  await loadThresholds()
 })
 </script>
 
@@ -273,60 +228,6 @@ onMounted(async () => {
             </div>
           </div>
           <KButton variant="primary" size="sm" class="mt-3">Regenerate Certificates</KButton>
-        </div>
-      </template>
-
-      <!-- VPN Settings -->
-      <template #vpn-settings>
-        <div class="settings-panel">
-          <h4 class="section-title">VPN Settings</h4>
-          <form class="settings-form" @submit.prevent="saveVpnSettings">
-            <div class="form-grid-2">
-              <KFormField name="vpn-port" label="OpenVPN Port">
-                <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="vpnForm.openvpn_port" type="number" placeholder="1194" />
-                </template>
-              </KFormField>
-              <KFormField name="vpn-proto" label="OpenVPN Protocol">
-                <template #default="{ fieldId }">
-                  <KSelect
-                    :id="fieldId"
-                    v-model="vpnForm.openvpn_protocol"
-                    :options="[
-                      { label: 'UDP', value: 'udp' },
-                      { label: 'TCP', value: 'tcp' },
-                    ]"
-                  />
-                </template>
-              </KFormField>
-              <KFormField name="vpn-ovpn-net" label="OpenVPN Network">
-                <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="vpnForm.openvpn_network" placeholder="10.8.0.0/24" />
-                </template>
-              </KFormField>
-              <KFormField name="vpn-l2tp-net" label="L2TP Network">
-                <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="vpnForm.l2tp_network" placeholder="10.9.0.0/24" />
-                </template>
-              </KFormField>
-              <KFormField name="vpn-ikev2-net" label="IKEv2 Network">
-                <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="vpnForm.ikev2_network" placeholder="10.10.0.0/24" />
-                </template>
-              </KFormField>
-              <KFormField name="vpn-dns1" label="DNS 1">
-                <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="vpnForm.dns_1" placeholder="8.8.8.8" />
-                </template>
-              </KFormField>
-              <KFormField name="vpn-dns2" label="DNS 2">
-                <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="vpnForm.dns_2" placeholder="8.8.4.4" />
-                </template>
-              </KFormField>
-            </div>
-            <KButton type="submit" variant="primary" :loading="saving">Save VPN Settings</KButton>
-          </form>
         </div>
       </template>
 
