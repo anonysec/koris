@@ -86,10 +86,6 @@ onMounted(async () => {
 
 <template>
   <div class="page settings-view">
-    <header class="page-header">
-      <h2 class="page-title">Settings</h2>
-    </header>
-
     <KTabs v-model="activeTab" :tabs="tabs" aria-label="Settings sections">
       <!-- Panel Status -->
       <template #panel-status>
@@ -259,8 +255,6 @@ onMounted(async () => {
 
 <style scoped>
 .settings-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
 
 .settings-panel { padding: var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-4); }
 .section-title { margin: 0; font-size: var(--text-base); font-weight: var(--font-semibold); }

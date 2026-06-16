@@ -61,7 +61,6 @@ onMounted(() => {
 <template>
   <div class="page payments-view">
     <header class="page-header">
-      <h2 class="page-title">Payments</h2>
       <KButton variant="primary" @click="showRecordForm = !showRecordForm">
         {{ showRecordForm ? 'Hide Form' : 'Record Payment' }}
       </KButton>
@@ -154,8 +153,7 @@ onMounted(() => {
 
 <style scoped>
 .payments-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; }
 
 .payments-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
 .payments-layout:has(.payments-sidebar) { grid-template-columns: 320px 1fr; }

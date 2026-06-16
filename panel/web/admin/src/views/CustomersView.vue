@@ -219,7 +219,6 @@ onMounted(() => {
   <div class="page customers-view">
     <!-- Header -->
     <header class="page-header">
-      <h2 class="page-title">Customers</h2>
       <KButton variant="primary" icon="+" @click="handleNewUser">New User</KButton>
     </header>
 
@@ -329,8 +328,7 @@ onMounted(() => {
 <style scoped>
 .customers-view { display: flex; flex-direction: column; gap: var(--space-4); }
 
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; }
 
 /* Main page-level tabs (Customers | Archived | Resellers) */
 .main-tabs {

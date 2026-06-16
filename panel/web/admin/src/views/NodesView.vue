@@ -166,7 +166,6 @@ onMounted(() => {
 <template>
   <div class="page nodes-view">
     <header class="page-header">
-      <h2 class="page-title">Nodes</h2>
       <KButton variant="primary" icon="+" @click="showAddForm = true">Add Node</KButton>
     </header>
 
@@ -440,8 +439,7 @@ onMounted(() => {
 
 <style scoped>
 .nodes-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; }
 
 .token-banner { padding: var(--space-3) var(--space-4); background: rgba(34, 211, 238, 0.08); border: 1px solid var(--color-accent); border-radius: var(--radius-lg); }
 .token-banner code { background: var(--color-surface-2); padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--text-sm); word-break: break-all; }
