@@ -10,6 +10,11 @@
 # Requires: GITHUB_TOKEN env var with repo scope
 # Optional: GITHUB_REPO (defaults to anonysec/panel)
 
+# Use PANEL_ADDR from environment if already set (e.g., sourced by deploy.sh),
+# otherwise parse it from the env file for standalone usage.
+PANEL_ADDR="${PANEL_ADDR:-$(grep -E '^PANEL_ADDR=' /etc/panel/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)}"
+PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8080}"
+
 GITHUB_REPO="${GITHUB_REPO:-anonysec/panel}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
@@ -25,7 +30,7 @@ OPENVPN_LOGS=$(journalctl -u openvpn@server -n 15 --no-pager -o short-iso 2>&1 |
 MYSQL_LOGS=$(journalctl -u mariadb -n 10 --no-pager -o short-iso 2>&1 || echo "not available")
 NODE_AGENT_LOGS=$(journalctl -u node-agent -n 15 --no-pager -o short-iso 2>&1 || echo "not available")
 SERVICE_STATUS=$(systemctl is-active panel 2>/dev/null || echo "unknown")
-HEALTH_CHECK=$(curl -s --max-time 5 http://127.0.0.1:${PANEL_PORT:-8088}/api/health 2>/dev/null || echo "health check failed")
+HEALTH_CHECK=$(curl -s --max-time 5 "http://${PANEL_ADDR}/api/health" 2>/dev/null || echo "health check failed")
 PANEL_VERSION=$(cat /opt/koris-next/VERSION 2>/dev/null || echo "unknown")
 HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
 DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
