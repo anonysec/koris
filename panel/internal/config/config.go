@@ -77,6 +77,20 @@ func Load() Config {
 		}
 	}
 
+	// SecureCookies: configurable via PANEL_SECURE_COOKIES env var.
+	// Defaults to false because the panel is designed to run behind a reverse proxy
+	// (Nginx handles HTTPS, proxies to Go over HTTP). Setting Secure: true on cookies
+	// when Go receives plain HTTP can cause browsers to reject the cookie on refresh.
+	// Operators who expose Go directly over HTTPS should set PANEL_SECURE_COOKIES=true.
+	secureCookies := false
+	if v := os.Getenv("PANEL_SECURE_COOKIES"); v != "" {
+		secureCookies = strings.ToLower(v) == "true"
+	} else if !devMode {
+		// Legacy fallback: if env var is not set and not in dev mode,
+		// still default to false for reverse proxy compatibility
+		secureCookies = false
+	}
+
 	return Config{
 		Addr:           getenv("PANEL_ADDR", ":8080"),
 		DBDSN:          dbDSN,
@@ -87,7 +101,7 @@ func Load() Config {
 		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/koris-next/panel/web/admin/www"),
 		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/koris-next/panel/web/portal/www"),
 		TemplateDir:    getenv("PANEL_TEMPLATE_DIR", "/etc/koris/templates/"),
-		SecureCookies:  !devMode,
+		SecureCookies:  secureCookies,
 		TrustedProxies: trustedProxies,
 		AllowedOrigins: allowedOrigins,
 	}
