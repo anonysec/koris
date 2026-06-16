@@ -69,7 +69,9 @@ async function handleLogout() {
 }
 
 function handleNotifications() {
-  router.push({ name: 'tickets' })
+  // Navigate to settings audit logs which shows system events
+  // TODO: Replace with proper notification dropdown component
+  router.push({ name: 'settings', params: { tab: 'audit-logs' } })
 }
 </script>
 
