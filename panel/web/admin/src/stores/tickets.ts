@@ -66,11 +66,15 @@ export const useTicketsStore = defineStore('tickets', () => {
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, error } = useApi({
     onUnauthorized: () => {
-      // On 401, clear auth state and redirect to login
+      // Only redirect if auth was fully initialized and user WAS authenticated
+      // (i.e. the session actually expired). This prevents race conditions on
+      // initial page load where stores fire before auth state is propagated.
       const auth = useAuthStore()
-      auth.user = null
-      auth.isAuthenticated = false
-      router.push({ name: 'login' })
+      if (auth.initialized && auth.isAuthenticated) {
+        auth.user = null
+        auth.isAuthenticated = false
+        router.push({ name: 'login' })
+      }
     },
   })
 

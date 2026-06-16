@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
-import router from '@/router'
 
 /**
  * Auth user representation
@@ -63,13 +62,11 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
 
   // ─── API composable ───────────────────────────────────────────────────────
+  // No onUnauthorized handler here — the auth store handles 401 manually.
+  // This prevents a redirect loop when checkAuth() fires during initialization
+  // (e.g. /api/auth/me returning 401 before auth state is fully propagated).
   const { get, post, loading, error } = useApi({
-    onUnauthorized: () => {
-      // On 401, clear auth state and redirect to login
-      user.value = null
-      isAuthenticated.value = false
-      router.push({ name: 'login' })
-    },
+    showErrorToast: false,
   })
 
   // ─── Computed ─────────────────────────────────────────────────────────────
