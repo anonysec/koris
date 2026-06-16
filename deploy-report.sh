@@ -10,7 +10,9 @@
 # Requires: GITHUB_TOKEN env var with repo scope
 # Optional: GITHUB_REPO (defaults to anonysec/panel)
 
-PANEL_ADDR="$(grep -E '^PANEL_ADDR=' /etc/panel/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)"
+# Use PANEL_ADDR from environment if already set (e.g., sourced by deploy.sh),
+# otherwise parse it from the env file for standalone usage.
+PANEL_ADDR="${PANEL_ADDR:-$(grep -E '^PANEL_ADDR=' /etc/panel/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)}"
 PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8080}"
 
 GITHUB_REPO="${GITHUB_REPO:-anonysec/panel}"

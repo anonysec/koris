@@ -113,7 +113,5 @@ echo "=== [deploy] End of diagnostics ==="
 
 # Optional: deploy-report.sh posts deploy logs to GitHub Issues for remote debugging.
 # Its failure should not affect deploy success.
-if [ -f /etc/panel/panel.env ]; then
-  source /etc/panel/panel.env
-fi
-bash ./deploy-report.sh &
+# Wrapped in a subshell to prevent panel.env side effects from polluting the parent shell.
+( source /etc/panel/panel.env 2>/dev/null; exec bash ./deploy-report.sh ) &
