@@ -136,7 +136,7 @@ func main() {
 	}, database)
 	telegramBot.Start()
 
-	mux := srv.Routes().(*http.ServeMux)
+	mux := srv.Routes()
 	// Register webhook handler if in webhook mode
 	if botWebhook != "" && botEnabled {
 		mux.HandleFunc("/api/bot/webhook", telegramBot.WebhookHandler())
@@ -148,8 +148,11 @@ func main() {
 	// Rate limiter: 10 requests/sec per IP, burst 30
 	limiter := ratelimit.New(10, 30, cfg.TrustedProxies)
 
+	// Apply no-cache middleware on API responses
+	handler := api.NoCacheMiddleware(mux)
+
 	// CSRF middleware: between rate limiter and route handler
-	csrfProtected := csrf.Middleware(cfg.SessionSecret, mux)
+	csrfProtected := csrf.Middleware(cfg.SessionSecret, handler)
 
 	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(csrfProtected)))
 }

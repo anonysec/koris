@@ -17,13 +17,14 @@ func NewEnforcer(db *sql.DB) *Enforcer {
 // EnforceConnLimit kills excess active sessions for users who exceed their connection limit.
 // Called periodically by the worker goroutine.
 func (e *Enforcer) EnforceConnLimit() {
-	// Get users with conn_limit > 0 who have more active sessions than allowed
+	// Get users with Simultaneous-Use > 0 who have more active sessions than allowed
 	rows, err := e.db.Query(`
-		SELECT c.username, COALESCE(JSON_EXTRACT(c.extra_json, '$.conn_limit'), 0) AS conn_limit,
-			(SELECT COUNT(*) FROM radacct WHERE username=c.username AND acctstoptime IS NULL) AS active
-		FROM customers c
-		WHERE c.status = 'active'
-		HAVING conn_limit > 0 AND active > conn_limit
+		SELECT r.username, CAST(r.value AS UNSIGNED) AS conn_limit,
+			(SELECT COUNT(*) FROM radacct WHERE username=r.username AND acctstoptime IS NULL) AS active
+		FROM radcheck r
+		JOIN customers c ON c.username = r.username AND c.status = 'active' AND c.deleted_at IS NULL
+		WHERE r.attribute = 'Simultaneous-Use' AND CAST(r.value AS UNSIGNED) > 0
+		HAVING active > conn_limit
 	`)
 	if err != nil {
 		log.Printf("[enforcer] query: %v", err)

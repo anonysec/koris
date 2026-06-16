@@ -292,7 +292,7 @@ func New(db *sql.DB, cfg config.Config) *Server {
 	}
 }
 
-func (s *Server) Routes() http.Handler {
+func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/health", s.health)
@@ -5514,9 +5514,9 @@ func (s *Server) resellerPayments(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "method", http.StatusMethodNotAllowed)
 }
 
-// noCacheMiddleware sets Cache-Control: no-store on all /api/ responses to prevent
+// NoCacheMiddleware sets Cache-Control: no-store on all /api/ responses to prevent
 // browser-level caching of dynamic data.
-func noCacheMiddleware(next http.Handler) http.Handler {
+func NoCacheMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")

@@ -10,7 +10,7 @@ func TestNoCacheMiddleware_APIPaths(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := noCacheMiddleware(inner)
+	handler := NoCacheMiddleware(inner)
 
 	tests := []struct {
 		name     string
