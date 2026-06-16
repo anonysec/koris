@@ -148,7 +148,6 @@ onMounted(() => {
   <div class="page templates-view">
     <!-- Header -->
     <header class="page-header">
-      <h2 class="page-title">User Templates</h2>
       <KButton variant="primary" icon="+" @click="openCreate">Create Template</KButton>
     </header>
 
@@ -268,8 +267,7 @@ onMounted(() => {
 
 <style scoped>
 .templates-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; }
 
 .template-form-panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .form-title { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: var(--font-semibold); }

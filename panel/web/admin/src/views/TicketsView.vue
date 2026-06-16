@@ -53,10 +53,6 @@ onMounted(() => {
 
 <template>
   <div class="page tickets-view">
-    <header class="page-header">
-      <h2 class="page-title">Tickets</h2>
-    </header>
-
     <div class="tickets-layout">
       <!-- Left: Tickets Table -->
       <section class="tickets-table-section">
@@ -161,8 +157,6 @@ onMounted(() => {
 
 <style scoped>
 .tickets-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
 
 .tickets-layout { display: grid; grid-template-columns: 1fr 320px; gap: var(--space-5); }
 
