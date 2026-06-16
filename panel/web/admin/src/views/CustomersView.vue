@@ -23,14 +23,9 @@ const statusTabs = [
 ]
 
 const columns = [
-  { key: 'username', label: 'Username', sortable: true, filterable: true },
+  { key: 'username', label: 'Username', sortable: true },
   { key: 'display_name', label: 'Display Name', sortable: true },
-  { key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
-    { label: 'Active', value: 'active' },
-    { label: 'Limited', value: 'limited' },
-    { label: 'Disabled', value: 'disabled' },
-    { label: 'Expired', value: 'expired' },
-  ]},
+  { key: 'status', label: 'Status', sortable: true },
   { key: 'plan', label: 'Plan', sortable: true },
   { key: 'credit', label: 'Credit', sortable: true, align: 'right' as const },
   { key: 'created_at', label: 'Created', sortable: true },
