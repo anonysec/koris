@@ -85,15 +85,19 @@ type CustomerDetail struct {
 }
 
 type Plan struct {
-	ID           int64   `json:"id"`
-	Name         string  `json:"name"`
-	DataGB       float64 `json:"data_gb"`
-	SpeedMbps    float64 `json:"speed_mbps"`
-	DurationDays int     `json:"duration_days"`
-	Price        float64 `json:"price"`
-	IsActive     bool    `json:"is_active"`
-	SortOrder    int     `json:"sort_order"`
-	CreatedAt    string  `json:"created_at"`
+	ID               int64   `json:"id"`
+	Name             string  `json:"name"`
+	DataGB           float64 `json:"data_gb"`
+	SpeedMbps        float64 `json:"speed_mbps"`
+	DurationDays     int     `json:"duration_days"`
+	Price            float64 `json:"price"`
+	BillingType      string  `json:"billing_type"`
+	PricePerGB       float64 `json:"price_per_gb"`
+	PricePerDay      float64 `json:"price_per_day"`
+	DisconnectOnZero bool    `json:"disconnect_on_zero"`
+	IsActive         bool    `json:"is_active"`
+	SortOrder        int     `json:"sort_order"`
+	CreatedAt        string  `json:"created_at"`
 }
 
 type NodeUsageSnapshot struct {
@@ -1512,7 +1516,7 @@ func (s *Server) planByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans ORDER BY is_active DESC, sort_order ASC, id DESC`)
+	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order,created_at FROM plans ORDER BY is_active DESC, sort_order ASC, id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1541,19 +1545,31 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
 		return
 	}
-	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,is_active,sort_order) VALUES(?,?,?,?,?,?,?)`, in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, boolInt(in.IsActive), in.SortOrder)
+	if in.BillingType == "" {
+		in.BillingType = "quota"
+	}
+	if in.BillingType != "quota" && in.BillingType != "payg" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_type"})
+		return
+	}
+	if in.PricePerGB < 0 || in.PricePerDay < 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
+		return
+	}
+	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.IsActive), in.SortOrder)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	id, _ := res.LastInsertId()
 	actor, _, _ := s.currentAdmin(r)
-	s.logAudit(actor, "plan.created", "plan", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
+	s.logAudit(actor, "plan.created", "plan", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name, "billing_type": in.BillingType}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true, "id": id})
 }
 
 func (s *Server) getPlan(w http.ResponseWriter, id int64) {
-	row := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, id)
+	row := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, id)
 	plan, err := scanPlan(row)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
@@ -1577,12 +1593,24 @@ func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request, id int64) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
 		return
 	}
-	if _, err := s.DB.Exec(`UPDATE plans SET name=?,data_gb=?,speed_mbps=?,duration_days=?,price=?,is_active=?,sort_order=? WHERE id=?`, in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, boolInt(in.IsActive), in.SortOrder, id); err != nil {
+	if in.BillingType == "" {
+		in.BillingType = "quota"
+	}
+	if in.BillingType != "quota" && in.BillingType != "payg" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_type"})
+		return
+	}
+	if in.PricePerGB < 0 || in.PricePerDay < 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
+		return
+	}
+	if _, err := s.DB.Exec(`UPDATE plans SET name=?,data_gb=?,speed_mbps=?,duration_days=?,price=?,billing_type=?,price_per_gb=?,price_per_day=?,disconnect_on_zero=?,is_active=?,sort_order=? WHERE id=?`,
+		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.IsActive), in.SortOrder, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	actor, _, _ := s.currentAdmin(r)
-	s.logAudit(actor, "plan.updated", "plan", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
+	s.logAudit(actor, "plan.updated", "plan", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name, "billing_type": in.BillingType}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -1660,11 +1688,19 @@ type planScanner interface {
 func scanPlan(row planScanner) (Plan, error) {
 	var p Plan
 	var active int
+	var disconnectOnZero int
 	var created sql.NullTime
-	if err := row.Scan(&p.ID, &p.Name, &p.DataGB, &p.SpeedMbps, &p.DurationDays, &p.Price, &active, &p.SortOrder, &created); err != nil {
+	var billingType sql.NullString
+	if err := row.Scan(&p.ID, &p.Name, &p.DataGB, &p.SpeedMbps, &p.DurationDays, &p.Price, &billingType, &p.PricePerGB, &p.PricePerDay, &disconnectOnZero, &active, &p.SortOrder, &created); err != nil {
 		return p, err
 	}
 	p.IsActive = active == 1
+	p.DisconnectOnZero = disconnectOnZero == 1
+	if billingType.Valid {
+		p.BillingType = billingType.String
+	} else {
+		p.BillingType = "quota"
+	}
 	if created.Valid {
 		p.CreatedAt = created.Time.Format(time.RFC3339)
 	}
@@ -3766,7 +3802,7 @@ func (s *Server) portalPlans(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
+	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order,created_at FROM plans WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return

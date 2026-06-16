@@ -12,6 +12,10 @@ export interface CreatePlanPayload {
   speed_mbps: number
   duration_days: number
   price: number
+  billing_type: 'quota' | 'payg'
+  price_per_gb: number
+  price_per_day: number
+  disconnect_on_zero: boolean
   is_active: boolean
   sort_order: number
 }
@@ -25,6 +29,10 @@ export interface UpdatePlanPayload {
   speed_mbps?: number
   duration_days?: number
   price?: number
+  billing_type?: 'quota' | 'payg'
+  price_per_gb?: number
+  price_per_day?: number
+  disconnect_on_zero?: boolean
   is_active?: boolean
   sort_order?: number
 }
