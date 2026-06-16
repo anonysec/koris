@@ -104,11 +104,6 @@ echo ""
 echo "[deploy] Service status:"
 systemctl is-active panel 2>/dev/null || echo "  panel service status unknown"
 
-# Quick health check with timeout
-echo ""
-echo "[deploy] Health check response:"
-curl -s --max-time 5 "http://${PANEL_ADDR}/api/health" 2>/dev/null || echo "  (health check failed or timed out)"
-
 echo ""
 echo "[deploy] Diagnostics endpoint:"
 curl -s --max-time 10 "http://${PANEL_ADDR}/api/diagnostics/status" 2>/dev/null || echo "  (diagnostics not available - may need auth)"
@@ -116,5 +111,9 @@ curl -s --max-time 10 "http://${PANEL_ADDR}/api/diagnostics/status" 2>/dev/null 
 echo ""
 echo "=== [deploy] End of diagnostics ==="
 
-# Source panel env and run report
-(source /opt/koris-next/panel.env 2>/dev/null; bash ./deploy-report.sh) 2>/dev/null &
+# Optional: deploy-report.sh posts deploy logs to GitHub Issues for remote debugging.
+# Its failure should not affect deploy success.
+if [ -f /etc/panel/panel.env ]; then
+  source /etc/panel/panel.env
+fi
+bash ./deploy-report.sh &
