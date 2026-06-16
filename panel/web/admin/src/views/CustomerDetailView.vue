@@ -27,25 +27,32 @@ const tabs = [
 
 // Edit form state
 const form = ref({
+  username: '',
+  password: '',
   display_name: '',
   status: '',
   plan_id: '',
   data_gb: '',
   speed_mbps: '',
+  days: '',
   notes: '',
 })
 
 const customer = computed(() => store.detail)
 const usage = computed(() => store.usage)
+const isNew = computed(() => props.id === 'new')
 
 function populateForm() {
   if (customer.value) {
     form.value = {
+      username: customer.value.username || '',
+      password: '',
       display_name: customer.value.display_name || '',
       status: customer.value.status || '',
       plan_id: String(customer.value.plan_id ?? ''),
       data_gb: '',
       speed_mbps: '',
+      days: '',
       notes: customer.value.notes || '',
     }
   }
@@ -64,6 +71,23 @@ async function saveProfile() {
   saving.value = false
 }
 
+async function createCustomer() {
+  saving.value = true
+  const created = await store.createCustomer({
+    username: form.value.username,
+    password: form.value.password,
+    display_name: form.value.display_name,
+    plan_id: Number(form.value.plan_id) || 1,
+    data_gb: Number(form.value.data_gb) || 0,
+    speed_mbps: Number(form.value.speed_mbps) || 0,
+    days: Number(form.value.days) || 30,
+  })
+  saving.value = false
+  if (created) {
+    router.push({ name: 'customers' })
+  }
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
@@ -80,8 +104,71 @@ onMounted(() => {
 
 <template>
   <div class="page customer-detail">
+    <!-- Create New Customer Form -->
+    <template v-if="isNew">
+      <header class="detail-header">
+        <div class="detail-header__left">
+          <div class="detail-header__info">
+            <h2 class="detail-header__username">New Customer</h2>
+          </div>
+        </div>
+        <KButton variant="ghost" @click="router.back()">Back</KButton>
+      </header>
+
+      <form class="profile-form" @submit.prevent="createCustomer">
+        <div class="form-grid">
+          <KFormField name="username" label="Username" required>
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="form.username" placeholder="username" />
+            </template>
+          </KFormField>
+
+          <KFormField name="password" label="Password" required>
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="form.password" type="password" placeholder="Password" />
+            </template>
+          </KFormField>
+
+          <KFormField name="display_name" label="Display Name" required>
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="form.display_name" placeholder="Display name" />
+            </template>
+          </KFormField>
+
+          <KFormField name="days" label="Duration (days)">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="form.days" type="number" placeholder="30" />
+            </template>
+          </KFormField>
+
+          <KFormField name="data_gb" label="Data (GB)">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="form.data_gb" type="number" placeholder="Plan default" />
+            </template>
+          </KFormField>
+
+          <KFormField name="speed_mbps" label="Speed (Mbps)">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="Plan default" />
+            </template>
+          </KFormField>
+        </div>
+
+        <KFormField name="notes" label="Notes">
+          <template #default="{ fieldId }">
+            <KTextarea :id="fieldId" v-model="form.notes" rows="3" />
+          </template>
+        </KFormField>
+
+        <div class="form-actions">
+          <KButton variant="ghost" @click="router.back()">Cancel</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">Create Customer</KButton>
+        </div>
+      </form>
+    </template>
+
     <!-- Loading State -->
-    <div v-if="store.detailLoading" class="loading-state">
+    <div v-else-if="store.detailLoading" class="loading-state">
       <KSkeleton variant="rect" :width="'100%'" :height="80" />
       <KSkeleton variant="rect" :width="'100%'" :height="300" />
     </div>

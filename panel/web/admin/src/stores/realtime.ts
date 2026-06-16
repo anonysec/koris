@@ -106,8 +106,8 @@ export const useRealtimeStore = defineStore('realtime', () => {
   }
 
   const wsUrl = typeof window !== 'undefined'
-    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/ws`
-    : 'ws://localhost/api/ws'
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/realtime`
+    : 'ws://localhost/api/realtime'
 
   const { connected, connect, disconnect } = useWebSocket({
     url: wsUrl,
