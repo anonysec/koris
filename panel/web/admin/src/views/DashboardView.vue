@@ -61,6 +61,14 @@ function formatDuration(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60)
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
+
+function formatBps(bps: number): string {
+  if (!bps || bps <= 0) return '0 bps'
+  if (bps < 1024) return `${bps.toFixed(0)} bps`
+  if (bps < 1048576) return `${(bps / 1024).toFixed(1)} Kbps`
+  if (bps < 1073741824) return `${(bps / 1048576).toFixed(1)} Mbps`
+  return `${(bps / 1073741824).toFixed(2)} Gbps`
+}
 </script>
 
 <template>
@@ -80,16 +88,29 @@ function formatDuration(seconds: number): string {
     <section class="charts-row">
       <div class="chart-panel chart-panel--traffic">
         <h4 class="panel-title">Traffic Overview</h4>
-        <KChart
-          v-if="trafficChartData.length > 2"
-          type="area"
-          :data="trafficChartData"
-          :height="200"
-          :options="{ gradientFill: true, showGrid: true }"
-          :animate="true"
-          :interactive="true"
-        />
-        <KSkeleton v-else variant="rect" :width="'100%'" :height="200" />
+        <div v-if="trafficChartData.length > 2">
+          <KChart
+            type="area"
+            :data="trafficChartData"
+            :height="200"
+            :options="{ gradientFill: true, showGrid: true }"
+            :animate="true"
+            :interactive="true"
+          />
+        </div>
+        <div v-else class="traffic-fallback">
+          <div class="traffic-live">
+            <div class="traffic-stat">
+              <span class="traffic-stat__label">↓ Download</span>
+              <span class="traffic-stat__value">{{ formatBps(realtime.stats.total_rx_bps) }}</span>
+            </div>
+            <div class="traffic-stat">
+              <span class="traffic-stat__label">↑ Upload</span>
+              <span class="traffic-stat__value">{{ formatBps(realtime.stats.total_tx_bps) }}</span>
+            </div>
+          </div>
+          <p class="traffic-note">Chart data loading... (updates every 3 seconds)</p>
+        </div>
       </div>
       <div class="chart-panel chart-panel--donut">
         <h4 class="panel-title">User Status</h4>
@@ -196,6 +217,13 @@ function formatDuration(seconds: number): string {
 
 .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4); }
 .chart-panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+
+.traffic-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: var(--space-4); }
+.traffic-live { display: flex; gap: var(--space-6); }
+.traffic-stat { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
+.traffic-stat__label { font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wider); }
+.traffic-stat__value { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--color-text); }
+.traffic-note { font-size: var(--text-xs); color: var(--color-muted); margin: 0; }
 
 .panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .panel-title { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
