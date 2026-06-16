@@ -15,7 +15,6 @@ import (
 	"koris-next/panel/internal/api"
 	"koris-next/panel/internal/bot"
 	"koris-next/panel/internal/config"
-	"koris-next/panel/internal/csrf"
 	"koris-next/panel/internal/db"
 	"koris-next/panel/internal/notify"
 	"koris-next/panel/internal/ratelimit"
@@ -151,8 +150,5 @@ func main() {
 	// Apply no-cache middleware on API responses
 	handler := api.NoCacheMiddleware(mux)
 
-	// CSRF middleware: between rate limiter and route handler
-	csrfProtected := csrf.Middleware(cfg.SessionSecret, handler)
-
-	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(csrfProtected)))
+	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)))
 }
