@@ -1746,6 +1746,8 @@ func (s *Server) nodeByID(w http.ResponseWriter, r *http.Request) {
 			s.getNode(w, id)
 		case http.MethodPatch:
 			s.updateNode(w, r, id)
+		case http.MethodDelete:
+			s.deleteNode(w, id)
 		default:
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 		}
@@ -1871,6 +1873,19 @@ func (s *Server) rotateNodeToken(w http.ResponseWriter, r *http.Request, id int6
 
 func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 	if _, err := s.DB.Exec(`UPDATE nodes SET status=? WHERE id=?`, status, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) deleteNode(w http.ResponseWriter, id int64) {
+	// Clean up related data first
+	_, _ = s.DB.Exec(`DELETE FROM node_vpn_configs WHERE node_id=?`, id)
+	_, _ = s.DB.Exec(`DELETE FROM node_tasks WHERE node_id=?`, id)
+	_, _ = s.DB.Exec(`DELETE FROM node_status WHERE node_id=?`, id)
+
+	if _, err := s.DB.Exec(`DELETE FROM nodes WHERE id=?`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

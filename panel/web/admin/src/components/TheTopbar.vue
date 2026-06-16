@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Breadcrumb } from '@koris/types/components'
+import { useI18n } from '@koris/composables/useI18n'
+import type { Locale } from '@koris/composables/useI18n'
+
+const { locale, setLocale } = useI18n()
 
 export interface Props {
   title: string
@@ -125,6 +129,18 @@ function handleSearchKeyup(event: KeyboardEvent) {
           @keyup="handleSearchKeyup"
         />
         <kbd v-show="showSearchBar" class="search-shortcut">⌘K</kbd>
+      </div>
+
+      <!-- Language Switcher -->
+      <div class="lang-switcher" role="group" aria-label="Language switcher">
+        <button
+          v-for="lang in (['en', 'fa', 'zh'] as Locale[])"
+          :key="lang"
+          :class="['lang-btn', { 'lang-btn--active': locale === lang }]"
+          @click="setLocale(lang)"
+        >
+          {{ lang === 'en' ? 'EN' : lang === 'fa' ? 'FA' : 'ZH' }}
+        </button>
       </div>
 
       <!-- Realtime connection status -->
@@ -370,6 +386,40 @@ function handleSearchKeyup(event: KeyboardEvent) {
 .icon-btn svg {
   width: 16px;
   height: 16px;
+}
+
+/* Language Switcher */
+.lang-switcher {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+.lang-btn {
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  border: none;
+  background: var(--color-surface, #0b1120);
+  color: var(--color-muted, #8b98a5);
+  font-size: var(--text-xs, 11px);
+  font-weight: var(--font-medium, 500);
+  cursor: pointer;
+  transition: all var(--duration-fast, 0.12s);
+}
+
+.lang-btn:not(:last-child) {
+  border-right: 1px solid var(--color-border, #28333f);
+}
+
+.lang-btn:hover {
+  color: var(--color-text, #e6edf3);
+  background: var(--color-surface-2, #1e2630);
+}
+
+.lang-btn--active {
+  color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.1);
 }
 
 </style>

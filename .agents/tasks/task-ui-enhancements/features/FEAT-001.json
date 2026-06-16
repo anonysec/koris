@@ -1,0 +1,33 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix admin UI issues: i18n language switcher, customers search/checkbox styling, node delete button, dashboard traffic chart (data usage not speed), and payments Record Payment as popup with Add Method form",
+  "status": "in_progress",
+  "steps": [
+    "1. Fix i18n: In panel/web/admin/src/i18n.ts, import and call registerMessages from @koris/composables/useI18n to register the existing en/fa/zh message bundles into the shared i18n system. The file already has the t() function and messages - it needs to call registerMessages() so the shared useI18n composable picks them up. Also ensure main.ts or i18n.ts calls registerMessages on startup. Then add a language switcher in the AppShell (panel/web/admin/src/layouts/AppShell.vue) or the TheSidebar/TheTopbar. The shared useI18n composable already has setLocale and persists to localStorage. A simple dropdown (KSelect or inline buttons for en/fa/zh) in the topbar or sidebar will suffice.",
+    "2. Fix CustomersView (panel/web/admin/src/views/CustomersView.vue): Replace the raw HTML <input type='search'> with the KInput component from @koris/ui. Import KInput (already available in shared). Keep the debounced search behavior. Also improve the checkbox styling - the current :deep(.k-table__checkbox) styles are hacky with hardcoded pixel values. Refine them to be properly sized (16x16 or 18x18) with proper box-sizing and relative units.",
+    "3. Fix NodesView (panel/web/admin/src/views/NodesView.vue): Add a Delete button next to the Enable/Disable button in the node-card__actions section. Add a deleteNode action to the nodes store (panel/web/admin/src/stores/nodes.ts) that calls DELETE /api/nodes/:id (the API route exists at /api/nodes/ which routes to nodeByID handler - we need to add DELETE method handling in the Go backend). Use useConfirm for confirmation dialog before deleting. Also add a deleteNode handler in the Go backend (panel/internal/api/api.go) in the nodeByID function - add a case for http.MethodDelete that soft-deletes or hard-deletes the node from the database.",
+    "4. Fix DashboardView (panel/web/admin/src/views/DashboardView.vue): The Traffic Overview chart currently shows speed (bps) over time from rxHistory/txHistory. Change it to show cumulative data usage. The realtime store pushes total_rx_bps and total_tx_bps which are speed values. Instead, the chart should show total data transferred. Options: (a) compute cumulative sum from the speed history (approximate by integrating bps * interval), or (b) add total_rx_bytes/total_tx_bytes to the stats websocket message if available. For the fallback (when chart data < 2 points), change from formatBps to formatBytes showing total data transferred (use stats fields or sum from live sessions). The chart title should reflect 'Data Usage' not just 'Traffic Overview'. Change the chart data computation to accumulate bytes over time rather than showing instantaneous speed.",
+    "5. Fix PaymentsView (panel/web/admin/src/views/PaymentsView.vue): Change the Record Payment form from a sidebar panel to a popup/modal using the KDrawer component (available at @koris/ui/KDrawer.vue). KDrawer slides from the side with overlay, focus trap, and proper close handling - this is the 'popup' UX the user wants. Replace the sidebar layout with a KDrawer that opens when 'Record Payment' is clicked. Also add an 'Add Method' button and form in the Payment Methods section to allow creating new payment methods. The store already has savePaymentMethod action."
+  ],
+  "acceptance_criteria": [
+    "Language switcher is visible in the admin UI and switching locale changes displayed text for translated keys",
+    "CustomersView uses KInput component instead of raw HTML input for search",
+    "Checkbox styling in CustomersView renders at proper 16-18px size without hacky pixel overrides",
+    "NodesView shows a Delete button on each node card that triggers confirmation and calls deleteNode",
+    "The nodes store has a deleteNode action that calls DELETE /api/nodes/:id",
+    "The Go backend handles DELETE method on /api/nodes/:id endpoint",
+    "DashboardView Traffic Overview shows cumulative data usage (bytes) not speed (bps)",
+    "DashboardView fallback shows total bytes transferred not speed",
+    "PaymentsView Record Payment opens as a KDrawer popup overlay, not an inline sidebar panel",
+    "PaymentsView has an Add Method button/form that calls savePaymentMethod",
+    "npm run build succeeds in both admin and portal directories"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel/panel/web/admin && npm run build",
+    "cd /projects/sandbox/panel/panel/web/portal && npm run build",
+    "cd /projects/sandbox/panel && go build ./..."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { registerMessages } from '@koris/composables/useI18n'
 
 export type Locale = 'en' | 'fa' | 'zh'
 export const locale = ref<Locale>('en')
@@ -269,3 +270,6 @@ export function t(key: string): string {
 }
 
 export function setLocale(l: Locale) { locale.value = l }
+
+// Register all admin translation bundles with the shared i18n system
+registerMessages(messages)

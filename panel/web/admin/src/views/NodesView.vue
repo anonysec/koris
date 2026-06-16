@@ -2,6 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useNodesStore } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
+import { useConfirm } from '@koris/composables/useConfirm'
 import KTabs from '@koris/ui/KTabs.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
@@ -13,6 +14,7 @@ import KSelect from '@koris/ui/KSelect.vue'
 
 const store = useNodesStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const activeTab = ref('nodes')
 const showAddForm = ref(false)
 const creating = ref(false)
@@ -99,6 +101,24 @@ async function handleCreateNode() {
 async function toggleNode(id: number, currentStatus: string) {
   const enable = currentStatus === 'offline'
   await store.updateNode(id, enable)
+}
+
+async function handleDeleteNode(id: number, name: string) {
+  const confirmed = await confirm({
+    title: 'Delete Node',
+    message: `Are you sure you want to delete "${name}"? This will remove the node and all related configurations.`,
+    variant: 'danger',
+    icon: '⚠',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  })
+  if (!confirmed) return
+  const success = await store.deleteNode(id)
+  if (success) {
+    toast.success(`Node "${name}" deleted successfully.`)
+  } else {
+    toast.error(`Failed to delete node "${name}".`)
+  }
 }
 
 
@@ -257,6 +277,9 @@ onMounted(() => {
               <div class="node-card__actions">
                 <KButton variant="ghost" size="sm" @click="toggleNode(node.id, node.status)">
                   {{ node.status === 'online' ? 'Disable' : 'Enable' }}
+                </KButton>
+                <KButton variant="danger" size="sm" @click="handleDeleteNode(node.id, node.name)">
+                  Delete
                 </KButton>
               </div>
             </div>
@@ -470,7 +493,7 @@ onMounted(() => {
 .metric-row__val { font-size: var(--text-xs); color: var(--color-muted); width: 36px; text-align: right; }
 .metric-text { font-size: var(--text-xs); padding-top: var(--space-1); }
 
-.node-card__actions { border-top: 1px solid var(--color-border); padding-top: var(--space-2); }
+.node-card__actions { border-top: 1px solid var(--color-border); padding-top: var(--space-2); display: flex; gap: var(--space-2); }
 
 /* ─── Cores / Protocol Cards ─────────────────────────────────────────────── */
 .cores-grid { display: flex; flex-direction: column; gap: var(--space-5); }

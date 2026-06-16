@@ -8,6 +8,7 @@ import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KAvatar from '@koris/ui/KAvatar.vue'
+import KInput from '@koris/ui/KInput.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
@@ -92,10 +93,10 @@ const debouncedSearch = useDebounceFn((val: string) => {
   store.filters.search = val
 }, 300)
 
-function onSearchInput(e: Event) {
-  const val = (e.target as HTMLInputElement).value
-  searchQuery.value = val
-  debouncedSearch(val)
+function onSearchInput(val: string | number) {
+  const strVal = String(val)
+  searchQuery.value = strVal
+  debouncedSearch(strVal)
 }
 
 function setMainTab(tabKey: string) {
@@ -267,13 +268,11 @@ onMounted(() => {
 
     <!-- Search -->
     <div class="search-bar">
-      <input
-        type="search"
-        class="search-input"
+      <KInput
+        :model-value="searchQuery"
         :placeholder="currentMainTab === 'archived' ? 'Search archived...' : 'Search customers...'"
-        :value="searchQuery"
-        @input="onSearchInput"
         aria-label="Search customers"
+        @update:model-value="onSearchInput"
       />
     </div>
 
@@ -432,8 +431,6 @@ onMounted(() => {
 
 /* Search */
 .search-bar { max-width: 320px; }
-.search-input { width: 100%; padding: var(--space-2) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: var(--text-sm); outline: none; transition: border-color var(--duration-normal); }
-.search-input:focus { border-color: var(--color-primary); }
 
 /* Username cell with avatar */
 .username-cell {
@@ -488,13 +485,14 @@ onMounted(() => {
 :deep(.k-table__checkbox) {
   appearance: none;
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 1rem;
+  height: 1rem;
   border: 2px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   cursor: pointer;
   position: relative;
+  flex-shrink: 0;
   transition: all var(--duration-fast);
 }
 
@@ -510,13 +508,16 @@ onMounted(() => {
 :deep(.k-table__checkbox:checked::after) {
   content: '';
   position: absolute;
-  top: 2px;
-  left: 5px;
-  width: 4px;
-  height: 8px;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: solid #fff;
   border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  width: 25%;
+  height: 50%;
+  margin: auto;
+  transform: rotate(45deg) translateY(-1px);
 }
 
 :deep(.k-table__checkbox:indeterminate) {
@@ -527,12 +528,13 @@ onMounted(() => {
 :deep(.k-table__checkbox:indeterminate::after) {
   content: '';
   position: absolute;
-  top: 6px;
-  left: 3px;
-  width: 8px;
+  top: 50%;
+  left: 50%;
+  width: 50%;
   height: 2px;
   background: #fff;
   border-radius: 1px;
+  transform: translate(-50%, -50%);
 }
 
 :deep(.k-table__checkbox:focus-visible) {
