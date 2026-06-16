@@ -42,7 +42,7 @@ async function handleLogin() {
     <aside class="login-hero">
       <div class="login-hero__content">
         <div class="login-hero__logo">
-          <span class="login-hero__logo-icon">K</span>
+          <span class="login-hero__logo-icon">◆</span>
           <span class="login-hero__logo-text">KorisPanel</span>
         </div>
         <h1 class="login-hero__title">VPN Management<br>Made Simple</h1>
@@ -60,7 +60,7 @@ async function handleLogin() {
         <p class="login-form__subtitle text-muted">Enter your credentials to continue</p>
 
         <div class="login-form__fields">
-          <KFormField name="username" label="Username" :error="errors.username" required>
+          <KFormField name="username" label="Username" :error="errors.username">
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
@@ -72,7 +72,7 @@ async function handleLogin() {
             </template>
           </KFormField>
 
-          <KFormField name="password" label="Password" :error="errors.password" required>
+          <KFormField name="password" label="Password" :error="errors.password">
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
@@ -136,16 +136,8 @@ async function handleLogin() {
 }
 
 .login-hero__logo-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--color-primary), #22d3ee);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 16px;
+  font-size: var(--text-2xl);
+  color: var(--color-primary);
 }
 
 .login-hero__logo-text {

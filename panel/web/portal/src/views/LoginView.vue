@@ -63,7 +63,7 @@ async function handleLogin() {
       <p class="login-card__subtitle">Sign in with your account credentials</p>
 
       <form class="login-form" @submit.prevent="handleLogin">
-        <KFormField label="Username" :required="true">
+        <KFormField label="Username">
           <KInput
             v-model="form.username"
             placeholder="Your username"
@@ -71,7 +71,7 @@ async function handleLogin() {
           />
         </KFormField>
 
-        <KFormField label="Password" :required="true">
+        <KFormField label="Password">
           <KInput
             v-model="form.password"
             type="password"
