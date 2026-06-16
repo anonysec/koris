@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Fix admin UI issues: i18n language switcher, customers search/checkbox styling, node delete button, dashboard traffic chart (data usage not speed), and payments Record Payment as popup with Add Method form",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. Fix i18n: In panel/web/admin/src/i18n.ts, import and call registerMessages from @koris/composables/useI18n to register the existing en/fa/zh message bundles into the shared i18n system. The file already has the t() function and messages - it needs to call registerMessages() so the shared useI18n composable picks them up. Also ensure main.ts or i18n.ts calls registerMessages on startup. Then add a language switcher in the AppShell (panel/web/admin/src/layouts/AppShell.vue) or the TheSidebar/TheTopbar. The shared useI18n composable already has setLocale and persists to localStorage. A simple dropdown (KSelect or inline buttons for en/fa/zh) in the topbar or sidebar will suffice.",
     "2. Fix CustomersView (panel/web/admin/src/views/CustomersView.vue): Replace the raw HTML <input type='search'> with the KInput component from @koris/ui. Import KInput (already available in shared). Keep the debounced search behavior. Also improve the checkbox styling - the current :deep(.k-table__checkbox) styles are hacky with hardcoded pixel values. Refine them to be properly sized (16x16 or 18x18) with proper box-sizing and relative units.",
@@ -29,5 +29,5 @@
     "cd /projects/sandbox/panel && go build ./..."
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 5 sub-features implemented successfully. Admin and portal frontends build with vue-tsc + vite. Go backend builds cleanly. KInput update:modelValue emits string|number so handlers need to accept that union type. The Locale type import from shared useI18n needs to use the exported type."
 }
