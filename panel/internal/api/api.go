@@ -378,6 +378,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/diagnostics/ai/rules", s.requireAdmin(s.aiHealingRules))
 	mux.HandleFunc("/api/diagnostics/ai/rules/", s.requireAdmin(s.aiHealingRuleByID))
 	mux.HandleFunc("/api/diagnostics/ai/healing-log", s.requireAdmin(s.aiHealingLog))
+	mux.HandleFunc("/api/diagnostics/logs", s.requireAdmin(s.serverLogs))
+	mux.HandleFunc("/api/diagnostics/status", s.requireAdmin(s.serverStatus))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/"))

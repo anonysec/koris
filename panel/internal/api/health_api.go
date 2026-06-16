@@ -3,11 +3,17 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// processStartTime records when the process started for uptime calculation.
+var processStartTime = time.Now()
 
 // aiDiagnostics runs all health checks and returns the diagnostics report.
 // GET /api/diagnostics/ai
@@ -366,5 +372,115 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 		"total":     total,
 		"page":      page,
 		"page_size": pageSize,
+	})
+}
+
+
+// allowedUnits is the whitelist of systemd units that can be queried via serverLogs.
+var allowedUnits = map[string]bool{
+	"panel":      true,
+	"nginx":      true,
+	"openvpn":    true,
+	"xl2tpd":     true,
+	"strongswan": true,
+	"mariadb":    true,
+	"mysql":      true,
+	"node-agent": true,
+}
+
+// serverLogs returns recent journalctl output for a whitelisted systemd unit.
+// GET /api/diagnostics/logs?lines=50&unit=panel
+func (s *Server) serverLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse lines parameter (default 50, max 500)
+	lines := 50
+	if l := r.URL.Query().Get("lines"); l != "" {
+		parsed, err := strconv.Atoi(l)
+		if err != nil || parsed < 1 {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid 'lines' parameter"})
+			return
+		}
+		lines = parsed
+		if lines > 500 {
+			lines = 500
+		}
+	}
+
+	// Parse unit parameter (default "panel", must be whitelisted)
+	unit := r.URL.Query().Get("unit")
+	if unit == "" {
+		unit = "panel"
+	}
+	if !allowedUnits[unit] {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("unit '%s' not allowed; allowed: panel, nginx, openvpn, xl2tpd, strongswan, mariadb, mysql, node-agent", unit)})
+		return
+	}
+
+	// Execute journalctl
+	cmd := exec.Command("journalctl", "-u", unit, "-n", strconv.Itoa(lines), "--no-pager", "-o", "short-iso")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": true, "unit": unit, "lines": lines, "output": string(output), "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true, "unit": unit, "lines": lines, "output": string(output)})
+}
+
+// serverStatus returns quick system status including version, uptime, runtime info,
+// database connectivity, and last health score.
+// GET /api/diagnostics/status
+func (s *Server) serverStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Uptime
+	uptime := time.Since(processStartTime).String()
+
+	// Go runtime info
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+
+	// Database ping
+	dbStatus := "ok"
+	if err := s.DB.Ping(); err != nil {
+		dbStatus = err.Error()
+	}
+
+	// Last health score
+	var lastScore *int
+	var lastScoreAt *string
+	var score int
+	var generatedAt sql.NullTime
+	err := s.DB.QueryRow(`SELECT score, generated_at FROM health_scores ORDER BY id DESC LIMIT 1`).Scan(&score, &generatedAt)
+	if err == nil {
+		lastScore = &score
+		if generatedAt.Valid {
+			t := generatedAt.Time.Format(time.RFC3339)
+			lastScoreAt = &t
+		}
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":      true,
+		"version": s.Config.Version,
+		"uptime":  uptime,
+		"runtime": map[string]any{
+			"go_version": runtime.Version(),
+			"goroutines": runtime.NumGoroutine(),
+			"mem_alloc":  memStats.Alloc,
+			"mem_sys":    memStats.Sys,
+		},
+		"database": map[string]any{
+			"status": dbStatus,
+		},
+		"last_health_score":    lastScore,
+		"last_health_score_at": lastScoreAt,
 	})
 }
