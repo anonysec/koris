@@ -189,6 +189,19 @@ async function toggleProtocol(nodeId: number, protocol: string, currentConfig: a
   await store.loadNodeVpnConfigs(nodeId)
 }
 
+// ─── Clear PSK when mode switches away from PSK-based auth ──────────────────
+watch(() => configForm.value?.extra_json?.ipsec_mode, (newMode, oldMode) => {
+  if (oldMode === 'ipsec' && newMode === 'plain' && configForm.value?.extra_json) {
+    configForm.value.extra_json.psk = ''
+  }
+})
+
+watch(() => configForm.value?.extra_json?.auth_type, (newType, oldType) => {
+  if (oldType === 'psk' && newType === 'certificate' && configForm.value?.extra_json) {
+    configForm.value.extra_json.psk = ''
+  }
+})
+
 // ─── Load configs when Cores tab is activated ────────────────────────────────
 watch(activeTab, (tab) => {
   if (tab === 'cores') {

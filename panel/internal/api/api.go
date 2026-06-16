@@ -1880,12 +1880,35 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 }
 
 func (s *Server) deleteNode(w http.ResponseWriter, id int64) {
-	// Clean up related data first
-	_, _ = s.DB.Exec(`DELETE FROM node_vpn_configs WHERE node_id=?`, id)
-	_, _ = s.DB.Exec(`DELETE FROM node_tasks WHERE node_id=?`, id)
-	_, _ = s.DB.Exec(`DELETE FROM node_status WHERE node_id=?`, id)
+	tx, err := s.DB.Begin()
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
 
-	if _, err := s.DB.Exec(`DELETE FROM nodes WHERE id=?`, id); err != nil {
+	// Clean up all related tables within a transaction
+	tables := []string{
+		"node_vpn_configs",
+		"node_tasks",
+		"node_status",
+		"node_services",
+		"node_usage_snapshots",
+		"node_diagnostics",
+	}
+	for _, table := range tables {
+		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE node_id=?`, id); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean %s: %v", table, err)})
+			return
+		}
+	}
+
+	if _, err := tx.Exec(`DELETE FROM nodes WHERE id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

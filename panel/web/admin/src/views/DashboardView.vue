@@ -28,12 +28,14 @@ function handleStatClick(routeName: string) {
 }
 
 const trafficChartData = computed(() => {
-  // Compute cumulative data usage from bps history
-  // Each data point represents cumulative sum of (rx+tx) values up to that index
-  // This gives a monotonically increasing "total data" curve
+  // Compute cumulative data usage (bytes) from bps history.
+  // Each sample in rxHistory/txHistory is a bps value pushed every ~3 seconds.
+  // To convert to bytes transferred per interval: (bps * 3) / 8
   let cumulative = 0
   return realtime.rxHistory.map((rx, i) => {
-    cumulative += rx + (realtime.txHistory[i] || 0)
+    const intervalBps = rx + (realtime.txHistory[i] || 0)
+    const intervalBytes = (intervalBps * 3) / 8
+    cumulative += intervalBytes
     return {
       label: `${i}`,
       value: cumulative,

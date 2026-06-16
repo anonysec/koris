@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useUsageStore } from '@/stores/usage'
 import { useUsageDisplay, formatBytes } from '@/composables/useUsageDisplay'
@@ -8,6 +9,7 @@ import KSkeleton from '@koris/ui/KSkeleton.vue'
 import PlanCard from '@/components/PlanCard.vue'
 import UsageGauge from '@/components/UsageGauge.vue'
 
+const router = useRouter()
 const auth = usePortalAuthStore()
 const usageStore = useUsageStore()
 
@@ -169,6 +171,13 @@ function formatDuration(seconds: number): string {
                 {{ daysRemaining }} day{{ daysRemaining !== 1 ? 's' : '' }}
               </span>
             </div>
+          </div>
+
+          <!-- Link to detailed usage page -->
+          <div class="usage-card__link">
+            <a class="usage-card__detail-link" @click.prevent="router.push({ name: 'portal-usage' })">
+              View detailed usage &rarr;
+            </a>
           </div>
         </div>
       </div>
@@ -338,6 +347,20 @@ function formatDuration(seconds: number): string {
 }
 .usage-card__expiry-days--warning {
   color: var(--color-danger, #ef4444);
+}
+.usage-card__link {
+  margin-top: var(--space-4);
+  text-align: center;
+}
+.usage-card__detail-link {
+  font-size: var(--text-sm);
+  color: var(--color-primary, #2563eb);
+  cursor: pointer;
+  font-weight: 500;
+  text-decoration: none;
+}
+.usage-card__detail-link:hover {
+  text-decoration: underline;
 }
 .dashboard__sessions {
   margin-top: var(--space-4);
