@@ -115,3 +115,6 @@ curl -s --max-time 10 http://127.0.0.1:${PANEL_PORT:-8088}/api/diagnostics/statu
 
 echo ""
 echo "=== [deploy] End of diagnostics ==="
+
+# Auto-report to GitHub for remote debugging
+bash ./deploy-report.sh 2>/dev/null &
