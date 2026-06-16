@@ -67,6 +67,10 @@ async function handleLogout() {
   await authStore.logout()
   router.push({ name: 'login' })
 }
+
+function handleNotifications() {
+  router.push({ name: 'tickets' })
+}
 </script>
 
 <template>
@@ -88,6 +92,7 @@ async function handleLogout() {
         :realtime-connected="realtimeStore.connected"
         :notification-count="realtimeStore.notificationCount"
         @toggle-theme="toggleTheme"
+        @open-notifications="handleNotifications"
       />
 
       <router-view v-slot="{ Component, route: viewRoute }">

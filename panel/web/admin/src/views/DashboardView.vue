@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useRealtimeStore } from '@/stores/realtime'
 import { useCustomersStore } from '@/stores/customers'
 import { useNodesStore } from '@/stores/nodes'
@@ -7,6 +8,7 @@ import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 
+const router = useRouter()
 const realtime = useRealtimeStore()
 const customers = useCustomersStore()
 const nodes = useNodesStore()
@@ -15,11 +17,15 @@ customers.loadCustomers()
 nodes.loadNodes()
 
 const statCards = computed(() => [
-  { label: 'Revenue', value: `$${realtime.stats.approved_payments}`, icon: '💰' },
-  { label: 'Active Users', value: realtime.stats.active_customers, icon: '👥' },
-  { label: 'Nodes Online', value: realtime.stats.nodes, icon: '🖥️' },
-  { label: 'Open Tickets', value: realtime.stats.open_tickets, icon: '🎫' },
+  { label: 'Revenue', value: `$${realtime.stats.approved_payments}`, icon: '💰', route: 'payments' },
+  { label: 'Active Users', value: realtime.stats.active_customers, icon: '👥', route: 'customers' },
+  { label: 'Nodes Online', value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
+  { label: 'Open Tickets', value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
 ])
+
+function handleStatClick(routeName: string) {
+  router.push({ name: routeName })
+}
 
 const trafficChartData = computed(() =>
   realtime.rxHistory.map((rx, i) => ({
@@ -61,7 +67,7 @@ function formatDuration(seconds: number): string {
   <div class="page dashboard">
     <!-- Stats Grid -->
     <section class="stats-grid" aria-label="Overview statistics">
-      <div v-for="stat in statCards" :key="stat.label" class="stat-card">
+      <div v-for="stat in statCards" :key="stat.label" class="stat-card stat-card--clickable" @click="handleStatClick(stat.route)">
         <span class="stat-card__icon">{{ stat.icon }}</span>
         <div class="stat-card__body">
           <span class="stat-card__value">{{ stat.value }}</span>
@@ -181,6 +187,8 @@ function formatDuration(seconds: number): string {
 
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
 .stat-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.stat-card--clickable { cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
+.stat-card--clickable:hover { transform: translateY(-2px); border-color: rgba(37, 99, 235, 0.3); }
 .stat-card__icon { font-size: 1.5rem; }
 .stat-card__body { display: flex; flex-direction: column; }
 .stat-card__value { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--color-text); }

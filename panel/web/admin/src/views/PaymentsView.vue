@@ -10,6 +10,7 @@ import KStatusPill from '@koris/ui/KStatusPill.vue'
 
 const store = usePaymentsStore()
 const creatingPayment = ref(false)
+const showRecordForm = ref(false)
 
 const paymentForm = ref({
   username: '',
@@ -61,11 +62,14 @@ onMounted(() => {
   <div class="page payments-view">
     <header class="page-header">
       <h2 class="page-title">Payments</h2>
+      <KButton variant="primary" @click="showRecordForm = !showRecordForm">
+        {{ showRecordForm ? 'Hide Form' : 'Record Payment' }}
+      </KButton>
     </header>
 
     <div class="payments-layout">
       <!-- Left Column: Form + Payment Methods -->
-      <aside class="payments-sidebar">
+      <aside v-if="showRecordForm" class="payments-sidebar">
         <!-- Record Payment Form -->
         <div class="panel">
           <h4 class="panel-title">Record Payment</h4>
@@ -153,7 +157,8 @@ onMounted(() => {
 .page-header { display: flex; align-items: center; justify-content: space-between; }
 .page-title { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
 
-.payments-layout { display: grid; grid-template-columns: 320px 1fr; gap: var(--space-5); }
+.payments-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-5); }
+.payments-layout:has(.payments-sidebar) { grid-template-columns: 320px 1fr; }
 
 .payments-sidebar { display: flex; flex-direction: column; gap: var(--space-4); }
 .panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
