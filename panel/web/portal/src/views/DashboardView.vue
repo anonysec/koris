@@ -26,6 +26,11 @@ const maxDataBytes = computed(() => usageStore.maxDataBytes)
 const totalUsageBytes = computed(() => usageStore.totalUsageBytes)
 const expiresAt = computed(() => auth.user?.subscription?.expires_at ?? '')
 
+// Active sessions list (up to 4 most recent)
+const activeSessionsList = computed(() => {
+  return usageStore.sessions.filter(s => s.online).slice(0, 4)
+})
+
 // Use the useUsageDisplay composable for dynamic color and remaining calculations
 const { remainingBytes, progressColor, daysRemaining } = useUsageDisplay(
   totalUsageBytes,
@@ -66,6 +71,13 @@ const progressBarColor = computed(() => {
 
 function formatMoney(value: number): string {
   return `${new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(value)} IRT`
+}
+
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
 }
 </script>
 <template>
@@ -158,6 +170,27 @@ function formatMoney(value: number): string {
               </span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Active Sessions Section -->
+      <div class="dashboard__sessions" v-if="activeSessionsList.length > 0">
+        <div class="sessions-card">
+          <div class="sessions-card__header">
+            <h3>Active Sessions</h3>
+            <KStatusPill status="active">{{ activeSessionsList.length }} active</KStatusPill>
+          </div>
+          <ul class="sessions-card__list">
+            <li v-for="session in activeSessionsList" :key="session.id" class="sessions-card__item">
+              <div class="sessions-card__ip">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0c0-.738.402-1.423 1.053-1.758a6.033 6.033 0 011.615 2.309A1.5 1.5 0 0114.5 10h-.528a2.013 2.013 0 00-1.942 1.491l-.311 1.09A2 2 0 019.78 14H9.5a1.5 1.5 0 01-1.5-1.5V12a2 2 0 00-2-2h-.528a1.506 1.506 0 01-1.14-.527z" clip-rule="evenodd" />
+                </svg>
+                <span>{{ session.framed_ip }}</span>
+              </div>
+              <div class="sessions-card__duration">{{ formatDuration(session.session_seconds) }}</div>
+            </li>
+          </ul>
         </div>
       </div>
     </template>
@@ -305,5 +338,56 @@ function formatMoney(value: number): string {
 }
 .usage-card__expiry-days--warning {
   color: var(--color-danger, #ef4444);
+}
+.dashboard__sessions {
+  margin-top: var(--space-4);
+}
+.sessions-card {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.sessions-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+.sessions-card__header h3 {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.sessions-card__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.sessions-card__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+}
+.sessions-card__ip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+.sessions-card__ip svg {
+  color: var(--color-muted);
+}
+.sessions-card__duration {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  font-weight: 500;
 }
 </style>
