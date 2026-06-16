@@ -49,7 +49,7 @@ These components are fully implemented and ready to use but have not yet been im
 | **useConfirm** | admin/CustomersView (provides confirmation dialog via KConfirmDialog) |
 | **useFormatDate** | portal: BillingView, SupportView, TicketThread (consolidated from duplicate inline functions) |
 | **useFormValidation** | Shared internally; has property-based tests |
-| **useFreshData** | portal: BillingView, UsageView (consolidated from duplicates in admin and portal) |
+| **useFreshData** | portal: BillingView, UsageView (portal-only; admin uses WebSocket realtime updates via useWebSocket instead of stale-data guards) |
 | **useI18n** | admin: TheSidebar, AppShell, main.ts |
 | **useTheme** | admin: TheSidebar, AppShell; portal: PortalNavbar, PortalShell |
 | **useToast** | admin: CustomerDetailView, NodesView, SettingsView (via ToastProvider + KToast) |
