@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
-import router from '@/router'
 import type { Plan, Payment } from '@koris/types/entities'
 
 /**
@@ -64,15 +63,10 @@ export const useBillingStore = defineStore('portal-billing', () => {
   const loading = ref(false)
 
   // ─── API composable ───────────────────────────────────────────────────────
-  const { get, post, error } = useApi({
-    onUnauthorized: () => {
-      // Clear billing state and redirect to portal login
-      payments.value = []
-      paymentMethods.value = []
-      plans.value = []
-      router.push({ name: 'portal-login' })
-    },
-  })
+  // No onUnauthorized handler — the portal auth store and router guard handle
+  // auth redirects. This prevents race conditions where a 401 during initial
+  // data load would cause a redirect loop after login.
+  const { get, post, error } = useApi()
 
   // ─── Computed ─────────────────────────────────────────────────────────────
   const pendingPayments = computed(() =>

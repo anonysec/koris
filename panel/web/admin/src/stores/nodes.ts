@@ -1,8 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
-import { useAuthStore } from '@/stores/auth'
-import router from '@/router'
 import type { NodeItem } from '@koris/types'
 
 /**
@@ -162,19 +160,10 @@ export const useNodesStore = defineStore('nodes', () => {
   const loading = ref(false)
 
   // ─── API composable ───────────────────────────────────────────────────────
-  const { get, post, patch, error } = useApi({
-    onUnauthorized: () => {
-      // Only redirect if auth was fully initialized and user WAS authenticated
-      // (i.e. the session actually expired). This prevents race conditions on
-      // initial page load where stores fire before auth state is propagated.
-      const auth = useAuthStore()
-      if (auth.initialized && auth.isAuthenticated) {
-        auth.user = null
-        auth.isAuthenticated = false
-        router.push({ name: 'login' })
-      }
-    },
-  })
+  // No onUnauthorized handler — the router guard handles auth redirects.
+  // This prevents race conditions where a 401 during initial data load
+  // would clear auth state and cause a redirect loop after login.
+  const { get, post, patch, error } = useApi()
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
