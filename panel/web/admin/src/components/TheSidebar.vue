@@ -88,7 +88,7 @@ const navGroups = computed<NavGroup[]>(() => [
     title: 'System',
     items: [
       {
-        route: 'system',
+        route: 'settings',
         label: t('nav.settings'),
         icon: 'settings',
       },

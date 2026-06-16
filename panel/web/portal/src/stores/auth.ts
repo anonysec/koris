@@ -112,6 +112,7 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
    */
   async function logout(): Promise<void> {
     try {
+      await get<any>('/api/health').catch(() => null)
       await post<LogoutResponse>('/api/auth/customer/logout')
     } catch {
       // Ignore logout errors — always clear local state
