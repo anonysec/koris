@@ -1,5 +1,12 @@
 #!/bin/bash
 # deploy-report.sh — Posts deploy diagnostics to a GitHub Issue for remote debugging.
+
+# Source environment from common locations where the token might be stored
+[ -f /opt/koris-next/panel.env ] && source /opt/koris-next/panel.env
+[ -f /etc/panel-env ] && source /etc/panel-env
+[ -f /root/.panel-token ] && source /root/.panel-token
+[ -f ~/.bashrc ] && source ~/.bashrc 2>/dev/null
+
 # Requires: GITHUB_TOKEN env var with repo scope
 # Optional: GITHUB_REPO (defaults to anonysec/panel)
 
