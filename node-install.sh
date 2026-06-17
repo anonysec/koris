@@ -62,11 +62,11 @@ case "$OS" in
     ubuntu|debian)
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq git curl openssl iproute2 \
-            openvpn easy-rsa strongswan xl2tpd >/dev/null 2>&1
+            openvpn easy-rsa strongswan xl2tpd wireguard-tools >/dev/null 2>&1
         ;;
     centos|almalinux|rocky|rhel|fedora)
         dnf install -y -q git curl openssl iproute \
-            openvpn easy-rsa strongswan xl2tpd >/dev/null 2>&1
+            openvpn easy-rsa strongswan xl2tpd wireguard-tools >/dev/null 2>&1
         ;;
     *) fatal "Unsupported OS: $OS" ;;
 esac
@@ -170,6 +170,18 @@ if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then
     cp -f "$INSTALL_DIR/scripts/openvpn/"*.sh /etc/openvpn/server/ 2>/dev/null || true
     chmod +x /etc/openvpn/server/*.sh 2>/dev/null || true
 fi
+
+# Log rotation and directories
+mkdir -p /var/log/openvpn/
+chmod 0750 /var/log/openvpn/
+chown root:root /var/log/openvpn/
+mkdir -p /var/log/panel-node/
+chmod 0750 /var/log/panel-node/
+chown root:root /var/log/panel-node/
+cp -f "$INSTALL_DIR/scripts/logrotate/koris-openvpn" /etc/logrotate.d/koris-openvpn
+cp -f "$INSTALL_DIR/scripts/logrotate/koris-node-agent" /etc/logrotate.d/koris-node-agent
+chmod 644 /etc/logrotate.d/koris-openvpn
+chmod 644 /etc/logrotate.d/koris-node-agent
 
 # Service
 cp "$INSTALL_DIR/node/systemd/node-agent.service" /etc/systemd/system/node-agent.service
