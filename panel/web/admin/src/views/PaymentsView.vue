@@ -32,7 +32,25 @@ const methodForm = ref({
   instructions: '',
   is_active: true,
   sort_order: 0,
+  wallet_address: '',
+  network: '',
+  currency: '',
 })
+
+const cryptoNetworkOptions = computed(() => [
+  { label: 'BTC', value: 'BTC' },
+  { label: 'ETH', value: 'ETH' },
+  { label: 'TRC20', value: 'TRC20' },
+  { label: 'ERC20', value: 'ERC20' },
+  { label: 'BEP20', value: 'BEP20' },
+])
+
+const cryptoCurrencyOptions = computed(() => [
+  { label: 'BTC', value: 'BTC' },
+  { label: 'USDT', value: 'USDT' },
+  { label: 'ETH', value: 'ETH' },
+  { label: 'BNB', value: 'BNB' },
+])
 
 const tableColumns = computed(() => [
   { key: 'username', label: t('payments.col_user'), sortable: true },
@@ -83,20 +101,39 @@ async function submitPayment() {
 
 async function submitMethod() {
   savingMethod.value = true
+  let instructions = methodForm.value.instructions
+  if (methodForm.value.type === 'crypto') {
+    instructions = JSON.stringify({
+      wallet_address: methodForm.value.wallet_address,
+      network: methodForm.value.network,
+      currency: methodForm.value.currency,
+      note: methodForm.value.instructions,
+    })
+  }
   const success = await store.savePaymentMethod({
     name: methodForm.value.name,
     type: methodForm.value.type,
-    instructions: methodForm.value.instructions,
+    instructions,
     is_active: methodForm.value.is_active,
     sort_order: Number(methodForm.value.sort_order),
   })
   savingMethod.value = false
   if (success) {
-    methodForm.value = { name: '', type: '', instructions: '', is_active: true, sort_order: 0 }
+    methodForm.value = { name: '', type: '', instructions: '', is_active: true, sort_order: 0, wallet_address: '', network: '', currency: '' }
     showMethodDrawer.value = false
     toast.success(t('payments.method_create_success'))
   } else {
     toast.error(t('payments.method_create_error'))
+  }
+}
+
+function parseCryptoInstructions(instructions: string): { wallet_address?: string; network?: string; currency?: string; note?: string } | null {
+  try {
+    const data = JSON.parse(instructions)
+    if (data && typeof data === 'object' && data.wallet_address) return data
+    return null
+  } catch {
+    return null
   }
 }
 
@@ -152,6 +189,11 @@ onMounted(() => {
           <div class="method-item__info">
             <span class="method-item__name">{{ method.name }}</span>
             <span class="method-item__type text-muted">{{ method.type }}</span>
+            <template v-if="method.type === 'crypto'">
+              <span v-if="parseCryptoInstructions(method.instructions)" class="method-item__crypto text-muted">
+                {{ parseCryptoInstructions(method.instructions)?.network }} &middot; {{ parseCryptoInstructions(method.instructions)?.currency }} &middot; {{ parseCryptoInstructions(method.instructions)?.wallet_address?.slice(0, 12) }}...
+              </span>
+            </template>
           </div>
           <KStatusPill :status="method.is_active ? 'active' : 'disabled'" size="sm" />
         </div>
@@ -211,6 +253,34 @@ onMounted(() => {
             />
           </template>
         </KFormField>
+        <!-- Crypto-specific fields -->
+        <template v-if="methodForm.type === 'crypto'">
+          <KFormField name="method-wallet" :label="t('payments.crypto_wallet')" required>
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="methodForm.wallet_address" :placeholder="t('payments.crypto_wallet_placeholder')" />
+            </template>
+          </KFormField>
+          <KFormField name="method-network" :label="t('payments.crypto_network')" required>
+            <template #default="{ fieldId }">
+              <KSelect
+                :id="fieldId"
+                v-model="methodForm.network"
+                :options="cryptoNetworkOptions"
+                :placeholder="t('payments.crypto_select_network')"
+              />
+            </template>
+          </KFormField>
+          <KFormField name="method-currency" :label="t('payments.crypto_currency')" required>
+            <template #default="{ fieldId }">
+              <KSelect
+                :id="fieldId"
+                v-model="methodForm.currency"
+                :options="cryptoCurrencyOptions"
+                :placeholder="t('payments.crypto_select_currency')"
+              />
+            </template>
+          </KFormField>
+        </template>
         <KFormField name="method-instructions" :label="t('payments.method_instructions')">
           <template #default="{ fieldId }">
             <KInput :id="fieldId" v-model="methodForm.instructions" :placeholder="t('payments.method_instructions_placeholder')" />
@@ -251,6 +321,7 @@ onMounted(() => {
 .method-item__info { display: flex; flex-direction: column; }
 .method-item__name { font-size: var(--text-sm); font-weight: var(--font-medium); }
 .method-item__type { font-size: var(--text-xs); }
+.method-item__crypto { font-size: var(--text-xs); font-family: monospace; }
 
 .payments-table-section { min-width: 0; }
 

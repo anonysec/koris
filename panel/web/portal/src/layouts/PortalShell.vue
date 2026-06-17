@@ -52,6 +52,7 @@ const langLabels: Record<Locale, string> = {
   en: 'EN',
   fa: 'FA',
   zh: 'ZH',
+  ru: 'RU',
 }
 </script>
 <template>
