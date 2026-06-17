@@ -234,6 +234,7 @@ function handleChangeLang(event: Event) {
           <option value="en">EN</option>
           <option value="fa">FA</option>
           <option value="zh">ZH</option>
+          <option value="ru">RU</option>
         </select>
         <button
           class="icon-btn"

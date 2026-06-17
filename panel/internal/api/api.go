@@ -409,6 +409,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/templates", s.requireAdmin(s.templates))
 	mux.HandleFunc("/api/templates/", s.requireAdmin(s.templateByID))
 	mux.HandleFunc("/api/settings/data-warning-thresholds", s.requireAdmin(s.dataWarningThresholds))
+	mux.HandleFunc("/api/settings/warning-config", s.requireAdmin(s.warningConfig))
+	mux.HandleFunc("/api/portal/app-links", s.portalAppLinks)
 	mux.HandleFunc("/api/failover/providers", s.requireAdmin(s.failoverProviders))
 	mux.HandleFunc("/api/failover/providers/", s.requireAdmin(s.failoverProviderByID))
 	mux.HandleFunc("/api/failover/domains", s.requireAdmin(s.failoverDomains))
