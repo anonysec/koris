@@ -163,12 +163,6 @@ function handleNotifications() {
   height: 100vh;
 }
 
-/* Restore RTL text direction inside main content when data-dir="rtl" */
-:global([data-dir="rtl"]) .main {
-  direction: rtl;
-  text-align: right;
-}
-
 /* Fade transition for view changes */
 .fade-enter-active,
 .fade-leave-active {
@@ -222,12 +216,6 @@ function handleNotifications() {
   100% {
     background-position: -200% 0;
   }
-}
-
-/* RTL content direction */
-:global([data-dir="rtl"]) .main {
-  direction: rtl;
-  text-align: right;
 }
 
 /* Reduced motion preference */
