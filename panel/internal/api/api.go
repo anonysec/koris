@@ -393,6 +393,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/sessions/kill", s.requireAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
 	mux.HandleFunc("/api/nodes/vpn-config/", s.requireAdmin(s.nodeVPNConfig))
+	mux.HandleFunc("/api/wireguard/peers", s.requireAdmin(s.wireguardPeers))
+	mux.HandleFunc("/api/wireguard/peers/", s.requireAdmin(s.wireguardPeerByID))
 	mux.HandleFunc("/api/certificates", s.requireAdmin(s.certificates))
 	mux.HandleFunc("/api/certificates/", s.requireAdmin(s.certificateByID))
 	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
