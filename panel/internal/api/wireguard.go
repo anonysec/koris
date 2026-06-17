@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"koris-next/panel/internal/wireguard"
@@ -90,6 +92,19 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 	if in.NodeID <= 0 || in.AllowedIPs == "" {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_id_and_allowed_ips_required"})
 		return
+	}
+
+	// Validate each comma-separated CIDR segment in AllowedIPs
+	for _, seg := range strings.Split(in.AllowedIPs, ",") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_allowed_ips: empty segment"})
+			return
+		}
+		if _, _, err := net.ParseCIDR(seg); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("invalid_allowed_ips: %s", err.Error())})
+			return
+		}
 	}
 
 	// Generate WireGuard key pair and preshared key

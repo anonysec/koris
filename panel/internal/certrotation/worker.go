@@ -77,12 +77,16 @@ func (w *Worker) run() {
 			// Critical: cert expires within 7 days
 			w.eventFn("cert.expiring", "error",
 				fmt.Sprintf("Certificate %q expires in %d days", cert.Name, cert.DaysUntilExpiry),
-				fmt.Sprintf("Certificate at %s expires on %s. Automatic regeneration initiated.", cert.CertPath, cert.ExpiresAt.Format("2006-01-02")))
+				fmt.Sprintf("Certificate at %s expires on %s.", cert.CertPath, cert.ExpiresAt.Format("2006-01-02")))
 
 			// Attempt regeneration
 			newFingerprint, err := w.Regenerate(cert)
 			if err != nil {
-				log.Printf("[certrotation] regenerate %s: %v", cert.Name, err)
+				if err == ErrCARequiresManualRotation {
+					log.Printf("[certrotation] %s: %v", cert.Name, err)
+				} else {
+					log.Printf("[certrotation] regenerate %s: %v", cert.Name, err)
+				}
 				continue
 			}
 			log.Printf("[certrotation] regenerated %s, new fingerprint: %s", cert.Name, newFingerprint)
@@ -130,8 +134,15 @@ func (w *Worker) CheckExpiring() ([]ExpiringCert, error) {
 	return certs, rows.Err()
 }
 
+// ErrCARequiresManualRotation is returned when Regenerate is called for a CA certificate.
+// CA certificates cannot be auto-regenerated because doing so would invalidate all
+// client certificates signed by the old CA key.
+var ErrCARequiresManualRotation = fmt.Errorf("CA certificates require manual rotation; auto-regeneration is not supported")
+
 // Regenerate regenerates a certificate using openssl based on its type.
 // It updates the database with the new expiry and fingerprint.
+// For CA certificates, it returns ErrCARequiresManualRotation instead of regenerating,
+// because a new CA key would invalidate all existing client certificates.
 func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 	cType := certType(cert.CertPath)
 
@@ -140,16 +151,9 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 
 	switch cType {
 	case "ca":
-		// Regenerate CA certificate
-		keyPath := strings.TrimSuffix(cert.CertPath, ".crt") + ".key"
-		cmd = exec.Command("openssl", "req", "-x509", "-nodes",
-			"-days", "3650",
-			"-newkey", "ec",
-			"-pkeyopt", "ec_paramgen_curve:prime256v1",
-			"-keyout", keyPath,
-			"-out", cert.CertPath,
-			"-subj", "/CN=VPN-CA")
-		newDays = 3650
+		// CA certificates must not be auto-regenerated. A new CA key pair would
+		// invalidate all client certs signed by the old CA. Require manual rotation.
+		return "", ErrCARequiresManualRotation
 	case "server":
 		// Regenerate server certificate (self-signed for simplicity)
 		keyPath := strings.TrimSuffix(cert.CertPath, ".crt") + ".key"
@@ -225,7 +229,20 @@ func (w *Worker) DistributeToNodes(cert ExpiringCert) error {
 		if err := rows.Scan(&nodeID); err != nil {
 			continue
 		}
-		_, err := w.db.Exec(
+
+		// Check if there is already a pending cert.distribute task for this node and cert_path.
+		// Skip to avoid duplicate tasks accumulating if the worker fires again before
+		// previous distribution tasks are completed.
+		var existingCount int
+		err := w.db.QueryRow(
+			`SELECT COUNT(*) FROM node_tasks WHERE node_id = ? AND action = 'cert.distribute' AND status = 'pending' AND payload_json LIKE ?`,
+			nodeID, fmt.Sprintf(`%%"cert_path":"%s"%%`, cert.CertPath),
+		).Scan(&existingCount)
+		if err == nil && existingCount > 0 {
+			continue
+		}
+
+		_, err = w.db.Exec(
 			`INSERT INTO node_tasks (node_id, action, payload_json, status) VALUES (?, 'cert.distribute', ?, 'pending')`,
 			nodeID, string(payloadJSON),
 		)
@@ -237,10 +254,13 @@ func (w *Worker) DistributeToNodes(cert ExpiringCert) error {
 }
 
 // certType determines the certificate type from its file path.
+// For "ca" classification, the base name must equal "ca.crt", "ca.key", or start with "ca." or "ca-".
+// This avoids false positives like "cascade" which merely contains "ca" as a substring.
 func certType(path string) string {
 	base := strings.ToLower(filepath.Base(path))
 
-	if strings.Contains(base, "ca") {
+	// Strict "ca" matching: base must be exactly "ca.*" or start with "ca." / "ca-"
+	if base == "ca.crt" || base == "ca.key" || strings.HasPrefix(base, "ca.") || strings.HasPrefix(base, "ca-") {
 		return "ca"
 	}
 	if strings.Contains(base, "tls") || base == "ta.key" {

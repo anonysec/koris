@@ -117,6 +117,12 @@ func parseTcOutput(output string) []tcClassStat {
 // DeltaRates computes per-second bandwidth rates from current class stats and previous byte counters.
 // Counter-wrap clamping: if the current byte count is less than the previous (counter wrap or reset),
 // the rate is clamped to 0.
+//
+// NOTE: tc class stats on the tun0 egress qdisc represent data flowing FROM the server TO the client.
+// This is the client's download (Rx) direction. We assign the same value to both RxBps and TxBps
+// because we only have a single "Sent" counter from the egress qdisc - there are no per-class
+// ingress filter stats available to measure client upload (Tx) separately. When ingress policing
+// stats become available in the future, TxBps should be populated from those counters instead.
 func DeltaRates(current []tcClassStat, prev map[string]int64, dt float64) []UserBandwidth {
 	var result []UserBandwidth
 
@@ -124,7 +130,7 @@ func DeltaRates(current []tcClassStat, prev map[string]int64, dt float64) []User
 		bw := UserBandwidth{
 			ClassID: cs.ClassID,
 			RxBytes: cs.Bytes,
-			TxBytes: cs.Bytes,
+			TxBytes: cs.Bytes, // Same value; only egress (server->client) stats available
 		}
 
 		// Derive IP hint from class ID (last octet)
@@ -141,6 +147,8 @@ func DeltaRates(current []tcClassStat, prev map[string]int64, dt float64) []User
 					delta = 0
 				}
 				rate := int64(float64(delta) / dt)
+				// Both Rx and Tx get the same rate because tc class on tun0 egress only
+				// provides a single counter representing server->client (download) traffic.
 				bw.RxBps = rate
 				bw.TxBps = rate
 			}

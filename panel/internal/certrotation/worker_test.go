@@ -15,6 +15,7 @@ func TestCertType(t *testing.T) {
 		{"/etc/openvpn/server/ca.crt", "ca"},
 		{"/etc/openvpn/server/ca.key", "ca"},
 		{"/etc/openvpn/ca.crt", "ca"},
+		{"/etc/openvpn/server/ca-bundle.crt", "ca"},
 		{"/etc/openvpn/server/server.crt", "server"},
 		{"/etc/openvpn/server/vpn-server.crt", "server"},
 		{"/etc/strongswan/ipsec.d/certs/server.crt", "server"},
@@ -23,6 +24,12 @@ func TestCertType(t *testing.T) {
 		{"/etc/openvpn/server/tls-auth.key", "tls-crypt"},
 		{"/etc/openvpn/server/dh.pem", "unknown"},
 		{"/etc/wireguard/wg0.conf", "unknown"},
+		// Ensure "cascade" in the filename does NOT match "ca" - it should match "server"
+		// because it's a .crt in a server directory
+		{"/etc/openvpn/server/vpn-cascade.crt", "server"},
+		{"/etc/openvpn/server/cascade-vpn.crt", "server"},
+		// Ensure filenames that merely contain "ca" as substring are not classified as "ca"
+		{"/etc/openvpn/server/localcache.crt", "server"},
 	}
 
 	for _, tt := range tests {
