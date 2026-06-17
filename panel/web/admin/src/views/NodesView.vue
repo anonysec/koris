@@ -445,7 +445,7 @@ onMounted(() => {
 
     <!-- New Token Display -->
     <div v-if="newToken" class="token-banner">
-      <p><strong>Node Token:</strong> <code>{{ newToken }}</code></p>
+      <p><strong>{{ t('nodes.node_token') }}:</strong> <code>{{ newToken }}</code></p>
       <p class="text-muted text-sm">{{ t('nodes.token_save_warning') }}</p>
       <KButton variant="ghost" size="sm" @click="newToken = null">{{ t('nodes.dismiss') }}</KButton>
     </div>
