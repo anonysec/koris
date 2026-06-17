@@ -5086,14 +5086,37 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Import plans first (referenced by customers)
+	// Track import statistics per table
+	imported := map[string]int{}
+	failed := map[string]int{}
+
+	// Import nodes first (referenced by vpn_configs)
+	if nodes, ok := backup.Tables["nodes"]; ok {
+		for _, n := range nodes {
+			_, err := tx.Exec(`INSERT IGNORE INTO nodes(id, name, public_ip, domain, status) VALUES(?,?,?,?,?)`,
+				toInt64(n["id"]), toString(n["name"]), toString(n["public_ip"]),
+				toString(n["domain"]), toString(n["status"]))
+			if err != nil {
+				failed["nodes"]++
+			} else {
+				imported["nodes"]++
+			}
+		}
+	}
+
+	// Import plans (referenced by customers)
 	if plans, ok := backup.Tables["plans"]; ok {
 		for _, p := range plans {
-			_, _ = tx.Exec(`INSERT IGNORE INTO plans(id, name, data_gb, speed_mbps, duration_days, price, billing_type, price_per_gb, price_per_day, disconnect_on_zero, is_active, sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO plans(id, name, data_gb, speed_mbps, duration_days, price, billing_type, price_per_gb, price_per_day, disconnect_on_zero, is_active, sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 				toInt64(p["id"]), toString(p["name"]), toFloat64(p["data_gb"]), toFloat64(p["speed_mbps"]),
 				toInt(p["duration_days"]), toFloat64(p["price"]), toString(p["billing_type"]),
 				toFloat64(p["price_per_gb"]), toFloat64(p["price_per_day"]), toBool(p["disconnect_on_zero"]),
 				toBool(p["is_active"]), toInt(p["sort_order"]))
+			if err != nil {
+				failed["plans"]++
+			} else {
+				imported["plans"]++
+			}
 		}
 	}
 
@@ -5104,25 +5127,40 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := c["plan_id"]; exists && v != nil {
 				planID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, _ = tx.Exec(`INSERT IGNORE INTO customers(id, username, display_name, status, plan_id, notes, sub_token) VALUES(?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO customers(id, username, display_name, status, plan_id, notes, sub_token) VALUES(?,?,?,?,?,?,?)`,
 				toInt64(c["id"]), toString(c["username"]), toString(c["display_name"]),
 				toString(c["status"]), planID, toString(c["notes"]), toString(c["sub_token"]))
+			if err != nil {
+				failed["customers"]++
+			} else {
+				imported["customers"]++
+			}
 		}
 	}
 
 	// Import wallets
 	if wallets, ok := backup.Tables["wallets"]; ok {
-		for _, w := range wallets {
-			_, _ = tx.Exec(`INSERT INTO wallets(username, credit) VALUES(?,?) ON DUPLICATE KEY UPDATE credit=VALUES(credit)`,
-				toString(w["username"]), toFloat64(w["credit"]))
+		for _, wal := range wallets {
+			_, err := tx.Exec(`INSERT INTO wallets(username, credit) VALUES(?,?) ON DUPLICATE KEY UPDATE credit=VALUES(credit)`,
+				toString(wal["username"]), toFloat64(wal["credit"]))
+			if err != nil {
+				failed["wallets"]++
+			} else {
+				imported["wallets"]++
+			}
 		}
 	}
 
 	// Import radcheck
 	if radcheck, ok := backup.Tables["radcheck"]; ok {
 		for _, rc := range radcheck {
-			_, _ = tx.Exec(`INSERT IGNORE INTO radcheck(id, username, attribute, op, value) VALUES(?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO radcheck(id, username, attribute, op, value) VALUES(?,?,?,?,?)`,
 				toInt64(rc["id"]), toString(rc["username"]), toString(rc["attribute"]), toString(rc["op"]), toString(rc["value"]))
+			if err != nil {
+				failed["radcheck"]++
+			} else {
+				imported["radcheck"]++
+			}
 		}
 	}
 
@@ -5133,18 +5171,28 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := p["intent_id"]; exists && v != nil {
 				intentID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, _ = tx.Exec(`INSERT IGNORE INTO payments(id, username, amount, method, status, intent_type, intent_id) VALUES(?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO payments(id, username, amount, method, status, intent_type, intent_id) VALUES(?,?,?,?,?,?,?)`,
 				toInt64(p["id"]), toString(p["username"]), toFloat64(p["amount"]),
 				toString(p["method"]), toString(p["status"]), toString(p["intent_type"]), intentID)
+			if err != nil {
+				failed["payments"]++
+			} else {
+				imported["payments"]++
+			}
 		}
 	}
 
 	// Import subscriptions
 	if subs, ok := backup.Tables["subscriptions"]; ok {
 		for _, sub := range subs {
-			_, _ = tx.Exec(`INSERT IGNORE INTO subscriptions(id, username, plan, status, paid_amount, discount_code) VALUES(?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO subscriptions(id, username, plan, status, paid_amount, discount_code) VALUES(?,?,?,?,?,?)`,
 				toInt64(sub["id"]), toString(sub["username"]), toString(sub["plan"]),
 				toString(sub["status"]), toFloat64(sub["paid_amount"]), toString(sub["discount_code"]))
+			if err != nil {
+				failed["subscriptions"]++
+			} else {
+				imported["subscriptions"]++
+			}
 		}
 	}
 
@@ -5155,9 +5203,14 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := tk["customer_id"]; exists && v != nil {
 				customerID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, _ = tx.Exec(`INSERT IGNORE INTO tickets(id, customer_id, username, subject, status, priority) VALUES(?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO tickets(id, customer_id, username, subject, status, priority) VALUES(?,?,?,?,?,?)`,
 				toInt64(tk["id"]), customerID, toString(tk["username"]),
 				toString(tk["subject"]), toString(tk["status"]), toString(tk["priority"]))
+			if err != nil {
+				failed["tickets"]++
+			} else {
+				imported["tickets"]++
+			}
 		}
 	}
 
@@ -5168,10 +5221,37 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := wt["reference_id"]; exists && v != nil {
 				refID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, _ = tx.Exec(`INSERT IGNORE INTO wallet_transactions(id, username, amount, type, description, actor, reference_type, reference_id) VALUES(?,?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT IGNORE INTO wallet_transactions(id, username, amount, type, description, actor, reference_type, reference_id) VALUES(?,?,?,?,?,?,?,?)`,
 				toInt64(wt["id"]), toString(wt["username"]), toFloat64(wt["amount"]),
 				toString(wt["type"]), toString(wt["description"]), toString(wt["actor"]),
 				toString(wt["reference_type"]), refID)
+			if err != nil {
+				failed["wallet_transactions"]++
+			} else {
+				imported["wallet_transactions"]++
+			}
+		}
+	}
+
+	// Import vpn_configs (depends on nodes)
+	if vpnConfigs, ok := backup.Tables["vpn_configs"]; ok {
+		for _, vc := range vpnConfigs {
+			var extraJSONStr sql.NullString
+			if extra, exists := vc["extra_json"]; exists && extra != nil {
+				if extraBytes, err := json.Marshal(extra); err == nil {
+					extraJSONStr = sql.NullString{String: string(extraBytes), Valid: true}
+				}
+			}
+			_, err := tx.Exec(`INSERT IGNORE INTO vpn_configs(id, node_id, protocol, port, network, enabled, mtu, max_clients, enable_logs, conn_limit, extra_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+				toInt64(vc["id"]), toInt64(vc["node_id"]), toString(vc["protocol"]),
+				toInt(vc["port"]), toString(vc["network"]), toBool(vc["enabled"]),
+				toInt(vc["mtu"]), toInt(vc["max_clients"]), toBool(vc["enable_logs"]),
+				toInt(vc["conn_limit"]), extraJSONStr)
+			if err != nil {
+				failed["vpn_configs"]++
+			} else {
+				imported["vpn_configs"]++
+			}
 		}
 	}
 
@@ -5180,7 +5260,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, map[string]any{"ok": true})
+	writeJSON(w, map[string]any{"ok": true, "imported": imported, "failed": failed})
 }
 
 // Backup helper functions for type conversion

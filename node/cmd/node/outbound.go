@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -198,9 +199,11 @@ func writeOutboundBridgeConfig(cfg *OutboundConfig, configDir string) error {
 func buildOutboundEntry(cfg *OutboundConfig) map[string]any {
 	parts := strings.SplitN(cfg.Address, ":", 2)
 	host := parts[0]
-	port := "443"
+	port := 443
 	if len(parts) == 2 {
-		port = parts[1]
+		if p, err := strconv.Atoi(parts[1]); err == nil {
+			port = p
+		}
 	}
 
 	entry := map[string]any{

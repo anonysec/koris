@@ -316,8 +316,10 @@ func (b *Bot) handleCallback(cb *CallbackQuery) {
 	isAdmin := b.isAdminChat(chatID)
 
 	if strings.HasPrefix(data, "user:") {
-		username := strings.TrimPrefix(data, "user:")
-		b.cmdFind(chatID, username)
+		if isAdmin {
+			username := strings.TrimPrefix(data, "user:")
+			b.cmdFind(chatID, username)
+		}
 	} else if strings.HasPrefix(data, "enable:") {
 		username := strings.TrimPrefix(data, "enable:")
 		if isAdmin {
@@ -758,8 +760,7 @@ func (b *Bot) cmdBackup(chatID int64) {
 
 func (b *Bot) cmdNodes(chatID int64) {
 	rows, err := b.db.Query(
-		`SELECT n.name, n.status, n.public_ip, COALESCE(n.last_seen_at, n.created_at),
-			(SELECT COUNT(DISTINCT ra.username) FROM radacct ra WHERE ra.acctstoptime IS NULL) as total_online
+		`SELECT n.name, n.status, n.public_ip, COALESCE(n.last_seen_at, n.created_at)
 		 FROM nodes n ORDER BY n.id`)
 	if err != nil {
 		b.sendMessage(chatID, "Error fetching nodes", "")
@@ -773,8 +774,7 @@ func (b *Bot) cmdNodes(chatID int64) {
 	for rows.Next() {
 		var name, status, ip string
 		var lastSeen sql.NullTime
-		var online int
-		if rows.Scan(&name, &status, &ip, &lastSeen, &online) == nil {
+		if rows.Scan(&name, &status, &ip, &lastSeen) == nil {
 			icon := "🟢"
 			if status == "offline" {
 				icon = "🔴"

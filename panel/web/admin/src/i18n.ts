@@ -513,6 +513,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'customer.conn_limit_removed': 'Connection limit removed (unlimited).',
     'customer.conn_limit_set': 'Connection limit set to',
     'customer.conn_limit_error': 'Failed to update connection limit.',
+    'customer.placeholder_password': 'Password',
+    'customer.placeholder_display_name': 'Display name',
+    'customer.placeholder_plan_default': 'Plan default',
     'customer.sessions': 'Sessions',
     'customer.wallet_transactions': 'Wallet Transactions',
     'customer.subscriptions': 'Subscriptions',
@@ -546,6 +549,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.outbound_sni': 'SNI Hostname',
     'nodes.outbound_desc': 'Route traffic through an external proxy for nodes only accessible within a local network.',
     'nodes.hint_outbound': 'Configure an outbound proxy to tunnel VPN traffic through an external server.',
+    'nodes.placeholder_uuid_or_password': 'UUID or password',
     // Nodes
     'nodes.node_token': 'Node Token',
   },
@@ -1057,6 +1061,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'customer.conn_limit_removed': 'محدودیت اتصال حذف شد (نامحدود).',
     'customer.conn_limit_set': 'محدودیت اتصال تنظیم شد:',
     'customer.conn_limit_error': 'خطا در به‌روزرسانی محدودیت اتصال.',
+    'customer.placeholder_password': 'رمز عبور',
+    'customer.placeholder_display_name': 'نام نمایشی',
+    'customer.placeholder_plan_default': 'پیش‌فرض پلن',
     'customer.sessions': 'نشست‌ها',
     'customer.wallet_transactions': 'تراکنش‌های کیف پول',
     'customer.subscriptions': 'اشتراک‌ها',
@@ -1090,6 +1097,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.outbound_sni': 'نام میزبان SNI',
     'nodes.outbound_desc': 'هدایت ترافیک از طریق پروکسی خارجی برای نودهایی که فقط در شبکه محلی قابل دسترسی هستند.',
     'nodes.hint_outbound': 'پروکسی خروجی را برای تونل ترافیک VPN از طریق سرور خارجی پیکربندی کنید.',
+    'nodes.placeholder_uuid_or_password': 'UUID یا رمز عبور',
     // Nodes
     'nodes.node_token': 'توکن نود',
   },
@@ -1602,6 +1610,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'customer.conn_limit_removed': '已移除连接限制（无限制）。',
     'customer.conn_limit_set': '连接限制已设置为',
     'customer.conn_limit_error': '更新连接限制失败。',
+    'customer.placeholder_password': '密码',
+    'customer.placeholder_display_name': '显示名称',
+    'customer.placeholder_plan_default': '套餐默认',
     'customer.sessions': '会话',
     'customer.wallet_transactions': '钱包交易',
     'customer.subscriptions': '订阅',
@@ -1635,6 +1646,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.outbound_sni': 'SNI主机名',
     'nodes.outbound_desc': '通过外部代理路由流量，适用于仅在本地网络中可访问的节点。',
     'nodes.hint_outbound': '配置出站代理以通过外部服务器隧道传输VPN流量。',
+    'nodes.placeholder_uuid_or_password': 'UUID或密码',
     // Nodes
     'nodes.node_token': '节点令牌',
   },
@@ -1858,6 +1870,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.outbound_sni': 'Имя хоста SNI',
     'nodes.outbound_desc': 'Маршрутизация трафика через внешний прокси для узлов, доступных только в локальной сети.',
     'nodes.hint_outbound': 'Настройте исходящий прокси для туннелирования VPN-трафика через внешний сервер.',
+    'nodes.placeholder_uuid_or_password': 'UUID или пароль',
     // Customers
     'customers.all': 'Все',
     'customers.active': 'Активные',
@@ -1869,6 +1882,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'customers.tab_archived': 'Архив',
     'customers.search': 'Поиск клиентов...',
     'customers.new_user': 'Новый пользователь',
+    // Customer Detail
+    'customer.placeholder_password': 'Пароль',
+    'customer.placeholder_display_name': 'Отображаемое имя',
+    'customer.placeholder_plan_default': 'По умолчанию тарифа',
     // Dashboard
     'dashboard.data_usage': 'Использование данных',
     'dashboard.user_status': 'Статус пользователей',
