@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "IPv6 dual-stack support (Task Group 5: 5.4 and 5.7). Migration 015_ipv6.sql already exists with network_ipv6 column - skip 5.1. Add IPv6 tc filter rules in koris-client-connect.sh and add IPv6 address to node push struct.",
+  "status": "in_progress",
+  "steps": [
+    "In scripts/openvpn/koris-client-connect.sh, in the apply_tc_limit() function, after the existing IPv4 tc filter lines, add IPv6 tc filter rules. After the line 'tc filter add dev \"$TUN\" protocol ip parent 1: prio \"$prio\" u32 match ip dst \"$IP/32\" flowid \"$cid\"', add a block that checks for IPv6 address (ifconfig_pool_remote_ip_ipv6 env var) and if present, adds: 'tc filter add dev \"$TUN\" protocol ipv6 parent 1: prio \"$((prio+10000))\" u32 match ip6 dst \"$IPV6/128\" flowid \"$cid\"'. Similarly for ingress: after the IPv4 ingress filter, add 'tc filter add dev \"$TUN\" parent ffff: protocol ipv6 prio \"$((prio+10000))\" u32 match ip6 src \"$IPV6/128\" police rate \"$UP_RATE\" burst 200k drop flowid :1'.",
+    "At the top of koris-client-connect.sh, after the IP variable assignment, add: IPV6=\"${ifconfig_pool_remote_ip_ipv6:-}\" and validate it (allow hex digits, colons, and optional /prefix).",
+    "In node/cmd/node/main.go, add a PublicIPv6 field to the Push struct: 'PublicIPv6 string `json:\"public_ipv6\"`'. In the main loop where push is constructed, set push.PublicIPv6 = firstIPv6() where firstIPv6() is a new helper that returns the first non-link-local IPv6 address (extract from the existing secondpass logic in firstIP into a dedicated function).",
+    "In panel/internal/api/api.go nodePush handler, add PublicIPv6 field to the input struct: 'PublicIPv6 string `json:\"public_ipv6\"`. No DB storage needed for now - it will be included in the payload_json column which stores the full push JSON.",
+    "Write a test in node/cmd/node/wireguard_test.go (or a new ipv6_test.go) that tests the firstIPv6 function returns empty on loopback-only systems."
+  ],
+  "acceptance_criteria": [
+    "go build ./... passes",
+    "go test ./... passes",
+    "koris-client-connect.sh has IPv6 tc filter rules",
+    "Push struct has PublicIPv6 field",
+    "firstIPv6() helper function exists in node agent"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel && go build ./...",
+    "cd /projects/sandbox/panel && go test ./..."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
