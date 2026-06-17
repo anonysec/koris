@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -508,8 +509,17 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 		if pubKey == "" || pubKey == "<nil>" {
 			return "failed", map[string]any{}, "public_key is required"
 		}
+		if !isValidWireGuardKey(pubKey) {
+			return "failed", map[string]any{}, "public_key must be a valid 44-character base64 WireGuard key"
+		}
 		if allowedIPs == "" || allowedIPs == "<nil>" {
 			return "failed", map[string]any{}, "allowed_ips is required"
+		}
+		if !isValidAllowedIPs(allowedIPs) {
+			return "failed", map[string]any{}, "allowed_ips must contain valid CIDR notation"
+		}
+		if psk != "" && psk != "<nil>" && !isValidWireGuardKey(psk) {
+			return "failed", map[string]any{}, "preshared_key must be a valid 44-character base64 WireGuard key"
 		}
 		// Add peer to live interface
 		args := []string{"set", "wg0", "peer", pubKey, "allowed-ips", allowedIPs}
@@ -529,11 +539,17 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			}
 		}
 		// Append peer to config file
-		peerBlock := fmt.Sprintf("\n[Peer]\nPublicKey = %s\nAllowedIPs = %s\n", pubKey, allowedIPs)
-		if psk != "" && psk != "<nil>" {
-			peerBlock = fmt.Sprintf("\n[Peer]\nPublicKey = %s\nPresharedKey = %s\nAllowedIPs = %s\n", pubKey, psk, allowedIPs)
-		}
 		confFile := "/etc/wireguard/wg0.conf"
+		// Read existing content to check if it already ends with a newline
+		existingData, _ := os.ReadFile(confFile)
+		prefix := "\n"
+		if len(existingData) > 0 && existingData[len(existingData)-1] == '\n' {
+			prefix = ""
+		}
+		peerBlock := fmt.Sprintf("%s[Peer]\nPublicKey = %s\nAllowedIPs = %s\n", prefix, pubKey, allowedIPs)
+		if psk != "" && psk != "<nil>" {
+			peerBlock = fmt.Sprintf("%s[Peer]\nPublicKey = %s\nPresharedKey = %s\nAllowedIPs = %s\n", prefix, pubKey, psk, allowedIPs)
+		}
 		f, err := os.OpenFile(confFile, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return "failed", map[string]any{}, fmt.Sprintf("open config: %s", err.Error())
@@ -548,6 +564,9 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 		pubKey := fmt.Sprint(payload["public_key"])
 		if pubKey == "" || pubKey == "<nil>" {
 			return "failed", map[string]any{}, "public_key is required"
+		}
+		if !isValidWireGuardKey(pubKey) {
+			return "failed", map[string]any{}, "public_key must be a valid 44-character base64 WireGuard key"
 		}
 		// Remove peer from live interface
 		cmd := exec.Command("wg", "set", "wg0", "peer", pubKey, "remove")
@@ -567,8 +586,26 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 		}
 		return "succeeded", map[string]any{"public_key": pubKey, "removed": true}, ""
 	case "wireguard.sync_config":
-		// Sync runtime config with file
-		cmd := exec.Command("wg", "syncconf", "wg0", "/etc/wireguard/wg0.conf")
+		// Use wg-quick strip to produce a config without wg-quick directives (Address, DNS, etc.)
+		stripCmd := exec.Command("wg-quick", "strip", "wg0")
+		strippedConf, err := stripCmd.Output()
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("wg-quick strip: %s", err.Error())
+		}
+		// Write stripped config to a temp file for wg syncconf
+		tmpFile, err := os.CreateTemp("", "wg-syncconf-*.conf")
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("create temp file: %s", err.Error())
+		}
+		tmpPath := tmpFile.Name()
+		defer os.Remove(tmpPath)
+		if _, err := tmpFile.Write(strippedConf); err != nil {
+			tmpFile.Close()
+			return "failed", map[string]any{}, fmt.Sprintf("write temp file: %s", err.Error())
+		}
+		tmpFile.Close()
+		// Sync runtime config with stripped file
+		cmd := exec.Command("wg", "syncconf", "wg0", tmpPath)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return "failed", map[string]any{"output": string(out)}, err.Error()
@@ -625,7 +662,45 @@ func removePeerFromConfig(config, pubKey string) string {
 		}
 		result = append(result, line)
 	}
-	return strings.Join(result, "\n")
+	// Trim trailing empty lines to prevent accumulation over repeated add/remove cycles
+	for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+		result = result[:len(result)-1]
+	}
+	// Ensure file ends with a single newline
+	return strings.Join(result, "\n") + "\n"
+}
+
+// isValidWireGuardKey checks that a WireGuard public/preshared key is a valid
+// 44-character base64 string that decodes to exactly 32 bytes.
+func isValidWireGuardKey(key string) bool {
+	if len(key) != 44 {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return false
+	}
+	return len(decoded) == 32
+}
+
+// isValidAllowedIPs validates that the allowed_ips value contains only valid CIDR
+// notations separated by commas, with no newlines or other dangerous characters.
+func isValidAllowedIPs(allowedIPs string) bool {
+	if strings.ContainsAny(allowedIPs, "\n\r") {
+		return false
+	}
+	parts := strings.Split(allowedIPs, ",")
+	for _, part := range parts {
+		cidr := strings.TrimSpace(part)
+		if cidr == "" {
+			return false
+		}
+		_, _, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeService(input string) string {
