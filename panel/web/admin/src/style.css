@@ -305,6 +305,10 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 /* Sidebar border swap */
 [dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
 
+/* Content direction for RTL - text flows right-to-left inside containers */
+[dir="rtl"] .main{direction:rtl;text-align:right}
+[dir="rtl"] .sidebar{direction:rtl;text-align:right}
+
 /* Badge margin swap */
 [dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
 
