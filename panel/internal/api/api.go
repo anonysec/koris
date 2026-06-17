@@ -393,6 +393,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/sessions/kill", s.requireAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
 	mux.HandleFunc("/api/nodes/vpn-config/", s.requireAdmin(s.nodeVPNConfig))
+	mux.HandleFunc("/api/wireguard/peers", s.requireAdmin(s.wireguardPeers))
+	mux.HandleFunc("/api/wireguard/peers/", s.requireAdmin(s.wireguardPeerByID))
 	mux.HandleFunc("/api/certificates", s.requireAdmin(s.certificates))
 	mux.HandleFunc("/api/certificates/", s.requireAdmin(s.certificateByID))
 	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
@@ -2199,61 +2201,39 @@ func fileExists(path string) (os.FileInfo, bool) {
 }
 
 func applyOpenVPNServerConfig(v VPNSettings) error {
-	// Validate before any file operations
-	if err := templates.ValidatePrivateNetwork(v.OpenVPNNetwork, false); err != nil {
-		return fmt.Errorf("network validation failed: %w", err)
-	}
+	// Validate inputs
 	if err := templates.ValidatePort(v.OpenVPNPort); err != nil {
 		return fmt.Errorf("port validation failed: %w", err)
 	}
 	if err := templates.ValidateProtocol(v.OpenVPNProtocol); err != nil {
 		return fmt.Errorf("protocol validation failed: %w", err)
 	}
+	if v.OpenVPNNetwork == "" {
+		return fmt.Errorf("network validation failed: OpenVPN network is required")
+	}
 
 	conf := strings.TrimSpace(os.Getenv("PANEL_OPENVPN_SERVER_CONF"))
 	if conf == "" {
 		conf = "/etc/openvpn/server/server.conf"
 	}
-	b, err := os.ReadFile(conf)
-	if err != nil {
-		return err
-	}
+
 	serverNet, serverMask := cidrToOpenVPNServer(v.OpenVPNNetwork)
-	lines := strings.Split(string(b), "\n")
-	out := []string{}
-	insertedServer := false
-	insertedDNS := false
-	for _, line := range lines {
-		trim := strings.TrimSpace(line)
-		if strings.HasPrefix(trim, "port ") || strings.HasPrefix(trim, "proto ") || strings.HasPrefix(trim, "server ") || strings.HasPrefix(trim, "push \"dhcp-option DNS ") {
-			continue
-		}
-		out = append(out, line)
-		if strings.HasPrefix(trim, "dev ") && serverNet != "" {
-			out = append(out, "server "+serverNet+" "+serverMask)
-			insertedServer = true
-		}
-		if strings.HasPrefix(trim, "push \"redirect-gateway") {
-			out = append(out, fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS1))
-			out = append(out, fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS2))
-			insertedDNS = true
-		}
+
+	vars := templates.TemplateVars{
+		Port:       v.OpenVPNPort,
+		Protocol:   v.OpenVPNProtocol,
+		Network:    v.OpenVPNNetwork,
+		ServerNet:  serverNet,
+		ServerMask: serverMask,
+		DNS1:       v.DNS1,
+		DNS2:       v.DNS2,
 	}
-	prefix := []string{fmt.Sprintf("port %d", v.OpenVPNPort), "proto " + v.OpenVPNProtocol}
-	if !insertedServer && serverNet != "" {
-		prefix = append(prefix, "server "+serverNet+" "+serverMask)
-	}
-	if !insertedDNS {
-		out = append(out, fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS1), fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS2))
-	}
-	newContent := strings.Join(append(prefix, out...), "\n")
-	backup := fmt.Sprintf("%s.bak.%d", conf, time.Now().Unix())
-	if err := os.WriteFile(backup, b, 0600); err != nil {
+
+	engine := templates.NewEngine(os.Getenv("PANEL_TEMPLATE_DIR"))
+	if err := engine.Apply("openvpn", conf, vars); err != nil {
 		return err
 	}
-	if err := os.WriteFile(conf, []byte(newContent), 0644); err != nil {
-		return err
-	}
+
 	cmd := exec.Command("systemctl", "restart", "openvpn-server@server")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("restart openvpn: %w: %s", err, string(out))
@@ -2561,6 +2541,9 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := writeRealtime("sessions", s.liveSessionsPayload()); err != nil {
+				return
+			}
+			if err := writeRealtime("bandwidth", s.bandwidthPayload()); err != nil {
 				return
 			}
 		case <-pingTicker.C:
@@ -4259,6 +4242,7 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		Token         string            `json:"token"`
 		Hostname      string            `json:"hostname"`
 		PublicIP      string            `json:"public_ip"`
+		PublicIPv6    string            `json:"public_ipv6"`
 		OS            string            `json:"os"`
 		CPUPercent    float64           `json:"cpu_percent"`
 		RAMPercent    float64           `json:"ram_percent"`
@@ -4273,6 +4257,12 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		IKEv2Status   string            `json:"ikev2_status"`
 		Services      map[string]string `json:"services"`
 		Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
+		PerUserBandwidth []struct {
+			IP      string `json:"ip"`
+			ClassID string `json:"class_id"`
+			RxBps   int64  `json:"rx_bps"`
+			TxBps   int64  `json:"tx_bps"`
+		} `json:"per_user_bandwidth,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -4352,6 +4342,37 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+
+	// Store per-user bandwidth snapshots if present
+	if len(in.PerUserBandwidth) > 0 {
+		// Lookup IP-to-username mapping from radacct active sessions
+		ipToUser := make(map[string]string)
+		rows, err := s.DB.Query(`SELECT username, framedipaddress FROM radacct WHERE acctstoptime IS NULL`)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var uname, fip string
+				if err := rows.Scan(&uname, &fip); err == nil && fip != "" {
+					// Extract last octet from IP for matching with class ID
+					parts := strings.Split(fip, ".")
+					if len(parts) == 4 {
+						ipToUser[parts[3]] = uname
+					}
+				}
+			}
+			rows.Close()
+		}
+
+		for _, bw := range in.PerUserBandwidth {
+			username := ipToUser[bw.IP]
+			if username == "" {
+				username = "unknown"
+			}
+			_, _ = s.DB.Exec(`INSERT INTO user_bandwidth_snapshots(node_id, username, ip, rx_bps, tx_bps) VALUES(?,?,?,?,?)`,
+				nodeID, username, bw.IP, bw.RxBps, bw.TxBps)
+		}
+	}
+
 	writeJSON(w, map[string]any{"ok": true, "node_id": nodeID})
 }
 
@@ -6018,6 +6039,34 @@ func (s *Server) liveSessionsPayload() []map[string]any {
 		}
 	}
 
+	return out
+}
+
+func (s *Server) bandwidthPayload() []map[string]any {
+	rows, err := s.DB.Query(`SELECT username, ip, rx_bps, tx_bps FROM user_bandwidth_snapshots WHERE created_at >= NOW() - INTERVAL 30 SECOND ORDER BY created_at DESC`)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+
+	// Group by username, take the most recent entry per user
+	seen := make(map[string]bool)
+	out := []map[string]any{}
+	for rows.Next() {
+		var username, ip string
+		var rxBps, txBps int64
+		if err := rows.Scan(&username, &ip, &rxBps, &txBps); err == nil {
+			if !seen[username] {
+				seen[username] = true
+				out = append(out, map[string]any{
+					"username": username,
+					"ip":       ip,
+					"rx_bps":   rxBps,
+					"tx_bps":   txBps,
+				})
+			}
+		}
+	}
 	return out
 }
 

@@ -1,0 +1,12 @@
+/var/log/panel-node/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    postrotate
+        systemctl kill -s HUP node-agent 2>/dev/null || true
+    endscript
+}

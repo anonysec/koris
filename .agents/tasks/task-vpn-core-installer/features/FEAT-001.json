@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-001",
+  "type": "refactor",
+  "description": "Refactor applyOpenVPNServerConfig() to use TemplateEngine.Apply() instead of line-by-line manipulation, add WireGuard keygen package, add WireGuard migration, add WireGuard task actions to node agent, and update normalizeService() for WireGuard",
+  "status": "completed",
+  "steps": [
+    "1. In panel/internal/api/api.go at line 2201, refactor applyOpenVPNServerConfig(v VPNSettings) to use the TemplateEngine: create a TemplateEngine via templates.NewEngine(os.Getenv(\"PANEL_TEMPLATE_DIR\")), build a TemplateVars from the VPNSettings fields (Port=v.OpenVPNPort, Protocol=v.OpenVPNProtocol, Network=v.OpenVPNNetwork, DNS1=v.DNS1, DNS2=v.DNS2, ServerNet and ServerMask from cidrToOpenVPNServer(v.OpenVPNNetwork)), call engine.Apply(\"openvpn\", conf, vars) which handles validation+backup+write, then issue systemctl restart openvpn-server@server. Remove the line-by-line manipulation code but keep cidrToOpenVPNServer() as it is still used.",
+    "2. Create panel/internal/wireguard/keygen.go with package wireguard containing: func GenerateKeyPair() (privateKey, publicKey string, err error) using crypto/rand for 32 random bytes, applying Curve25519 clamping (privBytes[0]&=248, privBytes[31]&=127, privBytes[31]|=64), then golang.org/x/crypto/curve25519.X25519 for public key derivation, returning base64-encoded strings. Also func GeneratePresharedKey() (string, error) generating 32 random bytes base64-encoded.",
+    "3. Create panel/internal/wireguard/keygen_test.go with tests for GenerateKeyPair (verify 44-char base64 output, different keys each call, valid base64 decode to 32 bytes) and GeneratePresharedKey (same pattern).",
+    "4. Create panel/migrations/014_wireguard.sql: ALTER TABLE node_vpn_configs MODIFY COLUMN protocol ENUM('openvpn','l2tp','ikev2','ssh','wireguard') NOT NULL; CREATE TABLE IF NOT EXISTS wg_peers with columns: id BIGINT AUTO_INCREMENT PRIMARY KEY, customer_id BIGINT NULL, node_id BIGINT NOT NULL, public_key VARCHAR(44) NOT NULL, preshared_key VARCHAR(44) NULL, private_key_encrypted TEXT NULL, allowed_ips VARCHAR(128) NOT NULL, endpoint VARCHAR(128) NULL, status ENUM('active','disabled','revoked') NOT NULL DEFAULT 'active', last_handshake_at DATETIME NULL, rx_bytes BIGINT NOT NULL DEFAULT 0, tx_bytes BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY node_pubkey (node_id, public_key), INDEX(customer_id), INDEX(node_id), INDEX(status).",
+    "5. In node/cmd/node/main.go, add WireGuard to the normalizeService() switch: case \"wireguard\", \"wg\", \"wg-quick@wg0\": return \"wg-quick@wg0\". Also update the serviceStatus unit lookup for wireguard (check wg-quick@wg0).",
+    "6. In node/cmd/node/main.go, add WireGuard task actions to executeTask(): handle \"wireguard.add_peer\" (extract public_key, preshared_key, allowed_ips from payload, run wg set wg0 peer <pubkey> preshared-key /dev/stdin allowed-ips <ips>, then append peer to /etc/wireguard/wg0.conf), \"wireguard.remove_peer\" (extract public_key from payload, run wg set wg0 peer <pubkey> remove, remove from config file), \"wireguard.sync_config\" (run wg-quick strip wg0 to get runtime config, compare with file, run wg syncconf wg0 if needed).",
+    "7. Add WireGuard status to the Push struct and main loop: add WireGuardStatus string field to Push, populate it from serviceStatus(\"wg-quick@wg0\") in the main loop, and include in the services map as \"wireguard\": serviceStatus(\"wg-quick@wg0\")."
+  ],
+  "acceptance_criteria": [
+    "go build ./... succeeds without errors",
+    "go test ./panel/internal/templates/ passes (existing tests still work with refactored applyOpenVPNServerConfig)",
+    "go test ./panel/internal/wireguard/ passes new keygen tests",
+    "go test ./node/... passes with the new task actions compiled",
+    "panel/migrations/014_wireguard.sql contains valid SQL for WireGuard schema",
+    "normalizeService(\"wireguard\") returns \"wg-quick@wg0\"",
+    "executeTask handles wireguard.add_peer, wireguard.remove_peer, wireguard.sync_config actions"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel && go build ./...",
+    "cd /projects/sandbox/panel && go test ./...",
+    "grep -q 'wireguard.add_peer' node/cmd/node/main.go",
+    "grep -q 'GenerateKeyPair' panel/internal/wireguard/keygen.go"
+  ],
+  "blocked_reason": null,
+  "findings": "All tests pass. The TemplateEngine.Apply() handles validation, backup, and write internally so the refactored applyOpenVPNServerConfig is significantly simpler. The wireguard keygen tests verify base64 output length, uniqueness, and Curve25519 clamping correctness."
+}

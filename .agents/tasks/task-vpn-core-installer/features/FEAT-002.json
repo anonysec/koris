@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Update node-install.sh with wireguard-tools dependency, logrotate config deployment, /var/log/openvpn/ directory creation, and add node-agent logrotate config",
+  "status": "completed",
+  "steps": [
+    "1. In node-install.sh, add wireguard-tools to the dependency installation lists for both Debian/Ubuntu (apt-get install line) and RHEL/CentOS/Fedora (dnf install line). Add it alongside the existing VPN packages (openvpn easy-rsa strongswan xl2tpd).",
+    "2. In node-install.sh, after the 'VPN scripts' section that copies OpenVPN scripts, add a new section '# Log rotation' that: (a) creates /var/log/openvpn/ with permissions 0750 and root:root ownership using mkdir -p and chmod/chown, (b) copies scripts/logrotate/koris-openvpn from $INSTALL_DIR to /etc/logrotate.d/koris-openvpn with chmod 644.",
+    "3. In scripts/logrotate/, create koris-node-agent logrotate config for /var/log/panel-node/*.log with daily rotation, 7 days retention, compress, delaycompress, missingok, notifempty, create 0640 root root, and postrotate that does systemctl reload node-agent 2>/dev/null || true.",
+    "4. In node-install.sh, in the same log rotation section, also copy koris-node-agent logrotate config to /etc/logrotate.d/koris-node-agent and create /var/log/panel-node/ directory with 0750 permissions."
+  ],
+  "acceptance_criteria": [
+    "node-install.sh contains wireguard-tools in both apt-get and dnf install commands",
+    "node-install.sh creates /var/log/openvpn/ directory with mode 0750",
+    "node-install.sh copies logrotate config to /etc/logrotate.d/koris-openvpn",
+    "node-install.sh copies node agent logrotate config to /etc/logrotate.d/koris-node-agent",
+    "scripts/logrotate/koris-node-agent file exists with proper logrotate syntax",
+    "bash -n node-install.sh passes syntax check"
+  ],
+  "verification": [
+    "bash -n /projects/sandbox/panel/node-install.sh",
+    "grep -q 'wireguard-tools' /projects/sandbox/panel/node-install.sh",
+    "grep -q '/var/log/openvpn' /projects/sandbox/panel/node-install.sh",
+    "grep -q 'logrotate' /projects/sandbox/panel/node-install.sh",
+    "test -f /projects/sandbox/panel/scripts/logrotate/koris-node-agent"
+  ],
+  "blocked_reason": null,
+  "findings": "All acceptance criteria met. bash -n passes, wireguard-tools in both apt-get and dnf lines, log rotation section with directories and config deployment added between VPN scripts and Service blocks, koris-node-agent logrotate config created."
+}
