@@ -2199,10 +2199,7 @@ func fileExists(path string) (os.FileInfo, bool) {
 }
 
 func applyOpenVPNServerConfig(v VPNSettings) error {
-	// Validate before any file operations
-	if err := templates.ValidatePrivateNetwork(v.OpenVPNNetwork, false); err != nil {
-		return fmt.Errorf("network validation failed: %w", err)
-	}
+	// Validate inputs
 	if err := templates.ValidatePort(v.OpenVPNPort); err != nil {
 		return fmt.Errorf("port validation failed: %w", err)
 	}
@@ -2214,46 +2211,24 @@ func applyOpenVPNServerConfig(v VPNSettings) error {
 	if conf == "" {
 		conf = "/etc/openvpn/server/server.conf"
 	}
-	b, err := os.ReadFile(conf)
-	if err != nil {
-		return err
-	}
+
 	serverNet, serverMask := cidrToOpenVPNServer(v.OpenVPNNetwork)
-	lines := strings.Split(string(b), "\n")
-	out := []string{}
-	insertedServer := false
-	insertedDNS := false
-	for _, line := range lines {
-		trim := strings.TrimSpace(line)
-		if strings.HasPrefix(trim, "port ") || strings.HasPrefix(trim, "proto ") || strings.HasPrefix(trim, "server ") || strings.HasPrefix(trim, "push \"dhcp-option DNS ") {
-			continue
-		}
-		out = append(out, line)
-		if strings.HasPrefix(trim, "dev ") && serverNet != "" {
-			out = append(out, "server "+serverNet+" "+serverMask)
-			insertedServer = true
-		}
-		if strings.HasPrefix(trim, "push \"redirect-gateway") {
-			out = append(out, fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS1))
-			out = append(out, fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS2))
-			insertedDNS = true
-		}
+
+	vars := templates.TemplateVars{
+		Port:       v.OpenVPNPort,
+		Protocol:   v.OpenVPNProtocol,
+		Network:    v.OpenVPNNetwork,
+		ServerNet:  serverNet,
+		ServerMask: serverMask,
+		DNS1:       v.DNS1,
+		DNS2:       v.DNS2,
 	}
-	prefix := []string{fmt.Sprintf("port %d", v.OpenVPNPort), "proto " + v.OpenVPNProtocol}
-	if !insertedServer && serverNet != "" {
-		prefix = append(prefix, "server "+serverNet+" "+serverMask)
-	}
-	if !insertedDNS {
-		out = append(out, fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS1), fmt.Sprintf("push \"dhcp-option DNS %s\"", v.DNS2))
-	}
-	newContent := strings.Join(append(prefix, out...), "\n")
-	backup := fmt.Sprintf("%s.bak.%d", conf, time.Now().Unix())
-	if err := os.WriteFile(backup, b, 0600); err != nil {
+
+	engine := templates.NewEngine(os.Getenv("PANEL_TEMPLATE_DIR"))
+	if err := engine.Apply("openvpn", conf, vars); err != nil {
 		return err
 	}
-	if err := os.WriteFile(conf, []byte(newContent), 0644); err != nil {
-		return err
-	}
+
 	cmd := exec.Command("systemctl", "restart", "openvpn-server@server")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("restart openvpn: %w: %s", err, string(out))
