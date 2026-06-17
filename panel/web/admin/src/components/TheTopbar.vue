@@ -4,7 +4,7 @@ import type { Breadcrumb } from '@koris/types/components'
 import { useI18n } from '@koris/composables/useI18n'
 import type { Locale } from '@koris/composables/useI18n'
 
-const { locale, setLocale } = useI18n()
+const { t, locale, setLocale } = useI18n()
 
 export interface Props {
   title: string
@@ -94,7 +94,7 @@ const shortcutLabel = computed(() => {
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4-4" />
         </svg>
-        <span class="search-box-text">Search...</span>
+        <span class="search-box-text">{{ t('topbar.search') }}</span>
         <kbd class="search-shortcut">{{ shortcutLabel }}</kbd>
       </button>
 

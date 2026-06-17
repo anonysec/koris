@@ -84,7 +84,7 @@ const navGroups = computed<NavGroup[]>(() => [
       },
       {
         route: 'tickets',
-        label: t('nav.tickets') || 'Tickets',
+        label: t('nav.tickets'),
         icon: 'tickets',
       },
     ],

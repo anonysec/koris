@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useNodesStore } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
+import { useI18n } from '@koris/composables/useI18n'
 import KTabs from '@koris/ui/KTabs.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
@@ -13,6 +14,7 @@ import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 
+const { t } = useI18n()
 const store = useNodesStore()
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -21,10 +23,10 @@ const showAddForm = ref(false)
 const creating = ref(false)
 const newToken = ref<string | null>(null)
 
-const tabs = [
-  { key: 'nodes', label: 'Nodes' },
-  { key: 'cores', label: 'Cores' },
-]
+const tabs = computed(() => [
+  { key: 'nodes', label: t('nodes.nodes') },
+  { key: 'cores', label: t('nodes.cores') },
+])
 
 const nodeForm = ref({
   name: '',
@@ -243,7 +245,7 @@ onMounted(() => {
 <template>
   <div class="page nodes-view">
     <header class="page-header">
-      <KButton variant="primary" icon="+" @click="showAddForm = true">Add Node</KButton>
+      <KButton variant="primary" icon="+" @click="showAddForm = true">{{ t('nodes.add_node') }}</KButton>
     </header>
 
     <!-- New Token Display -->
@@ -255,28 +257,28 @@ onMounted(() => {
 
     <!-- Add Node Form -->
     <div v-if="showAddForm" class="panel">
-      <h4 class="panel-title">Add New Node</h4>
+      <h4 class="panel-title">{{ t('nodes.add_node') }}</h4>
       <form class="node-form" @submit.prevent="handleCreateNode">
         <div class="form-grid">
-          <KFormField name="node-name" label="Name" required>
+          <KFormField name="node-name" :label="t('nodes.node_name')" required>
             <template #default="{ fieldId }">
               <KInput :id="fieldId" v-model="nodeForm.name" placeholder="node-us-1" />
             </template>
           </KFormField>
-          <KFormField name="node-ip" label="Public IP" required>
+          <KFormField name="node-ip" :label="t('nodes.public_ip')" required>
             <template #default="{ fieldId }">
               <KInput :id="fieldId" v-model="nodeForm.public_ip" placeholder="1.2.3.4" />
             </template>
           </KFormField>
-          <KFormField name="node-domain" label="Domain" required>
+          <KFormField name="node-domain" :label="t('nodes.domain')" required>
             <template #default="{ fieldId }">
               <KInput :id="fieldId" v-model="nodeForm.domain" placeholder="us1.example.com" />
             </template>
           </KFormField>
         </div>
         <div class="form-actions">
-          <KButton variant="ghost" @click="showAddForm = false">Cancel</KButton>
-          <KButton type="submit" variant="primary" :loading="creating">Create Node</KButton>
+          <KButton variant="ghost" @click="showAddForm = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="creating">{{ t('nodes.create_node') }}</KButton>
         </div>
       </form>
     </div>
@@ -333,10 +335,10 @@ onMounted(() => {
               </div>
               <div class="node-card__actions">
                 <KButton variant="ghost" size="sm" @click="toggleNode(node.id, node.status)">
-                  {{ node.status === 'online' ? 'Disable' : 'Enable' }}
+                  {{ node.status === 'online' ? t('btn.disable') : t('btn.enable') }}
                 </KButton>
                 <KButton variant="danger" size="sm" @click="handleDeleteNode(node.id, node.name)">
-                  Delete
+                  {{ t('btn.delete') }}
                 </KButton>
               </div>
             </div>
@@ -389,7 +391,7 @@ onMounted(() => {
                         <span class="toggle-switch__slider" />
                       </label>
                       <KButton variant="ghost" size="sm" @click="startEdit(node.id, proto, getNodeConfig(node.id, proto))">
-                        Edit
+                        {{ t('btn.edit') }}
                       </KButton>
                     </div>
                   </div>
@@ -401,12 +403,12 @@ onMounted(() => {
                     class="protocol-form"
                   >
                     <div class="protocol-form__grid">
-                      <KFormField :name="`${proto}-port`" label="Port">
+                      <KFormField :name="`${proto}-port`" :label="t('label.port')">
                         <template #default="{ fieldId }">
                           <KInput :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
                         </template>
                       </KFormField>
-                      <KFormField :name="`${proto}-network`" label="Network">
+                      <KFormField :name="`${proto}-network`" :label="t('label.network')">
                         <template #default="{ fieldId }">
                           <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
                         </template>
@@ -517,7 +519,7 @@ onMounted(() => {
 
                     <!-- Protocol Options (collapsible) -->
                     <details class="protocol-options">
-                      <summary class="protocol-options__title">Protocol Options</summary>
+                      <summary class="protocol-options__title">{{ t('nodes.protocol_options') }}</summary>
                       <div class="protocol-form__grid protocol-options__grid">
 
                         <!-- OpenVPN Protocol Options -->
@@ -706,7 +708,7 @@ onMounted(() => {
 
                     <!-- Advanced Settings -->
                     <details class="advanced-settings">
-                      <summary class="advanced-settings__title">Advanced Settings</summary>
+                      <summary class="advanced-settings__title">{{ t('nodes.advanced') }}</summary>
                       <div class="protocol-form__grid advanced-settings__grid">
                         <!-- MTU: all protocols except SSH -->
                         <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" label="MTU">
@@ -743,8 +745,8 @@ onMounted(() => {
                     </details>
 
                     <div class="protocol-form__actions">
-                      <KButton variant="ghost" size="sm" @click="cancelEdit">Cancel</KButton>
-                      <KButton variant="primary" size="sm" :loading="savingConfig" @click="saveConfig">Save</KButton>
+                      <KButton variant="ghost" size="sm" @click="cancelEdit">{{ t('btn.cancel') }}</KButton>
+                      <KButton variant="primary" size="sm" :loading="savingConfig" @click="saveConfig">{{ t('nodes.save_config') }}</KButton>
                     </div>
                   </div>
                 </div>
