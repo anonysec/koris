@@ -2,7 +2,7 @@
   "id": "FEAT-004",
   "type": "feat",
   "description": "Automatic certificate rotation (Task Group 8: full implementation). Worker with 1-hour ticker, CheckExpiring, Regenerate, DistributeToNodes, cert.distribute task action in node agent, warning/critical events, and panel startup initialization.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create migration panel/migrations/024_cert_rotation.sql: This is a no-op since 017_cert_expiry.sql already added expires_at and fingerprint columns. Content: '-- Certificate rotation support (base columns already in 017_cert_expiry.sql)\\nSELECT 1;'",
     "Create panel/internal/certrotation/worker.go with package certrotation. Define: type Worker struct { db *sql.DB; interval time.Duration; stop chan struct{} }. func New(db *sql.DB) *Worker (sets interval to 1 hour). func (w *Worker) Start() - launches goroutine with time.Ticker that calls w.run() every hour. func (w *Worker) Stop(). func (w *Worker) run() - calls CheckExpiring then processes results.",
@@ -30,5 +30,5 @@
     "cd /projects/sandbox/panel && go test ./..."
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "certType function needed refinement to avoid matching dh.pem as server cert when in /etc/openvpn/server/ directory. Only .crt/.key extensions in server directories are classified as server certs. DaysUntilExpiry uses integer truncation of hours/24 which means exactly N*24h from now shows as N-1 days (sub-hour remainder is lost). Tests adjusted to add 12h buffer for reliable assertions."
 }

@@ -1,0 +1,29 @@
+{
+  "project_type": "Go monorepo with panel API server and node agent binary",
+  "language": "Go 1.22",
+  "build_system": "go build ./... from repo root (/projects/sandbox/panel)",
+  "test_framework": "go test with standard testing package, tests alongside code (e.g., engine_test.go, wireguard_test.go)",
+  "build_command": "cd /projects/sandbox/panel && go build ./...",
+  "test_command": "cd /projects/sandbox/panel && go test ./...",
+  "verification_instructions": "1) go build ./... must pass with no errors. 2) go test ./... must pass all tests. 3) New code must integrate with existing patterns.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "Go 1.22+ is pre-installed. Run go build ./... to verify deps are downloaded.",
+  "environment_constraints": "OPEN_INTERNET - full network access. No Docker needed for this Go project. No database available for integration tests - use unit tests only.",
+  "contribution_requirements": "Follow existing code patterns in the codebase. Module path is 'koris-next'. Imports use paths like 'koris-next/panel/internal/...' and 'koris-next/node/internal/...'",
+  "key_patterns": "API handlers are methods on *Server struct in panel/internal/api/api.go. Routes registered in Routes() method. Helper funcs: writeJSON, writeJSONCode, writeError, pathID. Node agent uses Push struct posted to /api/node/push. Tasks polled via /api/node/tasks/poll and executed in executeTask switch. Events created via s.createEvent(). Auth: requireAdmin middleware. WireGuard keys in panel/internal/wireguard/keygen.go.",
+  "relevant_files": [
+    "panel/internal/api/api.go",
+    "panel/internal/wireguard/keygen.go",
+    "panel/migrations/014_wireguard.sql",
+    "panel/migrations/015_ipv6.sql",
+    "panel/migrations/016_bandwidth_snapshots.sql",
+    "panel/migrations/017_cert_expiry.sql",
+    "node/cmd/node/main.go",
+    "node/cmd/node/outbound.go",
+    "scripts/openvpn/koris-client-connect.sh",
+    "panel/cmd/panel/main.go",
+    "panel/internal/templates/defaults.go",
+    "panel/internal/api/templates.go"
+  ],
+  "directory_structure": "panel/ - panel server code (internal/api, internal/wireguard, internal/templates, cmd/panel, migrations). node/ - node agent (cmd/node, internal/config, internal/logger, internal/updater). scripts/ - shell scripts (openvpn/, logrotate/). go.mod at root with module 'koris-next'."
+}
