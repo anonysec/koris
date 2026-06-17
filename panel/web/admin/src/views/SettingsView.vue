@@ -71,7 +71,12 @@ async function loadPanelSettings(): Promise<void> {
     const res = await get<{ ok: boolean; settings: Record<string, string> }>('/api/panel-settings')
     if (res.settings) {
       panelName.value = res.settings.panel_name || ''
-      panelLang.value = res.settings.language || 'en'
+      // Only apply server language if user has NOT explicitly chosen a language via sidebar
+      // (localStorage takes priority as the most recent user choice)
+      const storedLang = typeof window !== 'undefined' ? localStorage.getItem('koris-lang') : null
+      if (!storedLang) {
+        panelLang.value = res.settings.language || 'en'
+      }
       // Load theme settings from server
       if (res.settings.ui_theme && availableThemes.some((t) => t.id === res.settings.ui_theme)) {
         selectedTheme.value = res.settings.ui_theme as UITheme
@@ -192,15 +197,15 @@ async function saveTelegramSettings(): Promise<void> {
 const importFileInput = ref<HTMLInputElement | null>(null)
 
 interface ExportItem {
-  label: string
+  labelKey: string
   url: string
 }
 
 const exportItems: ExportItem[] = [
-  { label: 'Customers CSV', url: '/api/export/customers.csv' },
-  { label: 'Payments CSV', url: '/api/export/payments.csv' },
-  { label: 'Wallet Transactions CSV', url: '/api/export/wallet-transactions.csv' },
-  { label: 'RADIUS Accounting CSV', url: '/api/export/radacct.csv' },
+  { labelKey: 'settings.export_customers_csv', url: '/api/export/customers.csv' },
+  { labelKey: 'settings.export_payments_csv', url: '/api/export/payments.csv' },
+  { labelKey: 'settings.export_wallet_csv', url: '/api/export/wallet-transactions.csv' },
+  { labelKey: 'settings.export_radacct_csv', url: '/api/export/radacct.csv' },
 ]
 
 function downloadExport(url: string): void {
@@ -420,7 +425,7 @@ onMounted(async () => {
                 :key="item.url"
                 class="export-item"
               >
-                <span class="export-item__label">{{ item.label }}</span>
+                <span class="export-item__label">{{ t(item.labelKey) }}</span>
                 <KButton variant="ghost" size="sm" @click="downloadExport(item.url)">
                   {{ t('label.download') }}
                 </KButton>

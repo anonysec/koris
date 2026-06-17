@@ -348,7 +348,7 @@ const langLabels: Record<Locale, string> = {
 [dir="rtl"] .portal-header__actions {
   margin-left: 0;
   margin-right: auto;
-  flex-direction: row-reverse;
+  direction: ltr;
 }
 [dir="rtl"] .portal-header__user-toggle {
   flex-direction: row-reverse;
