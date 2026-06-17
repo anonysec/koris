@@ -222,7 +222,7 @@ function resetToDefaults() {
   const proto = editingConfig.value.protocol
   const defaults = PROTOCOL_DEFAULTS[proto]
   if (!defaults) {
-    toast.error('No defaults available for this protocol')
+    toast.error(t('nodes.no_defaults'))
     return
   }
   configForm.value = {
