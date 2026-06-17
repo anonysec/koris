@@ -82,6 +82,11 @@ const navGroups = computed<NavGroup[]>(() => [
         label: t('nav.plans'),
         icon: 'plans',
       },
+      {
+        route: 'tickets',
+        label: t('nav.tickets') || 'Tickets',
+        icon: 'tickets',
+      },
     ],
   },
   {
@@ -99,7 +104,10 @@ const navGroups = computed<NavGroup[]>(() => [
 /** Determine if a nav item is active based on current route */
 function isActive(route: string): boolean {
   if (route === 'customers') {
-    return ['customers', 'customer-detail', 'resellers', 'tickets'].includes(props.currentRoute)
+    return ['customers', 'customer-detail', 'resellers'].includes(props.currentRoute)
+  }
+  if (route === 'tickets') {
+    return ['tickets', 'ticket-detail'].includes(props.currentRoute)
   }
   return props.currentRoute === route
 }
@@ -187,6 +195,11 @@ function handleChangeLang(event: Event) {
         <svg v-else-if="item.icon === 'plans'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="5" width="20" height="14" rx="2" />
           <path d="M2 10h20" />
+        </svg>
+        <!-- Tickets icon -->
+        <svg v-else-if="item.icon === 'tickets'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          <path d="M8 9h8M8 13h4" />
         </svg>
         <!-- Settings icon -->
         <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
