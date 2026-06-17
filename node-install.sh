@@ -76,12 +76,40 @@ GO_REQUIRED_MAJOR=1
 GO_REQUIRED_MINOR=21
 install_go() {
     local ARCH
-    ARCH="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+    case "$(uname -m)" in
+        x86_64)        ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+        armv7l)        ARCH="armv6l" ;;
+        *)             ARCH="amd64" ;;
+    esac
     local GO_VERSION="1.22.5"
     local GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz"
+    local GO_TARBALL="/tmp/go${GO_VERSION}.linux-${ARCH}.tar.gz"
     info "Downloading Go ${GO_VERSION} for ${ARCH}..."
+    curl -fsSL -o "$GO_TARBALL" "$GO_URL"
+
+    # Verify SHA256 checksum if sha256sum is available (best-effort)
+    if command -v sha256sum &>/dev/null; then
+        local EXPECTED_HASH
+        EXPECTED_HASH=$(curl -fsSL "https://go.dev/dl/?mode=json" 2>/dev/null \
+            | grep -A 5 "go${GO_VERSION}.linux-${ARCH}" \
+            | grep -oP '"sha256":\s*"\K[a-f0-9]+' || true)
+        if [[ -n "$EXPECTED_HASH" ]]; then
+            local ACTUAL_HASH
+            ACTUAL_HASH=$(sha256sum "$GO_TARBALL" | awk '{print $1}')
+            if [[ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]]; then
+                rm -f "$GO_TARBALL"
+                fatal "Go binary checksum mismatch! Expected: $EXPECTED_HASH, Got: $ACTUAL_HASH"
+            fi
+            info "Go binary checksum verified."
+        else
+            warn "Could not fetch Go checksum for verification. Proceeding with install."
+        fi
+    fi
+
     rm -rf /usr/local/go
-    curl -fsSL "$GO_URL" | tar -C /usr/local -xz
+    tar -C /usr/local -xzf "$GO_TARBALL"
+    rm -f "$GO_TARBALL"
     export PATH="/usr/local/go/bin:$PATH"
 }
 
