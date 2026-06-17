@@ -305,9 +305,13 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 /* Sidebar border swap */
 [data-dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
 
-/* Content direction for RTL - text flows right-to-left inside containers */
-[data-dir="rtl"] .main{direction:rtl;text-align:right}
-[data-dir="rtl"] .sidebar{direction:rtl;text-align:right}
+/* Content text-align for RTL - only text alignment, no direction on containers */
+[data-dir="rtl"] .sidebar{text-align:right}
+
+/* Text-level RTL direction - applied to text elements only, not flex/grid containers */
+[data-dir="rtl"] p,[data-dir="rtl"] span,[data-dir="rtl"] h1,[data-dir="rtl"] h2,[data-dir="rtl"] h3,[data-dir="rtl"] h4,[data-dir="rtl"] h5,[data-dir="rtl"] h6,[data-dir="rtl"] label,[data-dir="rtl"] td,[data-dir="rtl"] th{direction:rtl;text-align:right}
+[data-dir="rtl"] input,[data-dir="rtl"] textarea,[data-dir="rtl"] select{direction:rtl;text-align:right}
+[data-dir="rtl"] input[type="number"],[data-dir="rtl"] input[type="tel"],[data-dir="rtl"] input[type="url"]{direction:ltr;text-align:left}
 
 /* Badge margin swap */
 [data-dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
@@ -339,18 +343,11 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 /* Auth screen border swap */
 [data-dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border)}
 
-/* Number/tel inputs keep LTR direction */
-[data-dir="rtl"] input[type="number"],[data-dir="rtl"] input[type="tel"]{direction:ltr;text-align:left}
-
 /* Subscription URL input stays LTR */
 [data-dir="rtl"] .sp__sub-url-input{direction:ltr;text-align:left}
 
 /* Settings grid flip (nav moves to right side) */
 [data-dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
-
-/* RTL content direction for main and sidebar */
-[data-dir="rtl"] .main{direction:rtl;text-align:right}
-[data-dir="rtl"] .sidebar{direction:rtl;text-align:right}
 
 /* Bulk toolbar clear margin */
 [data-dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
