@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "refactor",
   "description": "Refactor applyOpenVPNServerConfig() to use TemplateEngine.Apply() instead of line-by-line manipulation, add WireGuard keygen package, add WireGuard migration, add WireGuard task actions to node agent, and update normalizeService() for WireGuard",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. In panel/internal/api/api.go at line 2201, refactor applyOpenVPNServerConfig(v VPNSettings) to use the TemplateEngine: create a TemplateEngine via templates.NewEngine(os.Getenv(\"PANEL_TEMPLATE_DIR\")), build a TemplateVars from the VPNSettings fields (Port=v.OpenVPNPort, Protocol=v.OpenVPNProtocol, Network=v.OpenVPNNetwork, DNS1=v.DNS1, DNS2=v.DNS2, ServerNet and ServerMask from cidrToOpenVPNServer(v.OpenVPNNetwork)), call engine.Apply(\"openvpn\", conf, vars) which handles validation+backup+write, then issue systemctl restart openvpn-server@server. Remove the line-by-line manipulation code but keep cidrToOpenVPNServer() as it is still used.",
     "2. Create panel/internal/wireguard/keygen.go with package wireguard containing: func GenerateKeyPair() (privateKey, publicKey string, err error) using crypto/rand for 32 random bytes, applying Curve25519 clamping (privBytes[0]&=248, privBytes[31]&=127, privBytes[31]|=64), then golang.org/x/crypto/curve25519.X25519 for public key derivation, returning base64-encoded strings. Also func GeneratePresharedKey() (string, error) generating 32 random bytes base64-encoded.",
@@ -28,5 +28,5 @@
     "grep -q 'GenerateKeyPair' panel/internal/wireguard/keygen.go"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All tests pass. The TemplateEngine.Apply() handles validation, backup, and write internally so the refactored applyOpenVPNServerConfig is significantly simpler. The wireguard keygen tests verify base64 output length, uniqueness, and Curve25519 clamping correctness."
 }
