@@ -203,13 +203,13 @@ onMounted(() => {
 
           <KFormField name="password" :label="t('login.password')" required>
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.password" type="password" placeholder="Password" />
+              <KInput :id="fieldId" v-model="form.password" type="password" :placeholder="t('customer.placeholder_password')" />
             </template>
           </KFormField>
 
           <KFormField name="display_name" :label="t('customer.display_name')" required>
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.display_name" placeholder="Display name" />
+              <KInput :id="fieldId" v-model="form.display_name" :placeholder="t('customer.placeholder_display_name')" />
             </template>
           </KFormField>
 
@@ -221,13 +221,13 @@ onMounted(() => {
 
           <KFormField name="data_gb" :label="t('customer.data_gb')">
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.data_gb" type="number" placeholder="Plan default" />
+              <KInput :id="fieldId" v-model="form.data_gb" type="number" :placeholder="t('customer.placeholder_plan_default')" />
             </template>
           </KFormField>
 
           <KFormField name="speed_mbps" :label="t('customer.speed_mbps')">
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="Plan default" />
+              <KInput :id="fieldId" v-model="form.speed_mbps" type="number" :placeholder="t('customer.placeholder_plan_default')" />
             </template>
           </KFormField>
         </div>
@@ -296,13 +296,13 @@ onMounted(() => {
 
               <KFormField name="data_gb" :label="t('customer.data_gb')">
                 <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="form.data_gb" type="number" placeholder="Plan default" />
+                  <KInput :id="fieldId" v-model="form.data_gb" type="number" :placeholder="t('customer.placeholder_plan_default')" />
                 </template>
               </KFormField>
 
               <KFormField name="speed_mbps" :label="t('customer.speed_mbps')">
                 <template #default="{ fieldId }">
-                  <KInput :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="Plan default" />
+                  <KInput :id="fieldId" v-model="form.speed_mbps" type="number" :placeholder="t('customer.placeholder_plan_default')" />
                 </template>
               </KFormField>
             </div>

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -304,6 +306,24 @@ func (s *Server) putWarningConfig(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
+	}
+
+	// Validate webhook URL if provided
+	in.WebhookURL = strings.TrimSpace(in.WebhookURL)
+	if in.WebhookURL != "" {
+		parsed, err := url.Parse(in.WebhookURL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid webhook URL")
+			return
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			writeError(w, http.StatusBadRequest, "bad_request", "webhook URL must use http or https scheme")
+			return
+		}
+		if parsed.Host == "" {
+			writeError(w, http.StatusBadRequest, "bad_request", "webhook URL must have a valid host")
+			return
+		}
 	}
 
 	cfgJSON, err := json.Marshal(map[string]any{

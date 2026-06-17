@@ -1029,7 +1029,7 @@ onMounted(() => {
                           </KFormField>
                           <KFormField :name="`${proto}-outbound-uuid`" :label="t('nodes.outbound_uuid')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.outbound.uuid" placeholder="UUID or password" type="password" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.outbound.uuid" :placeholder="t('nodes.placeholder_uuid_or_password')" type="password" />
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-outbound-tls`" :label="t('nodes.outbound_tls')">
