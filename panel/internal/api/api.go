@@ -2206,6 +2206,9 @@ func applyOpenVPNServerConfig(v VPNSettings) error {
 	if err := templates.ValidateProtocol(v.OpenVPNProtocol); err != nil {
 		return fmt.Errorf("protocol validation failed: %w", err)
 	}
+	if v.OpenVPNNetwork == "" {
+		return fmt.Errorf("network validation failed: OpenVPN network is required")
+	}
 
 	conf := strings.TrimSpace(os.Getenv("PANEL_OPENVPN_SERVER_CONF"))
 	if conf == "" {
