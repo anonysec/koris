@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "IPv6 dual-stack support (Task Group 5: 5.4 and 5.7). Migration 015_ipv6.sql already exists with network_ipv6 column - skip 5.1. Add IPv6 tc filter rules in koris-client-connect.sh and add IPv6 address to node push struct.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "In scripts/openvpn/koris-client-connect.sh, in the apply_tc_limit() function, after the existing IPv4 tc filter lines, add IPv6 tc filter rules. After the line 'tc filter add dev \"$TUN\" protocol ip parent 1: prio \"$prio\" u32 match ip dst \"$IP/32\" flowid \"$cid\"', add a block that checks for IPv6 address (ifconfig_pool_remote_ip_ipv6 env var) and if present, adds: 'tc filter add dev \"$TUN\" protocol ipv6 parent 1: prio \"$((prio+10000))\" u32 match ip6 dst \"$IPV6/128\" flowid \"$cid\"'. Similarly for ingress: after the IPv4 ingress filter, add 'tc filter add dev \"$TUN\" parent ffff: protocol ipv6 prio \"$((prio+10000))\" u32 match ip6 src \"$IPV6/128\" police rate \"$UP_RATE\" burst 200k drop flowid :1'.",
     "At the top of koris-client-connect.sh, after the IP variable assignment, add: IPV6=\"${ifconfig_pool_remote_ip_ipv6:-}\" and validate it (allow hex digits, colons, and optional /prefix).",
@@ -22,5 +22,5 @@
     "cd /projects/sandbox/panel && go test ./..."
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All acceptance criteria met. go build and go test pass cleanly. IPv6 tc filters are guarded by [ -n \"$IPV6\" ] check. firstIPv6() correctly skips IPv4 and link-local addresses. PublicIPv6 included in payload_json via json.Marshal of the full input struct."
 }
