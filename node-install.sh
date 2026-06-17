@@ -91,7 +91,7 @@ install_go() {
     # Verify SHA256 checksum if sha256sum is available (best-effort)
     if command -v sha256sum &>/dev/null; then
         local EXPECTED_HASH
-        EXPECTED_HASH=$(curl -fsSL "https://go.dev/dl/?mode=json" 2>/dev/null \
+        EXPECTED_HASH=$(curl -fsSL "https://go.dev/dl/?mode=json&include=all" 2>/dev/null \
             | grep -A 5 "go${GO_VERSION}.linux-${ARCH}" \
             | grep -oP '"sha256":\s*"\K[a-f0-9]+' || true)
         if [[ -n "$EXPECTED_HASH" ]]; then
