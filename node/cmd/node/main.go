@@ -50,6 +50,7 @@ type Push struct {
 	OpenVPNStatus string             `json:"openvpn_status"`
 	L2TPStatus    string             `json:"l2tp_status"`
 	IKEv2Status   string             `json:"ikev2_status"`
+	WireGuardStatus string           `json:"wireguard_status"`
 	Services      map[string]string  `json:"services"`
 	Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
 }
@@ -211,31 +212,33 @@ func main() {
 		}
 		host, _ := os.Hostname()
 		services := map[string]string{
-			"openvpn": serviceStatus("openvpn"),
-			"l2tp":    serviceStatus("xl2tpd"),
-			"ikev2":   serviceStatus("strongswan"),
-			"ssh":     serviceStatus("ssh"),
+			"openvpn":   serviceStatus("openvpn"),
+			"l2tp":      serviceStatus("xl2tpd"),
+			"ikev2":     serviceStatus("strongswan"),
+			"ssh":       serviceStatus("ssh"),
+			"wireguard": serviceStatus("wg-quick@wg0"),
 		}
 		push := Push{
-			Token:         token,
-			Type:          "status",
-			Hostname:      host,
-			PublicIP:      firstIP(),
-			OS:            runtime.GOOS,
-			Timestamp:     now.UTC(),
-			CPUPercent:    cpuPercent(),
-			RAMPercent:    memPercent(),
-			DiskPercent:   diskPercent("/"),
-			RxBytes:       nowRx,
-			TxBytes:       nowTx,
-			RxBps:         int64(float64(nowRx-lastRx) / dt),
-			TxBps:         int64(float64(nowTx-lastTx) / dt),
-			OnlineUsers:   onlineUsers(),
-			OpenVPNStatus: services["openvpn"],
-			L2TPStatus:    services["l2tp"],
-			IKEv2Status:   services["ikev2"],
-			Services:      services,
-			Diagnostics:   buildDiagnostics(startTime, agentVersion),
+			Token:           token,
+			Type:            "status",
+			Hostname:        host,
+			PublicIP:        firstIP(),
+			OS:              runtime.GOOS,
+			Timestamp:       now.UTC(),
+			CPUPercent:      cpuPercent(),
+			RAMPercent:      memPercent(),
+			DiskPercent:     diskPercent("/"),
+			RxBytes:         nowRx,
+			TxBytes:         nowTx,
+			RxBps:           int64(float64(nowRx-lastRx) / dt),
+			TxBps:           int64(float64(nowTx-lastTx) / dt),
+			OnlineUsers:     onlineUsers(),
+			OpenVPNStatus:   services["openvpn"],
+			L2TPStatus:      services["l2tp"],
+			IKEv2Status:     services["ikev2"],
+			WireGuardStatus: services["wireguard"],
+			Services:        services,
+			Diagnostics:     buildDiagnostics(startTime, agentVersion),
 		}
 
 		ok, errMsg := postJSON(client, panel+"/api/node/push", token, push, log)
@@ -498,9 +501,131 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			changesList[k] = map[string]string{"old": v[0], "new": v[1]}
 		}
 		return "succeeded", map[string]any{"changes": changesList}, ""
+	case "wireguard.add_peer":
+		pubKey := fmt.Sprint(payload["public_key"])
+		psk := fmt.Sprint(payload["preshared_key"])
+		allowedIPs := fmt.Sprint(payload["allowed_ips"])
+		if pubKey == "" || pubKey == "<nil>" {
+			return "failed", map[string]any{}, "public_key is required"
+		}
+		if allowedIPs == "" || allowedIPs == "<nil>" {
+			return "failed", map[string]any{}, "allowed_ips is required"
+		}
+		// Add peer to live interface
+		args := []string{"set", "wg0", "peer", pubKey, "allowed-ips", allowedIPs}
+		if psk != "" && psk != "<nil>" {
+			// Use preshared-key via stdin
+			cmd := exec.Command("wg", "set", "wg0", "peer", pubKey, "preshared-key", "/dev/stdin", "allowed-ips", allowedIPs)
+			cmd.Stdin = strings.NewReader(psk)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return "failed", map[string]any{"output": string(out)}, err.Error()
+			}
+		} else {
+			cmd := exec.Command("wg", args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return "failed", map[string]any{"output": string(out)}, err.Error()
+			}
+		}
+		// Append peer to config file
+		peerBlock := fmt.Sprintf("\n[Peer]\nPublicKey = %s\nAllowedIPs = %s\n", pubKey, allowedIPs)
+		if psk != "" && psk != "<nil>" {
+			peerBlock = fmt.Sprintf("\n[Peer]\nPublicKey = %s\nPresharedKey = %s\nAllowedIPs = %s\n", pubKey, psk, allowedIPs)
+		}
+		confFile := "/etc/wireguard/wg0.conf"
+		f, err := os.OpenFile(confFile, os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("open config: %s", err.Error())
+		}
+		_, err = f.WriteString(peerBlock)
+		f.Close()
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("write config: %s", err.Error())
+		}
+		return "succeeded", map[string]any{"public_key": pubKey, "allowed_ips": allowedIPs}, ""
+	case "wireguard.remove_peer":
+		pubKey := fmt.Sprint(payload["public_key"])
+		if pubKey == "" || pubKey == "<nil>" {
+			return "failed", map[string]any{}, "public_key is required"
+		}
+		// Remove peer from live interface
+		cmd := exec.Command("wg", "set", "wg0", "peer", pubKey, "remove")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "failed", map[string]any{"output": string(out)}, err.Error()
+		}
+		// Remove peer from config file
+		confFile := "/etc/wireguard/wg0.conf"
+		confData, err := os.ReadFile(confFile)
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("read config: %s", err.Error())
+		}
+		newConf := removePeerFromConfig(string(confData), pubKey)
+		if err := os.WriteFile(confFile, []byte(newConf), 0600); err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("write config: %s", err.Error())
+		}
+		return "succeeded", map[string]any{"public_key": pubKey, "removed": true}, ""
+	case "wireguard.sync_config":
+		// Sync runtime config with file
+		cmd := exec.Command("wg", "syncconf", "wg0", "/etc/wireguard/wg0.conf")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "failed", map[string]any{"output": string(out)}, err.Error()
+		}
+		return "succeeded", map[string]any{"message": "config synced"}, ""
 	default:
 		return "failed", map[string]any{}, "unsupported action"
 	}
+}
+
+// removePeerFromConfig removes a [Peer] block with the given public key from a WireGuard config.
+func removePeerFromConfig(config, pubKey string) string {
+	lines := strings.Split(config, "\n")
+	var result []string
+	skip := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Start of a new section
+		if strings.HasPrefix(trimmed, "[") {
+			if skip {
+				skip = false
+			}
+			// Check if this is the peer we want to remove
+			if strings.EqualFold(trimmed, "[Peer]") {
+				// Look ahead - we need to mark for potential skipping
+				skip = false // Will be determined by PublicKey line
+				result = append(result, line)
+				continue
+			}
+		}
+		if !skip && strings.HasPrefix(strings.TrimSpace(line), "PublicKey") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 && strings.TrimSpace(parts[1]) == pubKey {
+				// Remove this peer block: remove the [Peer] line we just added
+				// and skip until next section
+				if len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "[Peer]" {
+					result = result[:len(result)-1]
+					// Also remove trailing empty line before [Peer] if present
+					for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
+						result = result[:len(result)-1]
+					}
+				}
+				skip = true
+				continue
+			}
+		}
+		if skip {
+			// Skip lines until next section header
+			if strings.HasPrefix(trimmed, "[") {
+				skip = false
+				result = append(result, line)
+			}
+			continue
+		}
+		result = append(result, line)
+	}
+	return strings.Join(result, "\n")
 }
 
 func normalizeService(input string) string {
@@ -514,6 +639,8 @@ func normalizeService(input string) string {
 		return "strongswan"
 	case "ssh", "sshd", "ssh-tunnel", "dropbear":
 		return "ssh"
+	case "wireguard", "wg", "wg-quick@wg0":
+		return "wg-quick@wg0"
 	default:
 		return ""
 	}
@@ -769,6 +896,16 @@ func serviceStatus(service string) string {
 			}
 		}
 		unitName = "openvpn"
+	case "wg-quick@wg0":
+		// Check wg-quick@wg0 service
+		out, err := exec.Command("systemctl", "is-active", "wg-quick@wg0").Output()
+		if err == nil {
+			status := strings.TrimSpace(string(out))
+			if status == "active" {
+				return "running"
+			}
+		}
+		return "stopped"
 	case "xl2tpd":
 		// L2TP/IPSec needs both xl2tpd and an IPSec daemon.
 		// Check xl2tpd first.
