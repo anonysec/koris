@@ -2543,6 +2543,9 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 			if err := writeRealtime("sessions", s.liveSessionsPayload()); err != nil {
 				return
 			}
+			if err := writeRealtime("bandwidth", s.bandwidthPayload()); err != nil {
+				return
+			}
 		case <-pingTicker.C:
 			if err := writePing(); err != nil {
 				return
@@ -4254,6 +4257,12 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		IKEv2Status   string            `json:"ikev2_status"`
 		Services      map[string]string `json:"services"`
 		Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
+		PerUserBandwidth []struct {
+			IP      string `json:"ip"`
+			ClassID string `json:"class_id"`
+			RxBps   int64  `json:"rx_bps"`
+			TxBps   int64  `json:"tx_bps"`
+		} `json:"per_user_bandwidth,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -4333,6 +4342,37 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+
+	// Store per-user bandwidth snapshots if present
+	if len(in.PerUserBandwidth) > 0 {
+		// Lookup IP-to-username mapping from radacct active sessions
+		ipToUser := make(map[string]string)
+		rows, err := s.DB.Query(`SELECT username, framedipaddress FROM radacct WHERE acctstoptime IS NULL`)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var uname, fip string
+				if err := rows.Scan(&uname, &fip); err == nil && fip != "" {
+					// Extract last octet from IP for matching with class ID
+					parts := strings.Split(fip, ".")
+					if len(parts) == 4 {
+						ipToUser[parts[3]] = uname
+					}
+				}
+			}
+			rows.Close()
+		}
+
+		for _, bw := range in.PerUserBandwidth {
+			username := ipToUser[bw.IP]
+			if username == "" {
+				username = "unknown"
+			}
+			_, _ = s.DB.Exec(`INSERT INTO user_bandwidth_snapshots(node_id, username, ip, rx_bps, tx_bps) VALUES(?,?,?,?,?)`,
+				nodeID, username, bw.IP, bw.RxBps, bw.TxBps)
+		}
+	}
+
 	writeJSON(w, map[string]any{"ok": true, "node_id": nodeID})
 }
 
@@ -5999,6 +6039,34 @@ func (s *Server) liveSessionsPayload() []map[string]any {
 		}
 	}
 
+	return out
+}
+
+func (s *Server) bandwidthPayload() []map[string]any {
+	rows, err := s.DB.Query(`SELECT username, ip, rx_bps, tx_bps FROM user_bandwidth_snapshots WHERE created_at >= NOW() - INTERVAL 30 SECOND ORDER BY created_at DESC`)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+
+	// Group by username, take the most recent entry per user
+	seen := make(map[string]bool)
+	out := []map[string]any{}
+	for rows.Next() {
+		var username, ip string
+		var rxBps, txBps int64
+		if err := rows.Scan(&username, &ip, &rxBps, &txBps); err == nil {
+			if !seen[username] {
+				seen[username] = true
+				out = append(out, map[string]any{
+					"username": username,
+					"ip":       ip,
+					"rx_bps":   rxBps,
+					"tx_bps":   txBps,
+				})
+			}
+		}
+	}
 	return out
 }
 

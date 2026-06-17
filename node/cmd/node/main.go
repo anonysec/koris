@@ -53,8 +53,9 @@ type Push struct {
 	L2TPStatus    string             `json:"l2tp_status"`
 	IKEv2Status   string             `json:"ikev2_status"`
 	WireGuardStatus string           `json:"wireguard_status"`
-	Services      map[string]string  `json:"services"`
-	Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
+	Services         map[string]string  `json:"services"`
+	Diagnostics      *DiagnosticsReport `json:"diagnostics,omitempty"`
+	PerUserBandwidth []UserBandwidth    `json:"per_user_bandwidth,omitempty"`
 }
 
 type Task struct {
@@ -195,6 +196,7 @@ func main() {
 	// Consecutive failure tracking state for push endpoint.
 	tracker := NewFailureTracker(3, log)
 
+	collector := NewBandwidthCollector()
 	lastRx, lastTx := netBytes()
 	lastAt := time.Now()
 	for {
@@ -243,6 +245,10 @@ func main() {
 			Services:        services,
 			Diagnostics:     buildDiagnostics(startTime, agentVersion),
 		}
+
+		// Collect per-user bandwidth from tc
+		bw := collector.Collect("tun0")
+		push.PerUserBandwidth = bw
 
 		ok, errMsg := postJSON(client, panel+"/api/node/push", token, push, log)
 		if ok {
