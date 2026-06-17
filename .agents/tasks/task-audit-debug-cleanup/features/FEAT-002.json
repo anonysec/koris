@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-002",
+  "type": "chore",
+  "description": "Remove dead/unused code packages and functions. Three internal packages are defined but never imported by any code in the project: gateway, totp, and certrotation. Additionally, the logServerError method in api.go is defined but never called. Remove these to reduce maintenance burden and confusion.",
+  "status": "completed",
+  "steps": [
+    "Delete the entire directory panel/internal/gateway/ (gateway.go). This ZarinPal payment gateway integration is never imported anywhere in the project.",
+    "Delete the entire directory panel/internal/totp/ (totp.go). This TOTP implementation is never imported anywhere in the project.",
+    "Delete the entire directory panel/internal/certrotation/ (worker.go). This certificate rotation worker is never imported or started from main.go.",
+    "Remove the logServerError method from panel/internal/api/api.go (around line 5606-5613). It is defined but never called anywhere in the codebase.",
+    "Run go build ./... to confirm no compile errors after removal.",
+    "Run go test ./... to confirm all tests still pass."
+  ],
+  "acceptance_criteria": [
+    "Directories panel/internal/gateway/, panel/internal/totp/, panel/internal/certrotation/ no longer exist",
+    "The logServerError method is removed from api.go",
+    "go build ./... succeeds with no errors",
+    "go test ./... passes all tests"
+  ],
+  "verification": [
+    "Run: go build ./...",
+    "Run: go test ./...",
+    "Run: ls panel/internal/gateway panel/internal/totp panel/internal/certrotation 2>&1 (should show 'No such file or directory' for all three)"
+  ],
+  "blocked_reason": null,
+  "findings": "Clean removal. The log package import became unused after removing logServerError, so it was also removed. go build, go test, and go vet all pass cleanly."
+}

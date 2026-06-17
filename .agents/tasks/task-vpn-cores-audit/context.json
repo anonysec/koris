@@ -1,0 +1,30 @@
+{
+  "project_type": "Go backend (panel + node agent) with bash VPN scripts (OpenVPN auth/connect/disconnect)",
+  "language": "Go 1.x, Bash",
+  "build_system": "go build ./... from repo root; scripts installed via install-node.sh",
+  "test_framework": "Go testing package (go test ./...)",
+  "build_command": "cd /projects/sandbox/panel && go build ./...",
+  "test_command": "cd /projects/sandbox/panel && go test ./...",
+  "verification_instructions": "1) go build ./... passes, 2) go test ./... passes, 3) go vet ./... clean",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "go mod tidy && go build ./...",
+  "environment_constraints": "Go toolchain available. No MySQL or systemd for integration tests.",
+  "contribution_requirements": "Follow existing patterns: structured JSON logging via internal/logger, SQL injection prevention via parameterized queries or strict validation, keep node agent minimal.",
+  "key_patterns": "Node agent: polls panel, pushes status, executes tasks. Panel: stores node status, manages failover DNS, enforces connection limits. OpenVPN scripts: handle auth, connect, disconnect via FreeRADIUS and direct MySQL queries with sql_escape() sanitization.",
+  "relevant_files": [
+    "node/cmd/node/main.go",
+    "node/cmd/node/failure_tracker.go",
+    "node/internal/config/config.go",
+    "node/internal/logger/logger.go",
+    "node/internal/updater/updater.go",
+    "scripts/openvpn/koris-radius-auth.sh",
+    "scripts/openvpn/koris-client-connect.sh",
+    "scripts/openvpn/koris-client-disconnect.sh",
+    "panel/internal/api/connlimit.go",
+    "panel/internal/sessions/enforcer.go",
+    "panel/internal/api/failover_orchestrator.go",
+    "panel/internal/api/failover_dns.go",
+    "panel/internal/api/agent.go"
+  ],
+  "directory_structure": "node/ - Node agent Go binary (cmd/node/main.go, internal/{config,logger,updater}). panel/ - Panel server Go binary. scripts/openvpn/ - OpenVPN hook scripts for auth and accounting. panel/internal/sessions/ - Session enforcement logic."
+}

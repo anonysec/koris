@@ -1,0 +1,14 @@
+{
+  "task_id": "task-audit-debug-cleanup",
+  "task_description": "Audit and improve the KorisPanel codebase: fix deploy script bugs (PANEL_PORT variable never defined), remove unused/dead code packages (gateway, totp, certrotation) and unused functions (logServerError), and clean up redundant deploy diagnostics.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "go build ./... clean, go test ./... all pass, go vet ./... no issues, bash -n syntax checks pass for both deploy scripts, no PANEL_PORT references remain, dead code packages removed. Review feedback addressed (subshell isolation, env var honoring)."
+  }
+}

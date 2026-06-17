@@ -1,0 +1,14 @@
+{
+  "task_id": "task-ui-audit-cleanup",
+  "task_description": "UI audit: remove dead code (App.legacy.vue, orphaned tests, unused utility files), consolidate duplicated code (useFreshData, formatDate) into the shared library, and document unused-but-available shared components.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "Admin build passes (vue-tsc --noEmit + vite build). Portal build passes (vue-tsc --noEmit + vite build). Admin tests: 7 passed (useCommandPalette). Shared tests: 12 passed (useFreshData 6 tests + useFormValidation 6 tests). All type-checking clean with zero errors."
+  }
+}

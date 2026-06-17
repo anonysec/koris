@@ -111,21 +111,19 @@ function formatBps(bps: number): string {
 
 function getServiceStatus(node: any, protocol: string): string {
   const metrics = node.status_metrics
-  // Check node_services array first (SSH is only stored there)
+  // Check node_services array first (all services including SSH are stored here)
   if (node.services && Array.isArray(node.services)) {
     const svc = node.services.find((s: any) => s.service === protocol)
     if (svc && svc.status) return svc.status
   }
-  // Fall back to status_metrics for openvpn/l2tp/ikev2
-  if (!metrics) {
-    // If there is a config for this protocol, status is unknown; otherwise not configured
-    const hasConfig = getNodeConfig(node.id, protocol)
-    return hasConfig ? 'unknown' : 'not_configured'
+  // Fall back to status_metrics for all protocols
+  if (metrics) {
+    if (protocol === 'openvpn' && metrics.openvpn_status) return metrics.openvpn_status
+    if (protocol === 'l2tp' && metrics.l2tp_status) return metrics.l2tp_status
+    if (protocol === 'ikev2' && metrics.ikev2_status) return metrics.ikev2_status
+    if (protocol === 'ssh' && metrics.ssh_status) return metrics.ssh_status
   }
-  if (protocol === 'openvpn') return metrics.openvpn_status || 'unknown'
-  if (protocol === 'l2tp') return metrics.l2tp_status || 'unknown'
-  if (protocol === 'ikev2') return metrics.ikev2_status || 'unknown'
-  // For SSH and others, check if config exists
+  // If there is a config for this protocol, status is unknown; otherwise not configured
   const hasConfig = getNodeConfig(node.id, protocol)
   return hasConfig ? 'unknown' : 'not_configured'
 }

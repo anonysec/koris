@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix path inconsistency for VPN scripts between installers and the OpenVPN config. install.sh and node-install.sh copy scripts to /etc/openvpn/scripts/ but install-openvpn-scripts.sh and the default OpenVPN template reference /etc/openvpn/server/. Also fix missing PANEL_SECRET in install.sh generated panel.env (needed for AES-256-GCM encryption in failover DNS providers).",
+  "status": "completed",
+  "steps": [
+    "In install.sh: Change the VPN scripts copy target from '/etc/openvpn/scripts/' to '/etc/openvpn/server/' to match where install-openvpn-scripts.sh and the OpenVPN server config expect them. The current code is: mkdir -p /etc/openvpn/scripts; cp -f ...; chmod +x /etc/openvpn/scripts/*.sh. Change to: mkdir -p /etc/openvpn/server; cp -f ...; chmod +x /etc/openvpn/server/*.sh. Wait - actually looking more carefully, install.sh does NOT have this code. Only node-install.sh does. Check again...",
+    "In node-install.sh: Change the VPN scripts copy from '/etc/openvpn/scripts/' to '/etc/openvpn/server/' which is where the OpenVPN server.conf references them via the hooks (auth-user-pass-verify, client-connect, client-disconnect). The install-openvpn-scripts.sh correctly installs to $OPENVPN_DIR (/etc/openvpn/server) but node-install.sh puts them in the wrong directory.",
+    "In install.sh: Add PANEL_SECRET to the generated panel.env file. The failover system (failover.go encryptToken/decryptToken) requires os.Getenv('PANEL_SECRET') for AES-256-GCM encryption of DNS provider API tokens. Generate it with gen_secret (same pattern as SETUP_KEY and SESSION_SECRET). Add: PANEL_SECRET='$(gen_secret 32)' to the panel.env heredoc.",
+    "In install.sh: Also add the VPN scripts installation step (it's missing entirely - the install.sh doesn't install the OpenVPN hook scripts even though it installs openvpn). Add the same logic as node-install.sh but with the correct path: mkdir -p /etc/openvpn/server; cp scripts/openvpn/*.sh /etc/openvpn/server/; chmod +x /etc/openvpn/server/*.sh"
+  ],
+  "acceptance_criteria": [
+    "node-install.sh copies VPN scripts to /etc/openvpn/server/ (not /etc/openvpn/scripts/)",
+    "install.sh generates PANEL_SECRET in panel.env",
+    "install.sh includes VPN script installation to /etc/openvpn/server/",
+    "All scripts pass bash -n syntax check"
+  ],
+  "verification": [
+    "Run: bash -n install.sh",
+    "Run: bash -n node-install.sh",
+    "Run: grep -n 'PANEL_SECRET' install.sh to confirm it's generated",
+    "Run: grep -n '/etc/openvpn/server' node-install.sh to confirm correct path",
+    "Run: grep -n '/etc/openvpn/scripts' node-install.sh to confirm old path is gone"
+  ],
+  "blocked_reason": null,
+  "findings": "All changes verified with bash -n. VPN scripts path corrected in node-install.sh, PANEL_SECRET added to install.sh, and VPN hook scripts installation added to install.sh."
+}

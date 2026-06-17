@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Redesign portal as a single scrollable page with all info visible (no tabs/routes), multi-language, phone-friendly",
+  "status": "completed",
+  "steps": [
+    "1. Create a new single-page portal view at panel/panel/web/portal/src/views/SinglePageView.vue that combines all portal content into one scrollable page with sections: (a) Account Status section - plan name, status pill, expiry date, days remaining, (b) Usage Gauge section - data usage with progress bar and remaining display, (c) VPN Profiles section - download buttons for each available profile + subscription URL copy, (d) Support section - create ticket form and list of existing tickets with thread view.",
+    "2. Update panel/panel/web/portal/src/router/index.ts: Change the PortalShell children to use a single route that loads SinglePageView.vue as the main content. Keep the login route. Remove separate billing/usage/vpn/support routes (or redirect them to the main page). Keep profile as a modal/section.",
+    "3. Update panel/panel/web/portal/src/layouts/PortalShell.vue: Remove tab navigation (desktop nav links and mobile bottom tabs). Keep the header with brand, theme toggle, language, and user menu. The shell becomes a simple header + content layout.",
+    "4. Add comprehensive multi-language support to the portal: Expand panel/panel/web/portal/src/i18n.ts with 50+ keys covering all sections (account status, usage labels, VPN profile labels, support form labels, button texts) in en, fa, zh. Use t() for ALL user-visible strings in the new SinglePageView.",
+    "5. Ensure phone-friendly layout: Use CSS with mobile-first approach - single column on mobile (< 768px), content sections stack vertically with comfortable touch targets (min 44px tap areas). Use @media queries for responsive adjustments. Cards should fill viewport width on mobile with appropriate padding.",
+    "6. Keep the design simple with clear language - no technical jargon. Sections should use icons and clear headings. The support form should be minimal (subject + message only, no priority picker for simplicity)."
+  ],
+  "acceptance_criteria": [
+    "Portal loads as a single scrollable page showing account status, usage, VPN profiles, and support all at once",
+    "No tab navigation exists in the portal (no bottom tabs, no nav links aside from header brand)",
+    "All user-visible strings use t() and have translations in en, fa, zh",
+    "On mobile viewport (375px), page is usable with no horizontal scroll and comfortable tap targets",
+    "VPN profiles section shows download buttons and subscription URL",
+    "Support section allows creating tickets and viewing existing ones inline"
+  ],
+  "verification": [
+    "cd panel/panel/web/portal && npx vue-tsc --noEmit",
+    "cd panel/panel/web/portal && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "Portal redesigned as single scrollable page (SinglePageView.vue). All tabs/routes removed, old routes redirect to home. PortalShell simplified to header-only with language switcher, theme toggle, user dropdown. 55+ i18n keys per locale (EN/FA/ZH). Mobile-first CSS with 640px breakpoint. All user-visible strings use t(). vue-tsc and vite build pass cleanly. Router keeps portal-profile route accessible from user dropdown."
+}

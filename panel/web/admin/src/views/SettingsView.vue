@@ -279,6 +279,7 @@ async function saveThresholds(): Promise<void> {
 const telegramToken = ref('')
 const telegramChatId = ref('')
 const savingTelegram = ref(false)
+const testingBot = ref(false)
 
 async function loadTelegramSettings(): Promise<void> {
   try {
@@ -307,14 +308,83 @@ async function saveTelegramSettings(): Promise<void> {
   }
 }
 
+async function testBot(): Promise<void> {
+  testingBot.value = true
+  try {
+    // Save settings first
+    await patch<{ ok: boolean }>('/api/panel-settings', {
+      telegram_token: telegramToken.value,
+      telegram_chat_id: telegramChatId.value,
+    })
+    // Then restart bot with new config
+    const res = await fetch('/api/admin/bot/restart', { method: 'POST', credentials: 'include' })
+    const data = await res.json()
+    if (data.ok) {
+      toast.success(t('settings.bot_restart_success'))
+    } else {
+      toast.error(t('settings.bot_restart_error'))
+    }
+  } catch {
+    toast.error(t('settings.bot_restart_error'))
+  } finally {
+    testingBot.value = false
+  }
+}
+
 // ─── Backup ─────────────────────────────────────────────────────────────────
 const importFileInput = ref<HTMLInputElement | null>(null)
 const exporting = ref(false)
 const importing = ref(false)
 
 // ─── Panel HTTPS Certificate ────────────────────────────────────────────────
-// Certificate management is done via environment variables (PANEL_TLS_CERT, PANEL_TLS_KEY).
-// No upload functionality needed.
+const certStatus = ref<{ cert_exists: boolean; key_exists: boolean; expiry: string; issuer: string }>({
+  cert_exists: false, key_exists: false, expiry: '', issuer: '',
+})
+const loadingCert = ref(false)
+const uploadingCert = ref(false)
+const certFileInput = ref<HTMLInputElement | null>(null)
+const keyFileInput = ref<HTMLInputElement | null>(null)
+
+async function loadCertStatus(): Promise<void> {
+  loadingCert.value = true
+  try {
+    const res = await fetch('/api/admin/cert-status', { credentials: 'include' })
+    const data = await res.json()
+    if (data.ok) {
+      certStatus.value = { cert_exists: data.cert_exists, key_exists: data.key_exists, expiry: data.expiry || '', issuer: data.issuer || '' }
+    }
+  } catch { /* use defaults */ }
+  finally { loadingCert.value = false }
+}
+
+async function uploadCert(): Promise<void> {
+  const certEl = certFileInput.value
+  const keyEl = keyFileInput.value
+  if (!certEl?.files?.length || !keyEl?.files?.length) {
+    toast.error(t('settings.cert_files_required'))
+    return
+  }
+  uploadingCert.value = true
+  try {
+    const formData = new FormData()
+    formData.append('cert', certEl.files[0])
+    formData.append('key', keyEl.files[0])
+    const res = await fetch('/api/admin/cert-upload', { method: 'POST', credentials: 'include', body: formData })
+    const data = await res.json()
+    if (data.ok) {
+      toast.success(t('settings.cert_upload_success'))
+      await loadCertStatus()
+    } else {
+      toast.error(data.error || t('settings.cert_upload_error'))
+    }
+  } catch {
+    toast.error(t('settings.cert_upload_error'))
+  } finally {
+    uploadingCert.value = false
+    if (certEl) certEl.value = ''
+    if (keyEl) keyEl.value = ''
+  }
+}
 
 async function downloadBackup(): Promise<void> {
   exporting.value = true
@@ -371,7 +441,7 @@ async function handleImportFile(event: Event): Promise<void> {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus()])
 })
 </script>
 
@@ -639,7 +709,10 @@ onMounted(async () => {
                 <KInput :id="fieldId" v-model="telegramChatId" placeholder="-1001234567890" />
               </template>
             </KFormField>
-            <KButton type="submit" variant="primary" size="sm" :loading="savingTelegram">{{ t('settings.save_telegram') }}</KButton>
+            <div class="form-actions-row">
+              <KButton type="submit" variant="primary" size="sm" :loading="savingTelegram">{{ t('settings.save_telegram') }}</KButton>
+              <KButton type="button" variant="ghost" size="sm" :loading="testingBot" @click="testBot">{{ t('settings.test_bot') }}</KButton>
+            </div>
           </form>
         </div>
       </template>
@@ -649,14 +722,41 @@ onMounted(async () => {
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.panel_https') }}</h4>
           <p class="text-muted text-sm">{{ t('settings.panel_https_desc') }}</p>
+
+          <!-- Cert Status -->
           <div class="cert-info">
             <div class="cert-item">
-              <span class="cert-item__label">PANEL_TLS_CERT</span>
-              <code class="cert-item__value text-sm">/path/to/cert.pem</code>
+              <span class="cert-item__label">{{ t('settings.cert_status') }}</span>
+              <span v-if="certStatus.cert_exists && certStatus.key_exists" class="cert-item__value text-sm" style="color: var(--color-success)">HTTPS {{ t('settings.configured') }}</span>
+              <span v-else class="cert-item__value text-sm" style="color: var(--color-warning)">{{ t('settings.not_configured') }}</span>
             </div>
-            <div class="cert-item">
-              <span class="cert-item__label">PANEL_TLS_KEY</span>
-              <code class="cert-item__value text-sm">/path/to/key.pem</code>
+            <div v-if="certStatus.cert_exists" class="cert-item">
+              <span class="cert-item__label">{{ t('settings.cert_expiry') }}</span>
+              <code class="cert-item__value text-sm">{{ certStatus.expiry || '—' }}</code>
+            </div>
+            <div v-if="certStatus.issuer" class="cert-item">
+              <span class="cert-item__label">{{ t('settings.cert_issuer') }}</span>
+              <code class="cert-item__value text-sm">{{ certStatus.issuer }}</code>
+            </div>
+          </div>
+
+          <!-- Upload Form -->
+          <div class="cert-upload-section">
+            <h5 class="subsection-title">{{ t('settings.upload_cert') }}</h5>
+            <div class="cert-upload-form">
+              <KFormField name="cert-file" :label="t('settings.cert_file')">
+                <template #default>
+                  <input ref="certFileInput" type="file" accept=".pem,.crt,.cer" class="file-input" />
+                </template>
+              </KFormField>
+              <KFormField name="key-file" :label="t('settings.key_file')">
+                <template #default>
+                  <input ref="keyFileInput" type="file" accept=".pem,.key" class="file-input" />
+                </template>
+              </KFormField>
+              <KButton variant="primary" size="sm" :loading="uploadingCert" @click="uploadCert">
+                {{ t('settings.upload') }}
+              </KButton>
             </div>
           </div>
         </div>
@@ -710,6 +810,10 @@ onMounted(async () => {
 .cert-item__label { font-size: var(--text-sm); }
 .cert-item__value { font-size: var(--text-sm); color: var(--color-text); }
 .cert-upload-form input[type="file"] { font-size: var(--text-sm); }
+.cert-upload-section { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.cert-upload-form { display: flex; flex-direction: column; gap: var(--space-3); max-width: 400px; }
+.file-input { font-size: var(--text-sm); padding: var(--space-2); }
+.form-actions-row { display: flex; gap: var(--space-2); align-items: center; }
 
 .thresholds-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .threshold-row { display: flex; align-items: flex-end; gap: var(--space-2); }

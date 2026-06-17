@@ -1,0 +1,20 @@
+{
+  "id": "FEAT-003",
+  "type": "docs",
+  "description": "Document unused shared components and composables that are defined but not yet integrated. These are not dead code per se (they are likely prepared for future use per DESIGN_SYSTEM.md 'Next UI components to add' section), but they should be documented so the team is aware of what is available vs actively used. Also add a brief note about useVirtualScroll being ready for integration with KDataTable.",
+  "status": "completed",
+  "steps": [
+    "Add a COMPONENT_USAGE.md file to panel/web/shared/ that documents: (a) Components currently imported and used: KButton, KChart, KConfirmDialog, KDataTable, KEmptyState, KFormField, KInput, KSelect, KSkeleton, KStatusPill, KTabs, KTextarea, KToast, KAvatar. (b) Components defined but not yet imported: KAlert, KBreadcrumb, KDrawer, KPagination. (c) Composables currently used: useApi, useClipboard, useConfirm, useFormValidation, useI18n, useTheme, useToast, useWebSocket. (d) Composables defined but not yet imported: useVirtualScroll (ready for KDataTable large dataset optimization).",
+    "In the same file, note that useVirtualScroll is specifically designed to work with KDataTable for datasets with 1000+ rows (as documented in its JSDoc), and KPagination could be the alternative UX for large tables."
+  ],
+  "acceptance_criteria": [
+    "panel/web/shared/COMPONENT_USAGE.md exists with accurate usage status for all shared components and composables",
+    "The document distinguishes between 'actively used' and 'available for future integration'",
+    "The document is accurate based on the current state of imports across admin and portal"
+  ],
+  "verification": [
+    "Read panel/web/shared/COMPONENT_USAGE.md and verify it lists all shared components and composables with correct usage status"
+  ],
+  "blocked_reason": null,
+  "findings": "Created COMPONENT_USAGE.md documenting 14 actively used components, 4 available-for-future components, 10 actively used composables, and 1 available-for-future composable. Includes notes about useVirtualScroll + KDataTable integration and KPagination as an alternative approach for large datasets. References DESIGN_SYSTEM.md roadmap for rationale on keeping unused components."
+}

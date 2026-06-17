@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix security issue in node agent: debug logging exposes NODE_TOKEN in request body. Fix missing OnlineUsers metric (hardcoded to 0). Both are in node/cmd/node/main.go.",
+  "status": "completed",
+  "steps": [
+    "In node/cmd/node/main.go, function postJSON(): Remove the 'request_body' field from the Debug log call. The Push struct contains the 'token' field which is the NODE_TOKEN. Logging the full request body at any level exposes the authentication secret to log files. Keep url, method, and body_size fields only.",
+    "In node/cmd/node/main.go, in the main loop: Replace 'OnlineUsers: 0' with an actual count of online VPN users. The radacct table tracks active sessions (acctstoptime IS NULL), but the node agent does not have direct DB access. Instead, count online users by parsing the OpenVPN status file at /run/openvpn-status.log (which is configured in the default OpenVPN template). Add a helper function 'onlineUsers() int' that reads /run/openvpn-status.log, counts lines in the CLIENT LIST section (excluding the header), and returns the count. If the file doesn't exist or can't be read, return 0. This gives an accurate per-node online count.",
+    "Add the onlineUsers() helper function: read /run/openvpn-status.log, find 'ROUTING TABLE' line, count lines between 'CLIENT LIST' header (skip first 3 lines: title, Updated timestamp, column headers) and 'ROUTING TABLE'. Each line represents one connected client."
+  ],
+  "acceptance_criteria": [
+    "The Debug log in postJSON no longer includes 'request_body' field",
+    "OnlineUsers is populated from the OpenVPN status file instead of hardcoded 0",
+    "The onlineUsers() function gracefully returns 0 if the status file is missing or malformed",
+    "go build ./node/... compiles without errors",
+    "go test ./node/... passes"
+  ],
+  "verification": [
+    "Run: go build ./node/... to confirm compilation",
+    "Run: go test ./node/... to confirm existing tests pass",
+    "Run: grep -n 'request_body' node/cmd/node/main.go to confirm it's removed"
+  ],
+  "blocked_reason": null,
+  "findings": "Both fixes implemented cleanly. go build, go test, and go vet all pass. The onlineUsers() function handles missing/unreadable file gracefully by returning 0."
+}

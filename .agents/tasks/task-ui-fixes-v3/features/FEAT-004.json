@@ -1,0 +1,33 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Simplify user portal further, enhance node agent source with missing features (signal handling, SSH tunnel detection, L2TP IPSec detection, IPv6 in firstIP, fix loadConfigFromEnv temp file race, add missing task actions)",
+  "status": "completed",
+  "steps": [
+    "1. In panel/web/portal/src/layouts/PortalShell.vue: Simplify the portal - reduce nav links from 4 (Dashboard/Billing/Support/VPN Profiles) to 3 (Dashboard/Support/VPN Profiles). Remove Billing as a separate link - billing info will be shown inline on Dashboard. Update router-links accordingly. Make nav link text simpler and less technical.",
+    "2. In panel/web/portal/src/layouts/PortalShell.vue: Make nav more icon-based with SVG icons next to each link. Add mobile responsive styles (hamburger menu on small screens or bottom tab bar).",
+    "3. In node/cmd/node/main.go: Fix the loadConfigFromEnv function - the defer os.Remove(tmpFile.Name()) runs immediately in the function, deleting the temp file before config.Load finishes using it. Move the cleanup after config.Load returns, or better yet, pass the content directly without a temp file by adding a config.LoadFromString method, or simply remove the defer and let the OS clean temp files.",
+    "4. In node/cmd/node/main.go: Add graceful shutdown with signal handling - listen for SIGTERM and SIGINT, break the main loop, log shutdown message.",
+    "5. In node/cmd/node/main.go: Enhance SSH status detection in serviceStatus() - also check 'dropbear' and tunnel-specific services like 'ssh-tunnel@*'. For L2TP, also check 'ipsec' or 'strongswan-starter' status alongside xl2tpd since L2TP/IPSec needs both.",
+    "6. In node/cmd/node/main.go: Add IPv6 support in firstIP() - after trying IPv4, if no IPv4 found, try IPv6 (skip link-local fe80:: addresses).",
+    "7. In node/cmd/node/main.go: Add missing task actions in executeTask(): 'service.stop' (systemctl stop), 'agent.update' (trigger the updater), 'vpn.disconnect-user' (kill a specific user's VPN session by writing to OpenVPN management interface or killing the session file)."
+  ],
+  "acceptance_criteria": [
+    "Portal navigation is reduced to 3 tabs with icons",
+    "Portal is mobile-friendly with responsive nav",
+    "Node agent: loadConfigFromEnv no longer has temp file race condition",
+    "Node agent: graceful shutdown on SIGTERM/SIGINT",
+    "Node agent: SSH detection includes dropbear and tunnel services",
+    "Node agent: L2TP detection checks both xl2tpd and ipsec",
+    "Node agent: firstIP() returns IPv6 as fallback",
+    "Node agent: service.stop, agent.update, vpn.disconnect-user task actions work",
+    "go build ./... passes without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel && go build ./...",
+    "cd /projects/sandbox/panel/panel/web/portal && npx vue-tsc --noEmit",
+    "cd /projects/sandbox/panel/panel/web/portal && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "All verification passed: go build ./... clean, go test ./... all pass, vue-tsc --noEmit clean, vite build succeeds for portal. Portal nav reduced to 3 tabs (Dashboard, Support, My VPN) with inline SVG icons. Mobile responsive with hamburger menu overlay and bottom tab bar at <768px. Node agent: fixed loadConfigFromEnv race condition (os.Remove after config.Load), added graceful shutdown via SIGTERM/SIGINT done channel, enhanced SSH detection (sshd -> ssh -> dropbear fallback), enhanced L2TP detection (checks both xl2tpd and ipsec/strongswan-starter, reports degraded if only one running), added IPv6 fallback in firstIP (skips link-local fe80::), added service.stop/agent.update/vpn.disconnect-user task actions. All changes backward-compatible."
+}

@@ -1,0 +1,14 @@
+{
+  "task_id": "task-ui-enhancements",
+  "task_description": "Fix multiple UI issues: i18n not working, customers search/checkbox styling, no delete button for nodes, VPN core config incomplete (PSK shown when not needed, missing fields), dashboard traffic shows speed not usage, payments form not popup, portal has too many tabs",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "All builds pass (admin vue-tsc+vite, portal vue-tsc+vite, go build ./...). All tests pass (25 shared tests, 7 admin tests, all Go tests including panel/internal/api 17.5s). Review v1 found 6 issues - all resolved in fix commit 3f3d518."
+  }
+}

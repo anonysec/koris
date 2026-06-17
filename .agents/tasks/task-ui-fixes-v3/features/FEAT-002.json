@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Fix panel version showing 'vdev': fetch version from /api/health endpoint and pass to sidebar. Fix i18n: add nav group titles (Overview/Manage/System) to translations. Fix RTL: ensure proper RTL CSS handling for sidebar and all components when FA is selected.",
+  "status": "completed",
+  "steps": [
+    "1. In panel/web/admin/src/layouts/AppShell.vue: Add an onMounted fetch to GET /api/health, extract version from response, store in a ref, and pass as :version prop to TheSidebar. The /api/health endpoint returns JSON with a 'version' field. Fallback to VERSION file content or 'dev' if fetch fails.",
+    "2. In panel/web/admin/src/components/TheSidebar.vue: Replace hardcoded nav group titles ('Overview', 'Manage', 'System') with t() calls: t('nav.group_overview'), t('nav.group_manage'), t('nav.group_system').",
+    "3. In panel/web/admin/src/i18n.ts: Add keys 'nav.group_overview', 'nav.group_manage', 'nav.group_system' for all three locales (en: Overview/Manage/System, fa: proper Persian translations, zh: proper Chinese translations).",
+    "4. In panel/web/admin/src/style.css: Review and enhance the existing [dir='rtl'] rules. The RTL rules exist already but need completion: add rules for .portal-nav__links, .topbar-left, .form-grid, .form-actions, .protocol-card__controls margin, .bulk-toolbar, .search-bar. Ensure the grid layout flips properly with dir=rtl.",
+    "5. In panel/web/admin/src/components/TheSidebar.vue: Add scoped RTL styles so that in RTL mode, the collapse-btn moves to left instead of right, nav-item flex-direction stays row but text alignment adjusts, and sidebar-foot items align properly.",
+    "6. Verify useI18n.ts already applies dir='rtl' on <html> when locale is 'fa' (it does via applyDirection function) - no changes needed there."
+  ],
+  "acceptance_criteria": [
+    "Sidebar shows actual version from API (e.g., v1.0.0) not vdev",
+    "Nav group titles are translated when locale changes to FA or ZH",
+    "When FA locale is selected, document gets dir=rtl and layout flips correctly",
+    "RTL mode: sidebar appears on right, text is right-aligned, form layouts flip",
+    "vue-tsc --noEmit passes without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel/panel/web/admin && npx vue-tsc --noEmit",
+    "cd /projects/sandbox/panel/panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "All verification passed: vue-tsc --noEmit clean, vite build succeeds, vitest run passes (7 admin tests + 25 shared tests). Version fetch uses relative URL /api/health for reverse proxy compatibility. RTL scoped styles use :global() selector in TheSidebar to target [dir=rtl] from scoped context. All changes are backward-compatible (additive i18n keys, graceful fetch fallback)."
+}

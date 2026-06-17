@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-005",
+  "type": "fix",
+  "description": "Address 7 issues from semantic review: bot security, backup error handling, export/import asymmetry, outbound dead code, cmdNodes subquery, webhook validation, hardcoded placeholders",
+  "status": "completed",
+  "steps": [
+    "1. Fix bot.go: Add isAdmin guard to user: callback prefix handler",
+    "2. Fix api.go backupImport: Track row insertion failures and return counts in response",
+    "3. Fix api.go backupImport: Add import handlers for nodes and vpn_configs tables",
+    "4. Wire outbound functions: Call parseOutboundConfig and apply functions from node agent protocol setup",
+    "5. Fix cmdNodes: Remove wasteful per-node global online count subquery",
+    "6. Fix warnings.go putWarningConfig: Add webhook URL validation (scheme + host)",
+    "7. Fix hardcoded placeholders: Replace with t() calls in CustomerDetailView.vue and NodesView.vue, add i18n keys"
+  ],
+  "acceptance_criteria": [
+    "user: callback in bot is guarded by isAdmin check",
+    "backupImport reports row failure counts in JSON response",
+    "nodes and vpn_configs are imported during backup restore",
+    "Outbound functions are called from node agent when extra_json has outbound config",
+    "cmdNodes does not run a wasteful subquery for global online count",
+    "putWarningConfig validates webhook URL scheme and host",
+    "No remaining hardcoded English placeholder strings (Password, Display name, Plan default, UUID or password) in CustomerDetailView.vue or NodesView.vue",
+    "All builds pass (go build, go test, vue-tsc)"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel/panel && go build ./...",
+    "cd /projects/sandbox/panel/node && go build ./...",
+    "cd /projects/sandbox/panel/panel/web/admin && npx vue-tsc --noEmit"
+  ],
+  "blocked_reason": null,
+  "findings": "All 7 review issues addressed. Go build, go test, vue-tsc, and vite build all pass for panel, node, and admin frontend. The outbound dead code was wired via a new vpn.apply_outbound task action (backward compatible - existing nodes without outbound config are unaffected). Port type fixed from string to int in bridge config for xray-core/sing-box compatibility."
+}
