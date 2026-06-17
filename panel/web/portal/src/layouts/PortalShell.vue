@@ -356,4 +356,9 @@ const langLabels: Record<Locale, string> = {
 [dir="rtl"] .portal-header__dropdown-header {
   text-align: right;
 }
+/* Content direction for RTL - text flows right-to-left inside main */
+:global([dir="rtl"]) .portal-main {
+  direction: rtl;
+  text-align: right;
+}
 </style>
