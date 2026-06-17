@@ -1,0 +1,28 @@
+{
+  "project_type": "Full-stack VPN panel: Go API backend + Vue 3 admin SPA + Vue 3 portal SPA",
+  "language": "TypeScript (Vue 3 SFCs) + Go",
+  "build_system": "npm/vite for frontend, go build for backend",
+  "test_framework": "vitest for frontend (with happy-dom), go test for backend",
+  "build_command": "cd panel/web/admin && npm install && npx vue-tsc --noEmit && npx vite build",
+  "test_command": "cd panel/web/admin && npx vitest run",
+  "verification_instructions": "1. Run vue-tsc --noEmit to type-check admin frontend. 2. Run vite build to confirm bundle compiles. 3. Run go build ./... from repo root. 4. Run go test ./... from repo root.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/panel && cd panel/web/admin && npm install",
+  "environment_constraints": "No docker daemon available. Network is available for npm install. Go toolchain available.",
+  "contribution_requirements": "Branch is audit/debug-cleanup-improvements. User wants changes pushed directly or new PR. Code should be update-friendly (non-breaking, clean).",
+  "key_patterns": "Vue 3 Composition API with <script setup>. Pinia stores with composition style. KorisUI shared components (@koris/ui/*). useApi composable for HTTP. useCommandPalette composable for Ctrl+K. WebSocket realtime via gorilla/websocket with 3-second stat polling. Backend uses net/http with manual route registration on ServeMux.",
+  "relevant_files": [
+    "panel/panel/web/admin/src/components/TheTopbar.vue",
+    "panel/panel/web/admin/src/components/TheSidebar.vue",
+    "panel/panel/web/admin/src/components/CommandPalette.vue",
+    "panel/panel/web/admin/src/composables/useCommandPalette.ts",
+    "panel/panel/web/admin/src/views/SettingsView.vue",
+    "panel/panel/web/admin/src/views/NodesView.vue",
+    "panel/panel/web/admin/src/stores/realtime.ts",
+    "panel/panel/web/admin/src/stores/tickets.ts",
+    "panel/panel/web/admin/src/layouts/AppShell.vue",
+    "panel/panel/web/admin/src/router/index.ts",
+    "panel/panel/internal/api/api.go"
+  ],
+  "directory_structure": "panel/ is the root. panel/panel/internal/api/ has Go backend. panel/panel/web/admin/src/ is Vue 3 admin SPA. panel/panel/web/portal/src/ is Vue 3 customer portal. panel/panel/web/shared/ has KorisUI shared components."
+}

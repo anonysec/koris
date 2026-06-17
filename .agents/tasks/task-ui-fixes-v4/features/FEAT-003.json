@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Improve node-install.sh: add panel reachability check before install, add health check after install (verify node registered with panel), document RADIUS_SECRET usage in comments, use Go binary download from GitHub releases instead of building from source (with fallback to source build), add version check for Go.",
+  "status": "completed",
+  "steps": [
+    "In node-install.sh: After prompting for PANEL_URL, add a reachability check: curl -fsSL --max-time 10 $PANEL_URL/api/health and verify it returns JSON with 'ok'. Fatal with clear message if panel is unreachable.",
+    "Replace the golang-go apt package with a check for existing Go >= 1.21, and if not found, download Go binary from go.dev/dl (go1.22.x.linux-amd64.tar.gz). This ensures a modern Go version.",
+    "Add a comment block above RADIUS_SECRET explaining: 'RADIUS_SECRET is used for RADIUS authentication between this node and the panel's FreeRADIUS server. It must match the secret configured in the panel for this node.'",
+    "After systemctl restart node-agent and sleep 2, add a health check: curl the panel's /api/nodes endpoint or check systemctl status node-agent for active state. Print a clear success/failure message about whether the node registered.",
+    "Consolidate: Add a deprecation notice comment at the top of scripts/install-node.sh pointing users to use node-install.sh instead. The old script is kept for backward compatibility but should not be used for new installs."
+  ],
+  "acceptance_criteria": [
+    "node-install.sh checks panel reachability before starting installation",
+    "node-install.sh uses a modern Go version (downloads if needed)",
+    "RADIUS_SECRET has documentation in the script",
+    "Post-install health check verifies node-agent is running and attempts panel registration verification",
+    "scripts/install-node.sh has deprecation notice"
+  ],
+  "verification": [
+    "bash -n node-install.sh (syntax check)",
+    "bash -n scripts/install-node.sh (syntax check)"
+  ],
+  "blocked_reason": null,
+  "findings": "All changes are update-friendly and additive. No breaking changes to existing node.env configs. The Go download approach ensures modern Go regardless of distro package repos."
+}

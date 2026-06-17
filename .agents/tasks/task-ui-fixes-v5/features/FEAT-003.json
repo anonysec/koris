@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Complete RTL support for FA locale - icons flip, text alignment, full translation coverage, all components",
+  "status": "completed",
+  "steps": [
+    "1. Expand [dir=rtl] CSS rules in panel/panel/web/admin/src/style.css to cover ALL components comprehensively: (a) Icons should move to left side - add flex-direction:row-reverse to all icon+text containers, (b) Text alignment - all text starts from right, (c) Margins/paddings that use left/right need swapping, (d) Fixed-position elements (toast, dropdowns) need mirror positioning, (e) Grid/flex layouts that assume LTR need direction:rtl or explicit reversal. Target: node-card headers, metric rows, protocol cards, form fields with icons, stat cards, dashboard sections.",
+    "2. Add comprehensive [dir=rtl] rules to the portal: In the new SinglePageView.vue scoped styles and PortalShell.vue, add RTL rules for all sections. The profile cards, usage gauge labels, VPN download buttons, support ticket list all need RTL treatment.",
+    "3. Complete FA translations: Audit ALL English strings that appear in the rendered UI. In panel/panel/web/admin/src/i18n.ts, identify any keys that have English values but missing/incomplete FA translations. The portal's i18n.ts needs extensive FA translations for the new single-page content. Check DashboardView (admin), NodesView, SettingsView, CustomersView for any hardcoded English strings not using t().",
+    "4. Fix specific RTL issues: (a) Sidebar nav icons must appear on LEFT in RTL (they are on right in LTR) - already handled by flex-direction:row-reverse on .nav-item, (b) KDataTable column alignment should respect dir, (c) KButton icons should flip sides, (d) Form labels should be right-aligned, (e) Number inputs should remain LTR (numbers are universal), (f) Breadcrumb arrows should reverse.",
+    "5. Ensure the portal header in PortalShell.vue correctly mirrors in RTL: brand on right, user menu on left. The hamburger/mobile menu should respect RTL ordering."
+  ],
+  "acceptance_criteria": [
+    "When FA is selected, document has dir=rtl and ALL text flows right-to-left",
+    "Nav icons appear on left side of text in RTL mode",
+    "No English words remain visible in FA mode (all UI strings translated)",
+    "Toast notifications appear on left side in RTL",
+    "Form layouts properly mirror (labels right-aligned, inputs properly positioned)",
+    "Admin dashboard, nodes, customers, settings all render correctly in RTL",
+    "Portal single page renders correctly in RTL with proper section ordering"
+  ],
+  "verification": [
+    "cd panel/panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/panel/web/admin && npx vite build",
+    "cd panel/panel/web/portal && npx vue-tsc --noEmit",
+    "cd panel/panel/web/portal && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "Comprehensive RTL support implemented across all admin and portal views. DashboardView had 12+ hardcoded English strings (stat labels, panel titles, table headers, empty states) which were all converted to t() with FA/ZH translations. Added 8 new dashboard i18n keys per locale. RTL CSS expanded to 78+ new rules in style.css plus scoped RTL rules in all 5 view components. Toast on left side in RTL, icons move to left via flex-direction:row-reverse, text-align:right throughout, number inputs retain LTR. All builds pass (vue-tsc + vite build for both admin and portal)."
+}

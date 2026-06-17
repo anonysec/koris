@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/x509"
 	"database/sql"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -236,6 +240,32 @@ func loadBotConfigFromDB(database *sql.DB) (token string, chatIDs []int64) {
 	return
 }
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func parseCertInfo(certPath string) (expiry string, issuer string) {
+	data, err := os.ReadFile(certPath)
+	if err != nil {
+		return "", ""
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return "", ""
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", ""
+	}
+	expiry = cert.NotAfter.Format(time.RFC3339)
+	issuer = cert.Issuer.CommonName
+	if issuer == "" {
+		issuer = cert.Issuer.Organization[0]
+	}
+	return
+}
+
 func main() {
 	// Optimize for single-core servers
 	if os.Getenv("GOMAXPROCS") == "" {
@@ -285,7 +315,6 @@ func main() {
 			botEnabled = true
 		}
 	}
-	botWebhook := os.Getenv("PANEL_TG_WEBHOOK_URL")
 	var adminChats []int64
 	envChatID := os.Getenv("PANEL_TG_CHAT_ID")
 	if envChatID != "" {
@@ -301,17 +330,119 @@ func main() {
 	telegramBot := bot.New(bot.Config{
 		Token:      botToken,
 		AdminChats: adminChats,
-		WebhookURL: botWebhook,
 		Enabled:    botEnabled,
 	}, database)
 	telegramBot.Start()
 
 	mux := srv.Routes()
-	// Register webhook handler if in webhook mode
-	if botWebhook != "" && botEnabled {
-		mux.HandleFunc("/api/bot/webhook", telegramBot.WebhookHandler())
-		log.Printf("[bot] webhook endpoint registered at /api/bot/webhook")
-	}
+
+	// Bot restart endpoint (hot-reload)
+	mux.HandleFunc("/api/admin/bot/restart", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// Re-read config from DB
+		newToken, newChatIDs := loadBotConfigFromDB(database)
+		envToken := os.Getenv("PANEL_TG_BOT_TOKEN")
+		if envToken != "" {
+			newToken = envToken
+		}
+		envChat := os.Getenv("PANEL_TG_CHAT_ID")
+		var chats []int64
+		if envChat != "" {
+			for _, s := range strings.Split(envChat, ",") {
+				s = strings.TrimSpace(s)
+				if id, err := strconv.ParseInt(s, 10, 64); err == nil && id != 0 {
+					chats = append(chats, id)
+				}
+			}
+		} else {
+			chats = newChatIDs
+		}
+		enabled := newToken != ""
+		telegramBot.Restart(bot.Config{
+			Token:      newToken,
+			AdminChats: chats,
+			Enabled:    enabled,
+		})
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"message":"bot restarted"}`))
+	})
+
+	// Certificate status endpoint
+	mux.HandleFunc("/api/admin/cert-status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		certPath := "/etc/panel/cert.pem"
+		keyPath := "/etc/panel/key.pem"
+		certExists := fileExists(certPath)
+		keyExists := fileExists(keyPath)
+		result := map[string]any{
+			"ok":          true,
+			"cert_exists": certExists,
+			"key_exists":  keyExists,
+			"expiry":      "",
+			"issuer":      "",
+		}
+		if certExists {
+			expiry, issuer := parseCertInfo(certPath)
+			result["expiry"] = expiry
+			result["issuer"] = issuer
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	// Certificate upload endpoint
+	mux.HandleFunc("/api/admin/cert-upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"ok":false,"error":"invalid multipart form"}`))
+			return
+		}
+		certFile, _, err := r.FormFile("cert")
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"ok":false,"error":"cert file required"}`))
+			return
+		}
+		defer certFile.Close()
+		keyFile, _, err := r.FormFile("key")
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"ok":false,"error":"key file required"}`))
+			return
+		}
+		defer keyFile.Close()
+
+		os.MkdirAll("/etc/panel", 0755)
+		certData, _ := io.ReadAll(certFile)
+		keyData, _ := io.ReadAll(keyFile)
+		if err := os.WriteFile("/etc/panel/cert.pem", certData, 0600); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"ok":false,"error":"failed to save cert"}`))
+			return
+		}
+		if err := os.WriteFile("/etc/panel/key.pem", keyData, 0600); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"ok":false,"error":"failed to save key"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"message":"certificates saved"}`))
+	})
 
 	log.Printf("panel listening on %s", cfg.Addr)
 

@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add dedicated Tickets/Support nav item in TheSidebar, wire up Export/Import backup in SettingsView, and enhance SettingsView by removing useless Panel Status tab, making Panel Settings functional with v-model bindings and save action, and removing non-functional Audit Logs placeholder.",
+  "status": "completed",
+  "steps": [
+    "In panel/panel/web/admin/src/components/TheSidebar.vue: Add a 'tickets' nav item in the 'Manage' group (after 'nodes' or 'plans'), with label from t('nav.tickets') or fallback 'Tickets', icon 'tickets' (support/ticket icon SVG), and a badge showing open ticket count if available. Add a ticket icon SVG in the template alongside the existing icons.",
+    "Update the isActive function: add 'tickets' route check so it also marks the tickets nav item active for 'ticket-detail' route.",
+    "In panel/panel/web/admin/src/views/SettingsView.vue: Remove the 'panel-status' tab entirely (tab definition and template). Remove the 'audit-logs' tab entirely (tab definition and template).",
+    "Make the 'Panel Settings' tab functional: Add reactive state (panelName, panelLang refs), load settings from GET /api/panel-settings on mount, bind form fields with v-model, add a 'Save Settings' button that calls PATCH /api/panel-settings with the settings map.",
+    "Wire up the Backup tab: Add an exportBackup function that calls GET /api/export/customers.csv (or creates a comprehensive JSON export by fetching multiple endpoints). Since the backend already has CSV export endpoints (/api/export/customers.csv, /api/export/payments.csv, etc.), the Export button should trigger a download of customers.csv. For Import, add a file input that accepts JSON/CSV and POSTs to a suitable endpoint. If no import endpoint exists, show a toast explaining import is for restoring exported data.",
+    "For Export: use window.open or fetch + blob download to trigger /api/export/customers.csv download. Add a dropdown or section showing all available exports (customers, payments, radacct, wallet-transactions). For Import: add a file picker that reads the file and shows a confirmation before upload.",
+    "Simplify the remaining tabs list to: ['panel-settings', 'data-warnings', 'telegram', 'certificates', 'backup']. Set default active tab to 'panel-settings'.",
+    "Add responsive styles: ensure settings forms stack properly on mobile viewports."
+  ],
+  "acceptance_criteria": [
+    "TheSidebar shows a dedicated 'Tickets' nav item with a ticket icon",
+    "Clicking 'Tickets' navigates to the tickets route",
+    "Settings page no longer shows 'Panel Status' or 'Audit Logs' tabs",
+    "Panel Settings tab has working v-model bindings and a Save button that calls the API",
+    "Backup tab Export button triggers file download of CSV exports",
+    "Default settings tab is 'panel-settings' instead of 'panel-status'",
+    "vue-tsc --noEmit passes without errors"
+  ],
+  "verification": [
+    "cd panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "All acceptance criteria met. vue-tsc and vite build pass cleanly. Vitest 7 tests pass. Used patch method from useApi for PATCH /api/panel-settings. Export uses window.open for CSV downloads. Import shows toast for coming-soon functionality. Mobile responsive styles added at 768px breakpoint. The t('nav.tickets') i18n key may need to be added to locale files for full multi-lang support."
+}

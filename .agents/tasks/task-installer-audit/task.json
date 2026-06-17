@@ -1,0 +1,14 @@
+{
+  "task_id": "task-installer-audit",
+  "task_description": "Installer audit: fix VPN script path inconsistency, add missing PANEL_SECRET, fix hardcoded PROJECT_DIR in deploy.sh, add input validation to install.sh.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "All bash scripts pass syntax check (bash -n). Go build and tests pass (unchanged Go code). VPN script paths corrected. PANEL_SECRET added. deploy.sh uses dynamic PROJECT_DIR."
+  }
+}

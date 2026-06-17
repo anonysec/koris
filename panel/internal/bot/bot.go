@@ -23,9 +23,8 @@ import (
 
 // Config holds bot configuration.
 type Config struct {
-	Token      string // Telegram Bot API token
+	Token      string  // Telegram Bot API token
 	AdminChats []int64 // Chat IDs that receive admin notifications
-	WebhookURL string // If set, uses webhook mode; otherwise long-polling
 	Enabled    bool
 }
 
@@ -44,53 +43,44 @@ func New(cfg Config, db *sql.DB) *Bot {
 	return &Bot{
 		cfg:    cfg,
 		db:     db,
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{Timeout: 60 * time.Second},
 		apiURL: "https://api.telegram.org/bot" + cfg.Token,
 		stopCh: make(chan struct{}),
 	}
 }
 
-// Start begins the bot in the configured mode (webhook or polling).
+// Start begins the bot in long-polling mode.
 func (b *Bot) Start() {
 	if !b.cfg.Enabled || b.cfg.Token == "" {
 		log.Println("[bot] disabled or no token configured")
 		return
 	}
 
-	if b.cfg.WebhookURL != "" {
-		b.setupWebhook()
-		log.Printf("[bot] webhook mode: %s", b.cfg.WebhookURL)
-	} else {
-		go b.pollLoop()
-		log.Println("[bot] long-polling mode started")
-	}
+	go b.pollLoop()
+	log.Println("[bot] long-polling mode started")
 }
 
 // Stop gracefully stops the bot.
 func (b *Bot) Stop() {
-	close(b.stopCh)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	select {
+	case <-b.stopCh:
+		// already closed
+	default:
+		close(b.stopCh)
+	}
 }
 
-// WebhookHandler returns an HTTP handler for webhook mode.
-func (b *Bot) WebhookHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		var update Update
-		if err := json.Unmarshal(body, &update); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		go b.handleUpdate(update)
-		w.WriteHeader(http.StatusOK)
-	}
+// Restart stops the bot and restarts with new config.
+func (b *Bot) Restart(cfg Config) {
+	b.Stop()
+	b.mu.Lock()
+	b.cfg = cfg
+	b.apiURL = "https://api.telegram.org/bot" + cfg.Token
+	b.stopCh = make(chan struct{})
+	b.mu.Unlock()
+	b.Start()
 }
 
 // Notify sends a message to all admin chats.
@@ -158,20 +148,6 @@ type InlineButton struct {
 }
 
 // ========== Internal Methods ==========
-
-func (b *Bot) setupWebhook() {
-	payload := map[string]any{"url": b.cfg.WebhookURL}
-	body, _ := json.Marshal(payload)
-	resp, err := b.client.Post(b.apiURL+"/setWebhook", "application/json", bytes.NewReader(body))
-	if err != nil {
-		log.Printf("[bot] setWebhook error: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		log.Printf("[bot] setWebhook failed: %s", resp.Status)
-	}
-}
 
 func (b *Bot) pollLoop() {
 	offset := int64(0)

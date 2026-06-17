@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Fix language switching: (1) AppShell.vue does not handle the 'change-lang' event from TheSidebar - wire it to call setLocale(). (2) SettingsView.vue panelLang does not sync with useI18n's currentLocale - changing one must update the other.",
+  "status": "completed",
+  "steps": [
+    "In panel/web/admin/src/layouts/AppShell.vue: import setLocale from useI18n, add a handler function handleChangeLang(locale: string) that calls setLocale(locale as Locale), and bind @change-lang='handleChangeLang' on the TheSidebar component.",
+    "In panel/web/admin/src/views/SettingsView.vue: import { locale as currentLocale, setLocale } from useI18n. Add a watcher on panelLang that calls setLocale(panelLang.value) when panelLang changes. Also add a watcher on currentLocale that syncs panelLang.value = currentLocale.value (so sidebar changes reflect in settings). Initialize panelLang from currentLocale.value on mount instead of only from API response.",
+    "Ensure the Locale type import is available in AppShell.vue (import type { Locale } from '@koris/composables/useI18n')."
+  ],
+  "acceptance_criteria": [
+    "Changing language in sidebar immediately updates the UI locale and the settings page language select",
+    "Changing language in settings page immediately updates the UI locale and the sidebar select reflects it",
+    "Both use the shared setLocale() function so localStorage is persisted and RTL direction updates",
+    "npx vue-tsc --noEmit passes without errors"
+  ],
+  "verification": [
+    "cd panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "Type inference required explicit ref<string> for panelLang since currentLocale.value is typed as Locale. The loadPanelSettings API returns a plain string that gets assigned to panelLang, so explicit string typing prevents TS2322. Bidirectional watchers use guard checks to prevent infinite loops."
+}

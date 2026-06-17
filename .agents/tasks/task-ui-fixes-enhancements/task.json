@@ -1,0 +1,14 @@
+{
+  "task_id": "task-ui-fixes-enhancements",
+  "task_description": "Fix 7 user-reported issues: wire export/import backup, fix topbar search to open command palette with correct keybind, remove realtime status dot, add ticket notification broadcast from backend, enhance VPN cores config with comprehensive protocol options, add dedicated tickets sidebar nav, overhaul settings view removing useless tabs and making it functional, and complete multi-language support.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "vue-tsc --noEmit passes, vite build succeeds, vitest 7 tests pass, go build ./... passes, go test ./... passes. Semantic review v2 APPROVED with only non-blocking polish items remaining (toast i18n, export labels i18n, telegram hint i18n, export auth model)."
+  }
+}

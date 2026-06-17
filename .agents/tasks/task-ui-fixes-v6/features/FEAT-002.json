@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Convert backup from CSV exports to single database dump file (JSON), add full theme system with complete visual restyle (not just colors), and fix SSH 'unknown' status display in cores tab",
+  "status": "completed",
+  "steps": [
+    "1. BACKUP: Replace CSV export in SettingsView.vue backup tab with a single 'Export Database Backup' button that calls a new endpoint /api/backup/export. This downloads a single JSON file containing all tables (customers, payments, plans, wallets, nodes, vpn_configs, radcheck, subscriptions, settings, tickets). Remove the individual CSV export buttons.",
+    "2. BACKUP BACKEND: In panel/internal/api/api.go, add handler for GET /api/backup/export that queries all tables and returns a single JSON file with structure: { version: 1, exported_at: timestamp, tables: { customers: [...], payments: [...], ... } }. Register route in the mux alongside existing export routes.",
+    "3. BACKUP IMPORT: Add POST /api/backup/import endpoint that accepts the JSON dump file and restores data. Use a transaction: truncate tables then insert. Add an 'Import Backup' button in SettingsView.vue that opens a file picker for .json files and uploads to this endpoint.",
+    "4. BACKUP I18N: Update i18n keys: settings.export_backup -> 'Export Database Backup', settings.import_backup -> 'Import Database Backup', add settings.backup_format -> 'Single JSON file containing all panel data', settings.import_success, settings.import_error, settings.importing.",
+    "5. THEME FULL STYLE: Enhance useTheme.ts and tokens.css to apply full visual restyle per theme. Each theme should define not just colors but also: --radius-sm/md/lg/xl (border-radius), --shadow-sm/md/lg (box shadows), --space multipliers or overrides, font-size scale adjustments, button styles (padding, weight), card styles. Add CSS rules in tokens.css under [data-ui-theme='kiro'], [data-ui-theme='github'], etc. that override these tokens.",
+    "6. THEME DETAILS: Midnight = sharp edges (small radius), strong shadows, dense spacing. Kiro = medium radius, colored shadows with cyan tint, standard spacing. GitHub = large radius, subtle shadows, relaxed spacing, slightly larger font sizes. Soft Dark = large radius, no harsh shadows (soft glow), warm spacing. Corporate = sharp professional radius, minimal shadows, tight spacing, slightly smaller fonts.",
+    "7. SSH STATUS FIX: In NodesView.vue, the getServiceStatus function reads metrics.ssh_status. The node agent at node/cmd/node/main.go serviceStatus('ssh') correctly checks sshd/ssh/dropbear and returns 'running'/'stopped'/'failed'. The issue is likely that the panel status_metrics field name might not match. Check: the node pushes a map with key 'ssh' containing the status string. In the panel API, look at how status_metrics is stored/returned. The getServiceStatus function checks metrics.ssh_status but the node sends the status under key 'ssh' not 'ssh_status'. Fix: check the actual field name in the metrics response and update getServiceStatus accordingly. If node sends {ssh: 'running'} and panel stores as status_metrics.ssh = 'running', then getServiceStatus should read metrics.ssh not metrics.ssh_status. Look at how openvpn is stored - if it's metrics.openvpn_status then the node likely maps 'openvpn' -> 'openvpn_status' somewhere.",
+    "8. SSH STATUS - investigate the node push payload structure. In node/cmd/node/main.go around line 214-217 it builds a map: 'openvpn': serviceStatus('openvpn@server'), 'l2tp': serviceStatus('xl2tpd'), 'ikev2': serviceStatus('strongswan'), 'ssh': serviceStatus('ssh'). The panel likely stores this directly. So if getServiceStatus reads metrics.ssh_status but node sends metrics.ssh, that's the mismatch. Fix getServiceStatus to check metrics.ssh (without _status suffix) OR check both patterns."
+  ],
+  "acceptance_criteria": [
+    "Backup tab shows a single 'Export Database Backup' button instead of multiple CSV exports",
+    "Export produces a single .json file with all panel data",
+    "Import accepts the JSON file and restores data with success/error feedback",
+    "Each theme applies visually distinct border-radius, shadows, spacing, and font adjustments beyond just color",
+    "SSH cores status shows 'running'/'stopped' instead of 'unknown' when the node reports correctly",
+    "vue-tsc passes and vite build succeeds for both admin and portal"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel/panel/web/admin && npx vue-tsc --noEmit && npx vite build",
+    "cd /projects/sandbox/panel/panel && go build ./..."
+  ],
+  "blocked_reason": null,
+  "findings": "All builds pass (go build, go test, vue-tsc, vite build for admin and portal). SSH status fix: the issue was that SSH status lives in node_services table (returned as node.services[] array) not in node_status columns (returned as status_metrics). The getServiceStatus function now checks node.services first for all protocols, then falls back to status_metrics fields. Backup: old CSV endpoints kept (update-friendly), new /api/backup/export and /api/backup/import added additively. Theme full style uses CSS variable overrides in [data-ui-theme] selectors for radius, shadows, font sizes, and spacing."
+}

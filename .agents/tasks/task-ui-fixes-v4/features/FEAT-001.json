@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix CustomersView layout: move status filter tabs beside the search input on the same row. Redesign the users page to be more professional (Pasargad/Marzban-style) with compact inline layout, better visual hierarchy, and i18n for all hardcoded strings.",
+  "status": "completed",
+  "steps": [
+    "In panel/web/admin/src/views/CustomersView.vue, combine the status-tabs nav and search-bar into a single flex row (.filter-row) that places the status tabs on the left and search input on the right, side by side.",
+    "Replace all hardcoded English strings in the template with t() calls (statusTabs labels, mainTabs labels, bulk toolbar text, placeholder text, 'New User' button, confirm dialog text).",
+    "Add the corresponding i18n keys to panel/web/admin/src/i18n.ts for all 3 locales (en, fa, zh): 'customers.all', 'customers.active', 'customers.online', 'customers.limited', 'customers.disabled', 'customers.expired', 'customers.tab_customers', 'customers.tab_archived', 'customers.tab_resellers', 'customers.search', 'customers.search_archived', 'customers.new_user', 'customers.archived_desc', 'customers.selected', 'customers.clear', 'customers.enable', 'customers.disable', 'customers.traffic_reset', 'customers.delete', 'customers.confirm_delete_title', 'customers.confirm_delete_msg', 'customers.deleted_success', 'customers.deleted_error', 'customers.bulk_success', 'customers.bulk_error', 'customers.bulk_partial'.",
+    "Make the filter-row responsive: on mobile (max-width: 640px) stack vertically with status tabs scrollable horizontally and search full-width below.",
+    "Style the status tabs as compact pill-style buttons to match professional panels (smaller padding, subtle active indicator, no underline border)."
+  ],
+  "acceptance_criteria": [
+    "Status filter tabs and search input appear on the same row in CustomersView",
+    "All user-facing text uses t() function calls",
+    "The layout is responsive - stacks on mobile",
+    "npx vue-tsc --noEmit passes without errors"
+  ],
+  "verification": [
+    "cd panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "Both vue-tsc --noEmit and vite build pass. Used computed() for mainTabs, statusTabs, and columns so labels update reactively when locale changes. Added 27 new i18n keys across all 3 locales. The filter-row uses flexbox with responsive stacking at 640px. Status tabs use pill/rounded style. Actual path is panel/panel/web/admin/ (double panel dir)."
+}

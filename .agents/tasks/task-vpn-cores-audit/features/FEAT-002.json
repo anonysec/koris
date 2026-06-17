@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Harden the OpenVPN client-disconnect script against edge cases: the SQL UPDATE uses string interpolation for SQL_CAUSE which could still contain problematic characters even after sanitization, and the script doesn't verify MySQL success before logging STOP. Also add a missing 'username-as-common-name' safeguard in client-connect.",
+  "status": "completed",
+  "steps": [
+    "In scripts/openvpn/koris-client-disconnect.sh: The DUR (time_duration) variable is validated as numeric, which is good. However, the SQL statement uses IN, OUT, DUR directly in the heredoc without quotes around them in the SQL. Since they're validated as ^[0-9]+$, this is safe but fragile. More importantly, the mysql command's exit status is not checked - if the UPDATE fails, the script still logs STOP and exits 0. Add '|| { echo ... >> LOG; exit 0; }' after the mysql command to log database errors (but still exit 0 since OpenVPN expects success).",
+    "In scripts/openvpn/koris-client-connect.sh: The NAS_IP auto-detection via 'ip -4 route get 1.1.1.1' might fail silently on systems where the ip command output format differs. The script already handles this with the FATAL check, which is good. However, the SQL INSERT uses ON DUPLICATE KEY which relies on a unique key on (acctsessionid, acctuniqueid). Add a comment documenting this dependency for maintainability.",
+    "In scripts/openvpn/koris-client-connect.sh: The rate_from_policy function queries the database twice if Mikrotik-Rate-Limit is not set. The second query joins customers and plans. If both queries fail, the function returns 1 (no limit applied). Add explicit logging when the second fallback query also fails (currently silent failure)."
+  ],
+  "acceptance_criteria": [
+    "koris-client-disconnect.sh logs a warning if the MySQL UPDATE fails",
+    "koris-client-connect.sh has a comment documenting the ON DUPLICATE KEY unique constraint dependency",
+    "koris-client-connect.sh rate_from_policy logs when both speed queries fail",
+    "All scripts still pass basic shellcheck validation (no syntax errors)"
+  ],
+  "verification": [
+    "Run: bash -n scripts/openvpn/koris-client-connect.sh (syntax check)",
+    "Run: bash -n scripts/openvpn/koris-client-disconnect.sh (syntax check)",
+    "Run: bash -n scripts/openvpn/koris-radius-auth.sh (syntax check)"
+  ],
+  "blocked_reason": null,
+  "findings": "All three changes implemented minimally. bash -n syntax check passes on all three scripts. The DB error capture uses command substitution with 2>&1 to capture stderr from mysql, and the || DB_RC=$? pattern captures the exit code without triggering set -e."
+}

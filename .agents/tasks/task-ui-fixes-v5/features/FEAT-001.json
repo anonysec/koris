@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix delete user, add node edit, fix notification type mismatch, and improve cores config UX",
+  "status": "completed",
+  "steps": [
+    "1. Fix customer delete in panel/panel/web/admin/src/views/CustomersView.vue: The store's archiveCustomer calls del('/api/customers/:id') which IS handled by backend (archiveCustomer handler exists at line 917 of api.go, method=DELETE). Check the useApi del() method in panel/panel/web/shared/composables/useApi.ts to ensure it properly sends DELETE requests. The store function looks correct. Check if CustomersView.vue correctly calls archiveCustomer with the right ID and handles the response - look for the delete button handler. Also verify useApi's del function signature matches how it is called.",
+    "2. Add editNode action to panel/panel/web/admin/src/stores/nodes.ts: Add an editNode(nodeId: number, payload: {name: string, public_ip: string, domain: string}) action that calls patch('/api/nodes/:id', payload). Backend PATCH /api/nodes/:id already exists (line 1871 of api.go) accepting {name, public_ip, domain}.",
+    "3. Add edit form/drawer to NodesView.vue (panel/panel/web/admin/src/views/NodesView.vue): Add an edit button to each node card (next to disable/delete). When clicked, show an inline edit form (similar to the add form pattern) pre-filled with current node name, public_ip, domain. On submit call store.editNode(). Add i18n keys for edit node labels.",
+    "4. Fix notification WebSocket message matching: In panel/panel/web/admin/src/stores/realtime.ts line 100, the store checks data.type === 'notification'. The backend realtimeWS handler (line 2516) calls writeRealtime('notification', notif) which wraps it as {type:'notification', data: notif}. The store checks data.type === 'notification' AND data.data - this matches. The notification object has fields: id, type (value 'new_ticket'), message, timestamp, read. The Notification interface in realtime.ts has: id, type, message, timestamp, read. This SHOULD work. Double check that the frontend WebSocket URL is correct and that the admin panel actually connects. Verify in the useWebSocket composable that JSON parsing works. If it already works, leave it alone.",
+    "5. Improve cores config UX in NodesView.vue: The cores tab currently uses inline form grids. Enhance with: (a) card-based layout per protocol instead of flat list, (b) live validation indicators (red border on invalid fields like port < 1 or port > 65535, invalid CIDR in network), (c) a collapsible config preview section that shows generated key=value pairs the way they would appear in the actual config file, (d) better UX for array fields - push_routes displayed as tag-like chips that can be added/removed, allowed_keys displayed as a list with add/remove buttons."
+  ],
+  "acceptance_criteria": [
+    "Customer delete button in CustomersView.vue successfully calls archiveCustomer and the API returns ok:true",
+    "Node cards have an Edit button that opens a pre-filled form for name, public_ip, domain",
+    "editNode store action calls PATCH /api/nodes/:id and reloads list on success",
+    "Cores config shows live validation (port range 1-65535, CIDR format for network field)",
+    "Cores config has a config preview panel that renders key=value pairs",
+    "Array fields (push_routes, allowed_keys) have add/remove chip UI instead of plain textarea",
+    "All new UI strings use t() with i18n keys in en/fa/zh"
+  ],
+  "verification": [
+    "cd panel/panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "Customer delete code is correct - archiveCustomer calls del() which sends DELETE with CSRF token. The flow works if the backend is reachable and returns 2xx. WebSocket notification matching is correct - data.type==='notification' && data.data matches backend format. editNode added as PATCH /api/nodes/:id. Cores UX enhanced with validation, preview, and chip arrays. All changes are backward-compatible and additive."
+}

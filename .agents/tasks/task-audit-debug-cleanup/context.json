@@ -1,0 +1,26 @@
+{
+  "project_type": "Go backend panel with Vue.js frontends (VPN management panel)",
+  "language": "Go 1.22 (backend), TypeScript/Vue 3 (frontends)",
+  "build_system": "go build, npm (vite) for frontends. deploy.sh for production deploy",
+  "test_framework": "go test for backend, vitest for frontend",
+  "build_command": "go build ./...",
+  "test_command": "go test ./...",
+  "verification_instructions": "1. Run go build ./... to verify compilation. 2. Run go test ./... to verify all tests pass. 3. Run go vet ./... for static analysis.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "go mod download",
+  "environment_constraints": "No database available for integration tests. Use static analysis and unit tests only.",
+  "contribution_requirements": "No CONTRIBUTING.md. Follow existing patterns in code.",
+  "key_patterns": "Single large api.go (5976 lines) with all handlers. Helper functions at bottom. Package-per-concern in internal/. Deploy via deploy.sh with systemd. deploy-report.sh posts diagnostics as GitHub issues.",
+  "relevant_files": [
+    "panel/cmd/panel/main.go",
+    "panel/internal/api/api.go",
+    "panel/internal/api/health_api.go",
+    "panel/internal/gateway/gateway.go",
+    "panel/internal/totp/totp.go",
+    "panel/internal/certrotation/worker.go",
+    "deploy.sh",
+    "deploy-report.sh",
+    "panel/internal/config/config.go"
+  ],
+  "directory_structure": "Root: deploy scripts, go.mod. panel/cmd/panel: main entry. panel/internal/: api, auth, bot, certrotation, config, csrf, db, email, gateway, health, notify, ratelimit, sessions, templates, totp. node/: separate agent binary. panel/web/admin/ and panel/web/portal/: Vue SPAs."
+}
