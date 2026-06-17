@@ -38,6 +38,7 @@ type Push struct {
 	Type          string             `json:"type"`
 	Hostname      string             `json:"hostname"`
 	PublicIP      string             `json:"public_ip"`
+	PublicIPv6    string             `json:"public_ipv6"`
 	OS            string             `json:"os"`
 	Timestamp     time.Time          `json:"timestamp"`
 	CPUPercent    float64            `json:"cpu_percent"`
@@ -224,6 +225,7 @@ func main() {
 			Type:            "status",
 			Hostname:        host,
 			PublicIP:        firstIP(),
+			PublicIPv6:      firstIPv6(),
 			OS:              runtime.GOOS,
 			Timestamp:       now.UTC(),
 			CPUPercent:      cpuPercent(),
@@ -927,6 +929,31 @@ func firstIP() string {
 				continue
 			}
 			// Skip IPv4 (already tried) and link-local IPv6
+			if ipNet.IP.To4() != nil {
+				continue
+			}
+			if ipNet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			return ipNet.IP.String()
+		}
+	}
+	return ""
+}
+
+func firstIPv6() string {
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := iface.Addrs()
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP == nil {
+				continue
+			}
+			// Skip IPv4 and link-local IPv6
 			if ipNet.IP.To4() != nil {
 				continue
 			}

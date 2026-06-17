@@ -4239,6 +4239,7 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		Token         string            `json:"token"`
 		Hostname      string            `json:"hostname"`
 		PublicIP      string            `json:"public_ip"`
+		PublicIPv6    string            `json:"public_ipv6"`
 		OS            string            `json:"os"`
 		CPUPercent    float64           `json:"cpu_percent"`
 		RAMPercent    float64           `json:"ram_percent"`

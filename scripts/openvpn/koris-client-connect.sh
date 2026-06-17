@@ -9,6 +9,7 @@ U="${username:-${common_name:-}}"
 [[ "$U" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || { echo "$(date -Is) REJECT invalid username: $U" >> "$LOG"; exit 1; }
 
 IP="${ifconfig_pool_remote_ip:-}"
+IPV6="${ifconfig_pool_remote_ip_ipv6:-}"
 TRUSTED_IP="${trusted_ip:-}"
 TRUSTED_PORT="${trusted_port:-}"
 TUN="${dev:-tun0}"
@@ -16,6 +17,8 @@ TUN="${dev:-tun0}"
 # --- Input validation to prevent SQL injection ---
 # Validate IP addresses (allow only digits and dots for IPv4)
 [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || IP=""
+# Validate IPv6 address (hex digits, colons, optional /prefix or empty)
+[[ -z "$IPV6" ]] || [[ "$IPV6" =~ ^[0-9a-fA-F:]+(/[0-9]+)?$ ]] || IPV6=""
 [[ "$TRUSTED_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || TRUSTED_IP="0.0.0.0"
 [[ "$TRUSTED_PORT" =~ ^[0-9]+$ ]] || TRUSTED_PORT="0"
 
@@ -98,7 +101,13 @@ apply_tc_limit() {
   tc filter del dev "$TUN" parent ffff: protocol ip prio "$prio" 2>/dev/null || true
   tc filter add dev "$TUN" parent ffff: protocol ip prio "$prio" u32 match ip src "$IP/32" police rate "$UP_RATE" burst 200k drop flowid :1 2>/dev/null || true
 
-  echo "$(date -Is) LIMIT user=$U ip=$IP dev=$TUN down=$DOWN_RATE up=$UP_RATE class=$cid prio=$prio" >> "$TC_LOG"
+  # IPv6 tc filter rules
+  if [ -n "$IPV6" ]; then
+    tc filter add dev "$TUN" protocol ipv6 parent 1: prio "$((prio+10000))" u32 match ip6 dst "$IPV6/128" flowid "$cid" 2>/dev/null || true
+    tc filter add dev "$TUN" parent ffff: protocol ipv6 prio "$((prio+10000))" u32 match ip6 src "$IPV6/128" police rate "$UP_RATE" burst 200k drop flowid :1 2>/dev/null || true
+  fi
+
+  echo "$(date -Is) LIMIT user=$U ip=$IP ipv6=$IPV6 dev=$TUN down=$DOWN_RATE up=$UP_RATE class=$cid prio=$prio" >> "$TC_LOG"
 }
 
 apply_tc_limit || true
