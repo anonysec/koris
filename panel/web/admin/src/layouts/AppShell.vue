@@ -149,6 +149,7 @@ function handleNotifications() {
   min-height: 100vh;
   width: 100%;
   background: var(--color-bg, #070a12);
+  direction: ltr;
 }
 
 .app-shell.sidebar-collapsed {
@@ -216,6 +217,12 @@ function handleNotifications() {
   100% {
     background-position: -200% 0;
   }
+}
+
+/* RTL content direction */
+:global([dir="rtl"]) .main {
+  direction: rtl;
+  text-align: right;
 }
 
 /* Reduced motion preference */

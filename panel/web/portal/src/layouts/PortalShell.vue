@@ -125,6 +125,7 @@ const langLabels: Record<Locale, string> = {
   position: sticky;
   top: 0;
   z-index: 100;
+  direction: ltr;
 }
 .portal-header__brand {
   display: flex;
@@ -148,7 +149,7 @@ const langLabels: Record<Locale, string> = {
   font-size: var(--text-md);
 }
 .portal-header__actions {
-  margin-inline-start: auto;
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -341,6 +342,10 @@ const langLabels: Record<Locale, string> = {
 
 /* RTL support - Browser handles flex reversal automatically with dir="rtl".
    Only position/margin overrides needed. */
+:global([dir="rtl"]) .portal-main {
+  direction: rtl;
+  text-align: right;
+}
 [dir="rtl"] .portal-header__dropdown {
   right: auto;
   left: 0;
