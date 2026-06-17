@@ -40,6 +40,8 @@ type Server struct {
 	HealthEngine     *health.DiagnosticsEngine
 	prevSessionBytes map[int64]SessionBytes
 	sessionMutex     sync.RWMutex
+	wsNotifMu        sync.RWMutex
+	wsNotifChans     []chan map[string]any
 }
 
 type SessionBytes struct {
@@ -297,6 +299,38 @@ func New(db *sql.DB, cfg config.Config) *Server {
 		Notify:           notifier,
 		HealthEngine:     health.NewDiagnosticsEngine(db, analyzer, notifier),
 		prevSessionBytes: make(map[int64]SessionBytes),
+		wsNotifChans:     make([]chan map[string]any, 0),
+	}
+}
+
+func (s *Server) addWSSubscriber() chan map[string]any {
+	ch := make(chan map[string]any, 16)
+	s.wsNotifMu.Lock()
+	s.wsNotifChans = append(s.wsNotifChans, ch)
+	s.wsNotifMu.Unlock()
+	return ch
+}
+
+func (s *Server) removeWSSubscriber(ch chan map[string]any) {
+	s.wsNotifMu.Lock()
+	for i, c := range s.wsNotifChans {
+		if c == ch {
+			s.wsNotifChans = append(s.wsNotifChans[:i], s.wsNotifChans[i+1:]...)
+			break
+		}
+	}
+	s.wsNotifMu.Unlock()
+	close(ch)
+}
+
+func (s *Server) broadcastNotification(notif map[string]any) {
+	s.wsNotifMu.RLock()
+	defer s.wsNotifMu.RUnlock()
+	for _, ch := range s.wsNotifChans {
+		select {
+		case ch <- notif:
+		default:
+		}
 	}
 }
 
@@ -2460,6 +2494,8 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 
 	_ = writeRealtime("stats", s.dashboardStatsPayload())
 	_ = writeRealtime("sessions", s.liveSessionsPayload())
+	notifCh := s.addWSSubscriber()
+	defer s.removeWSSubscriber(notifCh)
 	ticker := time.NewTicker(3 * time.Second)
 	pingTicker := time.NewTicker(25 * time.Second)
 	defer ticker.Stop()
@@ -2477,6 +2513,10 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 			}
 		case <-pingTicker.C:
 			if err := writePing(); err != nil {
+				return
+			}
+		case notif := <-notifCh:
+			if err := writeRealtime("notification", notif); err != nil {
 				return
 			}
 		}
@@ -2795,6 +2835,15 @@ func (s *Server) createTicket(w http.ResponseWriter, r *http.Request, senderType
 	severity := "info"
 	if in.Priority == "high" { severity = "warning" }
 	s.createEvent("ticket", severity, fmt.Sprintf("New ticket #%d: %s", id, in.Subject), fmt.Sprintf("Ticket #%d created by %s for %s", id, actor, in.Username), actor, in.Username)
+	if senderType == "customer" {
+		s.broadcastNotification(map[string]any{
+			"id":        fmt.Sprintf("ticket-%d-%d", id, time.Now().UnixMilli()),
+			"type":      "new_ticket",
+			"message":   fmt.Sprintf("New support ticket from %s: %s", in.Username, in.Subject),
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"read":      false,
+		})
+	}
 	writeJSON(w, map[string]any{"ok": true, "id": id})
 }
 
