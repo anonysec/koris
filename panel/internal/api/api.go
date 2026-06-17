@@ -6273,6 +6273,20 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	extraStr := ""
 	if len(in.Extra) > 0 {
 		extraStr = string(in.Extra)
+		// Validate outbound config if present
+		var extraMap map[string]any
+		if err := json.Unmarshal(in.Extra, &extraMap); err == nil {
+			if outbound, ok := extraMap["outbound"].(map[string]any); ok {
+				if enabled, _ := outbound["enabled"].(bool); enabled {
+					oType, _ := outbound["type"].(string)
+					validTypes := map[string]bool{"vless": true, "vmess": true, "trojan": true, "shadowsocks": true, "socks5": true}
+					if oType != "" && !validTypes[oType] {
+						writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_outbound_type"})
+						return
+					}
+				}
+			}
+		}
 	}
 
 	_, err := s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json)
