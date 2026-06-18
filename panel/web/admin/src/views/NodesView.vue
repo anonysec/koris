@@ -13,6 +13,7 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
+import WireGuardConfig from '@/components/WireGuardConfig.vue'
 
 const { t } = useI18n()
 const store = useNodesStore()
@@ -1064,6 +1065,12 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
+              <!-- WireGuard Config Panel (per-node) -->
+              <WireGuardConfig
+                :node-id="node.id"
+                :current-config="getNodeConfig(node.id, 'wireguard')"
+                @saved="store.loadNodeVpnConfigs(node.id)"
+              />
             </div>
           </div>
         </div>
