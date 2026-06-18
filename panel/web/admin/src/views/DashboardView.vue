@@ -45,12 +45,12 @@ const trafficChartData = computed(() => {
   })
 })
 
-/** Total data transferred computed from live sessions */
+/** Total data transferred — use server-reported totals (includes all sessions, not just active) */
 const totalDownloaded = computed(() =>
-  realtime.liveSessions.reduce((sum, s) => sum + (s.input_bytes || 0), 0)
+  realtime.stats.total_input_bytes || realtime.liveSessions.reduce((sum, s) => sum + (s.input_bytes || 0), 0)
 )
 const totalUploaded = computed(() =>
-  realtime.liveSessions.reduce((sum, s) => sum + (s.output_bytes || 0), 0)
+  realtime.stats.total_output_bytes || realtime.liveSessions.reduce((sum, s) => sum + (s.output_bytes || 0), 0)
 )
 
 const userStatusData = computed(() => {

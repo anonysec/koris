@@ -151,7 +151,7 @@ async function handleCreateNode() {
 }
 
 async function toggleNode(id: number, currentStatus: string) {
-  const enable = currentStatus === 'offline'
+  const enable = currentStatus !== 'online'
   await store.updateNode(id, enable)
 }
 

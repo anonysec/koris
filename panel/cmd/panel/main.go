@@ -5,13 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -19,6 +16,7 @@ import (
 	"time"
 
 	"koris-next/panel/internal/api"
+	"koris-next/panel/internal/backup"
 	"koris-next/panel/internal/bot"
 	"koris-next/panel/internal/certrotation"
 	"koris-next/panel/internal/config"
@@ -59,7 +57,7 @@ func startWorker(db *sql.DB) {
 	notifier := notify.New()
 	ticker := time.NewTicker(time.Minute)
 	go func() {
-		for t := range ticker.C {
+		for range ticker.C {
 			if _, err := db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`); err != nil {
 				log.Printf("[worker] expire subscriptions: %v", err)
 			}
@@ -84,25 +82,7 @@ func startWorker(db *sql.DB) {
 			// PAYG Billing: deduct from wallet based on usage for pay-as-you-go plans
 			processPaygBilling(db)
 
-			if t.Hour() == 2 && t.Minute() == 0 {
-				dir := "/var/backups/koris-next"
-				_ = os.MkdirAll(dir, 0755)
-				file := filepath.Join(dir, fmt.Sprintf("db-%s.sql.gz", t.Format("2006-01-02")))
-				user, pass, dbname := mysqlCredsFromDSN(os.Getenv("PANEL_DB_DSN"))
-				if dbname == "" {
-					dbname = "radius_next"
-				}
-				// Use MYSQL_PWD environment variable instead of -p flag to prevent
-				// password exposure in process list (visible via ps aux or /proc/*/cmdline).
-				cmd := exec.Command("mysqldump", "-u", user, dbname)
-				cmd.Env = append(os.Environ(), "MYSQL_PWD="+pass)
-				out, err := os.Create(file)
-				if err == nil {
-					cmd.Stdout = out
-					_ = cmd.Run()
-					_ = out.Close()
-				}
-			}
+			// Backup scheduling handled by backup.Service.StartScheduler()
 		}
 	}()
 }
@@ -294,6 +274,11 @@ func main() {
 	}
 	startWorker(database)
 
+	// Initialize backup service
+	backupCfg := backup.LoadConfigFromDB(database)
+	backupService := backup.New(database, backupCfg)
+	backupService.StartScheduler()
+
 	// Start certificate rotation worker
 	certEventFn := func(eventType, severity, title, message string) {
 		_, _ = database.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES(?,?,?,?,?,?)`,
@@ -308,6 +293,7 @@ func main() {
 	log.Println("[main] session enforcer started")
 
 	srv := api.New(database, cfg)
+	srv.BackupService = backupService
 
 	// Start Telegram bot
 	// Load bot config from DB first, env vars override

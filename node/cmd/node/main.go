@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -667,9 +668,215 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			return "failed", map[string]any{"output": string(out)}, err.Error()
 		}
 		return "succeeded", map[string]any{"message": "config synced"}, ""
+	case "backup.collect_configs":
+		return executeBackupCollectConfigs(log)
+	case "backup.restore_configs":
+		return executeBackupRestoreConfigs(payload, log)
 	default:
 		return "failed", map[string]any{}, "unsupported action"
 	}
+}
+
+// executeBackupCollectConfigs collects VPN config files from well-known directories,
+// creates a tar archive, base64-encodes it, and returns the result.
+func executeBackupCollectConfigs(log *logger.Logger) (string, map[string]any, string) {
+	configDirs := []string{
+		"/etc/openvpn/",
+		"/etc/wireguard/",
+		"/etc/ipsec.d/",
+		"/etc/xl2tpd/",
+	}
+
+	const maxTotalSize int64 = 10 * 1024 * 1024 // 10MB limit
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	var filesCount int
+	var totalSize int64
+
+	for _, dir := range configDirs {
+		info, err := os.Stat(dir)
+		if err != nil || !info.IsDir() {
+			log.Debug("skipping non-existent config dir", map[string]any{"dir": dir})
+			continue
+		}
+
+		err = filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return nil // skip files we can't access
+			}
+			if fi.IsDir() {
+				return nil
+			}
+			if totalSize+fi.Size() > maxTotalSize {
+				log.Warn("backup config collection size limit reached", map[string]any{
+					"limit_mb":   10,
+					"current":    totalSize,
+					"skipped":    path,
+				})
+				return nil
+			}
+
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return nil // skip unreadable files
+			}
+
+			// Use path relative to / so it preserves the full /etc/... structure
+			hdr := &tar.Header{
+				Name:    strings.TrimPrefix(path, "/"),
+				Size:    int64(len(content)),
+				Mode:    int64(fi.Mode().Perm()),
+				ModTime: fi.ModTime(),
+			}
+			if err := tw.WriteHeader(hdr); err != nil {
+				return err
+			}
+			if _, err := tw.Write(content); err != nil {
+				return err
+			}
+
+			filesCount++
+			totalSize += int64(len(content))
+			return nil
+		})
+		if err != nil {
+			log.Error("error walking config dir", map[string]any{"dir": dir, "error": err.Error()})
+		}
+	}
+
+	if err := tw.Close(); err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("close tar writer: %s", err.Error())
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	return "succeeded", map[string]any{
+		"configs_tar_base64": encoded,
+		"files_count":        filesCount,
+		"total_size":         totalSize,
+	}, ""
+}
+
+// executeBackupRestoreConfigs accepts a base64-encoded tar from the task payload,
+// extracts files to their original absolute paths, and restarts affected services.
+func executeBackupRestoreConfigs(payload map[string]any, log *logger.Logger) (string, map[string]any, string) {
+	configsTarBase64, _ := payload["configs_tar_base64"].(string)
+	if configsTarBase64 == "" {
+		return "failed", map[string]any{}, "configs_tar_base64 is required"
+	}
+
+	data, err := base64.StdEncoding.DecodeString(configsTarBase64)
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("base64 decode: %s", err.Error())
+	}
+
+	tr := tar.NewReader(bytes.NewReader(data))
+
+	// Track which service directories were modified
+	servicesAffected := map[string]bool{}
+	var filesRestored int
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("read tar entry: %s", err.Error())
+		}
+		if hdr.Typeflag == tar.TypeDir {
+			continue
+		}
+
+		// Restore to absolute path (tar entries are stored without leading /)
+		absPath := "/" + strings.TrimPrefix(hdr.Name, "/")
+
+		// Path traversal protection: only allow known VPN config directories
+		allowed := false
+		if strings.HasPrefix(absPath, "/etc/openvpn/") {
+			allowed = true
+			servicesAffected["openvpn"] = true
+		} else if strings.HasPrefix(absPath, "/etc/wireguard/") {
+			allowed = true
+			servicesAffected["wireguard"] = true
+		} else if strings.HasPrefix(absPath, "/etc/ipsec.d/") {
+			allowed = true
+			servicesAffected["ipsec"] = true
+		} else if strings.HasPrefix(absPath, "/etc/xl2tpd/") {
+			allowed = true
+			servicesAffected["xl2tpd"] = true
+		}
+
+		if !allowed {
+			log.Warn("skipping restore of file outside allowed paths", map[string]any{"path": absPath})
+			continue
+		}
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+			log.Error("failed to create dir for restore", map[string]any{"path": absPath, "error": err.Error()})
+			continue
+		}
+
+		content, err := io.ReadAll(tr)
+		if err != nil {
+			log.Error("failed to read tar content", map[string]any{"path": absPath, "error": err.Error()})
+			continue
+		}
+
+		mode := os.FileMode(hdr.Mode)
+		if mode == 0 {
+			mode = 0640
+		}
+		if err := os.WriteFile(absPath, content, mode); err != nil {
+			log.Error("failed to write restored file", map[string]any{"path": absPath, "error": err.Error()})
+			continue
+		}
+
+		filesRestored++
+	}
+
+	// Restart affected services
+	serviceMap := map[string]string{
+		"openvpn":   "openvpn",
+		"wireguard": "wg-quick@wg0",
+		"ipsec":     "strongswan",
+		"xl2tpd":    "xl2tpd",
+	}
+
+	var restartedServices []string
+	var restartErrors []string
+
+	for svc := range servicesAffected {
+		unitName, ok := serviceMap[svc]
+		if !ok {
+			continue
+		}
+		cmd := exec.Command("systemctl", "restart", unitName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			restartErrors = append(restartErrors, fmt.Sprintf("%s: %s", unitName, strings.TrimSpace(string(out))))
+			log.Error("failed to restart service after config restore", map[string]any{
+				"service": unitName,
+				"error":   err.Error(),
+				"output":  string(out),
+			})
+		} else {
+			restartedServices = append(restartedServices, unitName)
+			log.Info("restarted service after config restore", map[string]any{"service": unitName})
+		}
+	}
+
+	result := map[string]any{
+		"files_restored":     filesRestored,
+		"services_restarted": restartedServices,
+	}
+	if len(restartErrors) > 0 {
+		result["restart_errors"] = restartErrors
+	}
+
+	return "succeeded", result, ""
 }
 
 // removePeerFromConfig removes a [Peer] block with the given public key from a WireGuard config.

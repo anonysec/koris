@@ -37,7 +37,6 @@ function notifIcon(type: string): string {
 <template>
   <div class="notifications-page">
     <div class="notifications-header">
-      <h2 class="notifications-title">{{ t('notifications.title') }}</h2>
       <button
         v-if="realtimeStore.notificationCount > 0"
         class="btn-mark-all"
