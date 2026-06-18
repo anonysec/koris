@@ -253,9 +253,6 @@ func TestParseWgDump(t *testing.T) {
 			name: "one active peer",
 			output: "privatekey123\t51820\toff\n" +
 				"YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=\t(none)\t1.2.3.4:51820\t10.0.0.2/32\t" +
-				strings.Replace(string(rune(0)), string(rune(0)), func() string {
-					return ""
-				}(), 0) +
 				itoa(now-60) + "\t12345\t67890\toff\n",
 			expectedPeers:  1,
 			expectedActive: 1,
