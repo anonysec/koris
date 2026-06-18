@@ -11,6 +11,10 @@ export interface Stats {
   pending_payments: number
   total_rx_bps: number
   total_tx_bps: number
+  total_input_bytes: number
+  total_output_bytes: number
+  today_input_bytes: number
+  today_output_bytes: number
 }
 
 export interface LiveSession {
@@ -44,6 +48,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
     pending_payments: 0,
     total_rx_bps: 0,
     total_tx_bps: 0,
+    total_input_bytes: 0,
+    total_output_bytes: 0,
+    today_input_bytes: 0,
+    today_output_bytes: 0,
   })
 
   const liveSessions = shallowRef<LiveSession[]>([])
@@ -91,6 +99,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
         pending_payments: d.pending_payments ?? stats.value.pending_payments,
         total_rx_bps: d.total_rx_bps ?? stats.value.total_rx_bps,
         total_tx_bps: d.total_tx_bps ?? stats.value.total_tx_bps,
+        total_input_bytes: d.total_input_bytes ?? stats.value.total_input_bytes,
+        total_output_bytes: d.total_output_bytes ?? stats.value.total_output_bytes,
+        today_input_bytes: d.today_input_bytes ?? stats.value.today_input_bytes,
+        today_output_bytes: d.today_output_bytes ?? stats.value.today_output_bytes,
       }
       scheduleHistoryUpdate(d.total_rx_bps || 0, d.total_tx_bps || 0)
     }

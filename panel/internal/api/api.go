@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"koris-next/panel/internal/auth"
+	"koris-next/panel/internal/backup"
 	"koris-next/panel/internal/config"
 	"koris-next/panel/internal/health"
 	"koris-next/panel/internal/notify"
@@ -38,6 +39,7 @@ type Server struct {
 	Auth             auth.Service
 	Notify           *notify.Notifier
 	HealthEngine     *health.DiagnosticsEngine
+	BackupService    *backup.Service
 	prevSessionBytes map[int64]SessionBytes
 	sessionMutex     sync.RWMutex
 	wsNotifMu        sync.RWMutex
@@ -426,6 +428,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/diagnostics/ai/healing-log", s.requireAdmin(s.aiHealingLog))
 	mux.HandleFunc("/api/diagnostics/logs", s.requireAdmin(s.serverLogs))
 	mux.HandleFunc("/api/diagnostics/status", s.requireAdmin(s.serverStatus))
+	mux.HandleFunc("/api/admin/backups/restore", s.requireAdmin(s.backupRestore))
+	mux.HandleFunc("/api/admin/backups/settings", s.requireAdmin(s.backupSettings))
+	mux.HandleFunc("/api/admin/backups/", s.requireAdmin(s.backupByID))
+	mux.HandleFunc("/api/admin/backups", s.requireAdmin(s.backupRoot))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/"))
@@ -605,20 +611,32 @@ func (s *Server) dashboardStatsPayload() map[string]any {
 	var rx, tx float64
 	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ns.rx_bps),0), COALESCE(SUM(ns.tx_bps),0) FROM node_status ns JOIN nodes n ON n.id=ns.node_id WHERE n.status <> 'disabled' AND ns.updated_at >= NOW() - INTERVAL 5 MINUTE`).Scan(&rx, &tx)
 
+	// Total data usage from radacct (all sessions, including closed ones)
+	var totalInput, totalOutput int64
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct`).Scan(&totalInput, &totalOutput)
+
+	// Today's data usage
+	var todayInput, todayOutput int64
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct WHERE acctstarttime >= CURDATE()`).Scan(&todayInput, &todayOutput)
+
 	return map[string]any{
-		"ok":                true,
-		"customers":         s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL`),
-		"active_customers":  s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND status='active'`),
-		"plans":             s.count(`SELECT COUNT(*) FROM plans WHERE is_active=1`),
-		"nodes":             s.count(`SELECT COUNT(*) FROM nodes WHERE status IN('online','stale')`),
-		"online_users":      s.count(`SELECT COUNT(DISTINCT username) FROM radacct WHERE acctstoptime IS NULL`),
-		"active_sessions":   s.count(`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL`),
-		"open_tickets":      s.count(`SELECT COUNT(*) FROM tickets WHERE deleted_at IS NULL AND status='open'`),
-		"pending_payments":  s.count(`SELECT COUNT(*) FROM payments WHERE status='pending'`),
-		"approved_payments": s.sum(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved'`),
-		"unseen_events":     s.count(`SELECT COUNT(*) FROM events WHERE seen=0`),
-		"total_rx_bps":      rx,
-		"total_tx_bps":      tx,
+		"ok":                  true,
+		"customers":           s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL`),
+		"active_customers":    s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND status='active'`),
+		"plans":               s.count(`SELECT COUNT(*) FROM plans WHERE is_active=1`),
+		"nodes":               s.count(`SELECT COUNT(*) FROM nodes WHERE status IN('online','stale')`),
+		"online_users":        s.count(`SELECT COUNT(DISTINCT username) FROM radacct WHERE acctstoptime IS NULL`),
+		"active_sessions":     s.count(`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL`),
+		"open_tickets":        s.count(`SELECT COUNT(*) FROM tickets WHERE deleted_at IS NULL AND status='open'`),
+		"pending_payments":    s.count(`SELECT COUNT(*) FROM payments WHERE status='pending'`),
+		"approved_payments":   s.sum(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved'`),
+		"unseen_events":       s.count(`SELECT COUNT(*) FROM events WHERE seen=0`),
+		"total_rx_bps":        rx,
+		"total_tx_bps":        tx,
+		"total_input_bytes":   totalInput,
+		"total_output_bytes":  totalOutput,
+		"today_input_bytes":   todayInput,
+		"today_output_bytes":  todayOutput,
 	}
 }
 

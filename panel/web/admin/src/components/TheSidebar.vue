@@ -93,6 +93,11 @@ const navGroups = computed<NavGroup[]>(() => [
     title: t('nav.group_system'),
     items: [
       {
+        route: 'backups',
+        label: t('nav.backups'),
+        icon: 'backups',
+      },
+      {
         route: 'settings',
         label: t('nav.settings'),
         icon: 'settings',
@@ -200,6 +205,12 @@ function handleChangeLang(event: Event) {
         <svg v-else-if="item.icon === 'tickets'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
           <path d="M8 9h8M8 13h4" />
+        </svg>
+        <!-- Backups icon -->
+        <svg v-else-if="item.icon === 'backups'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
         <!-- Settings icon -->
         <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

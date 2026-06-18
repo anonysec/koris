@@ -74,6 +74,7 @@ const langLabels: Record<Locale, string> = {
             <button class="portal-header__dropdown-item" :class="{ 'portal-header__dropdown-item--active': locale === 'en' }" @click="switchLang('en')">English</button>
             <button class="portal-header__dropdown-item" :class="{ 'portal-header__dropdown-item--active': locale === 'fa' }" @click="switchLang('fa')">فارسی</button>
             <button class="portal-header__dropdown-item" :class="{ 'portal-header__dropdown-item--active': locale === 'zh' }" @click="switchLang('zh')">中文</button>
+            <button class="portal-header__dropdown-item" :class="{ 'portal-header__dropdown-item--active': locale === 'ru' }" @click="switchLang('ru')">Русский</button>
           </div>
         </div>
 

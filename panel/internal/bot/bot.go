@@ -219,56 +219,88 @@ func (b *Bot) handleUpdate(u Update) {
 	case "/stats":
 		if isAdmin {
 			b.cmdStats(chatID)
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/users":
 		if isAdmin {
 			b.cmdUsers(chatID)
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/find":
 		if isAdmin && len(args) > 0 {
 			b.cmdFind(chatID, args[0])
+		} else if isAdmin {
+			b.sendMessage(chatID, "Usage: `/find username`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/create":
 		if isAdmin && len(args) >= 2 {
 			b.cmdCreate(chatID, args[0], args[1])
 		} else if isAdmin {
 			b.sendMessage(chatID, "Usage: `/create username password`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/enable":
 		if isAdmin && len(args) > 0 {
 			b.cmdSetStatus(chatID, args[0], "active")
+		} else if isAdmin {
+			b.sendMessage(chatID, "Usage: `/enable username`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/disable":
 		if isAdmin && len(args) > 0 {
 			b.cmdSetStatus(chatID, args[0], "disabled")
+		} else if isAdmin {
+			b.sendMessage(chatID, "Usage: `/disable username`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/traffic":
 		if isAdmin && len(args) > 0 {
 			b.cmdTraffic(chatID, args[0])
+		} else if isAdmin {
+			b.sendMessage(chatID, "Usage: `/traffic username`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/renew":
 		if isAdmin && len(args) >= 2 {
 			b.cmdRenew(chatID, args[0], args[1])
 		} else if isAdmin {
 			b.sendMessage(chatID, "Usage: `/renew username days`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/broadcast":
 		if isAdmin && len(args) > 0 {
 			b.cmdBroadcast(chatID, strings.Join(args, " "))
 		} else if isAdmin {
 			b.sendMessage(chatID, "Usage: `/broadcast message`", "Markdown")
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/online":
 		if isAdmin {
 			b.cmdOnline(chatID)
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/backup":
 		if isAdmin {
 			b.cmdBackup(chatID)
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/nodes":
 		if isAdmin {
 			b.cmdNodes(chatID)
+		} else {
+			b.sendMessage(chatID, "⛔ This command is for admins only.", "")
 		}
 	case "/me":
 		b.cmdMe(chatID, u.Message.From)
@@ -731,7 +763,7 @@ func (b *Bot) cmdOnline(chatID int64) {
 }
 
 func (b *Bot) cmdBackup(chatID int64) {
-	b.sendMessage(chatID, "💾 Generating backup...\n\nPlease use the admin panel Settings > Backup to download the full JSON backup. Telegram file sending is not supported in this version.", "Markdown")
+	b.sendMessage(chatID, "💾 Backups are managed from the admin panel.\n\nGo to *Settings → Backup* to:\n• Create manual backups\n• Configure automatic schedules\n• Download or restore backups", "Markdown")
 }
 
 func (b *Bot) cmdNodes(chatID int64) {

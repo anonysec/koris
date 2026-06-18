@@ -70,7 +70,6 @@ onMounted(() => {
 <template>
   <div class="page resellers-view">
     <header class="page-header">
-      <h3 class="page-title">{{ t('resellers.title') }}</h3>
       <KButton variant="primary" icon="+" @click="showForm = true">{{ t('resellers.add') }}</KButton>
     </header>
 
@@ -171,8 +170,7 @@ onMounted(() => {
 
 <style scoped>
 .resellers-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-title { margin: 0; font-size: var(--text-lg); font-weight: var(--font-semibold); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; }
 
 .panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .panel-title { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--font-semibold); }

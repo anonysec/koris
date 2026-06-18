@@ -131,8 +131,8 @@ function formatTime(timestamp: string): string {
         </ol>
       </nav>
 
-      <!-- Title and subtitle -->
-      <h2 class="topbar-title">{{ title }}</h2>
+      <!-- Title and subtitle (hide title when breadcrumbs already show the page name) -->
+      <h2 v-if="!breadcrumbs || breadcrumbs.length === 0" class="topbar-title">{{ title }}</h2>
       <p v-if="subtitle" class="topbar-subtitle">{{ subtitle }}</p>
     </div>
 
