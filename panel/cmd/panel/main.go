@@ -511,10 +511,15 @@ func main() {
 	// Apply no-cache middleware on API responses
 	handler := api.NoCacheMiddleware(mux)
 
-	// Start server: use TLS if cert and key files exist
+	// Start server: use TLS if cert and key files exist AND the panel is NOT behind a reverse proxy.
+	// Detection: if PANEL_ADDR is bound to loopback (127.0.0.1), assume nginx handles TLS.
+	// To force direct TLS even on loopback, set PANEL_TLS_DIRECT=true.
 	tlsCert := cfg.TLSCert
 	tlsKey := cfg.TLSKey
-	if fileExists(tlsCert) && fileExists(tlsKey) {
+	behindProxy := strings.HasPrefix(cfg.Addr, "127.") || strings.HasPrefix(cfg.Addr, "localhost")
+	forceTLS := strings.ToLower(os.Getenv("PANEL_TLS_DIRECT")) == "true"
+
+	if fileExists(tlsCert) && fileExists(tlsKey) && (!behindProxy || forceTLS) {
 		log.Printf("TLS enabled: cert=%s key=%s addr=%s", tlsCert, tlsKey, cfg.TLSAddr)
 		log.Printf("HTTP redirect: %s -> %s", cfg.Addr, cfg.TLSAddr)
 
@@ -522,9 +527,7 @@ func main() {
 		go func() {
 			redirectMux := http.NewServeMux()
 			redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				// Preserve path and query for the redirect
 				target := "https://" + r.Host + r.URL.RequestURI()
-				// If TLS is on non-standard port, adjust
 				if cfg.TLSAddr != ":443" {
 					host := r.Host
 					if idx := strings.Index(host, ":"); idx != -1 {
@@ -534,7 +537,6 @@ func main() {
 				}
 				http.Redirect(w, r, target, http.StatusMovedPermanently)
 			})
-			// Health check still works on HTTP for load balancers
 			redirectMux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.Write([]byte(`{"ok":true,"service":"panel","tls":true}`))
@@ -547,7 +549,12 @@ func main() {
 		// Start HTTPS server
 		log.Fatal(http.ListenAndServeTLS(cfg.TLSAddr, tlsCert, tlsKey, limiter.Middleware(handler)))
 	} else {
-		log.Printf("TLS disabled: cert/key not found at %s / %s", tlsCert, tlsKey)
+		if fileExists(tlsCert) && fileExists(tlsKey) && behindProxy {
+			log.Printf("TLS available but panel is behind reverse proxy (%s) — nginx handles TLS", cfg.Addr)
+			log.Printf("Set PANEL_TLS_DIRECT=true to serve TLS directly from Go")
+		} else if !fileExists(tlsCert) || !fileExists(tlsKey) {
+			log.Printf("TLS disabled: cert/key not found at %s / %s", tlsCert, tlsKey)
+		}
 		log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)))
 	}
 }
