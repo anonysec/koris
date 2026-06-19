@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/csv"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -223,4 +225,36 @@ func (s *Server) bandwidthReport(w http.ResponseWriter, r *http.Request) {
 		"today_rx":  todayRx,
 		"today_tx":  todayTx,
 	})
+}
+
+// ========== CSV Export ==========
+
+func (s *Server) exportRevenueCSV(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	rows, err := s.DB.Query(`
+		SELECT DATE(created_at), username, amount, method, status
+		FROM payments
+		WHERE created_at >= NOW() - INTERVAL 90 DAY
+		ORDER BY created_at DESC`)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="revenue-report.csv"`)
+	cw := csv.NewWriter(w)
+	cw.Write([]string{"Date", "Username", "Amount", "Method", "Status"})
+	for rows.Next() {
+		var date, username, method, status string
+		var amount float64
+		if rows.Scan(&date, &username, &amount, &method, &status) == nil {
+			cw.Write([]string{date, username, fmt.Sprintf("%.2f", amount), method, status})
+		}
+	}
+	cw.Flush()
 }

@@ -417,6 +417,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/export/payments.csv", s.requireAdmin(s.exportPaymentsCSV))
 	mux.HandleFunc("/api/export/radacct.csv", s.requireAdmin(s.exportRadacctCSV))
 	mux.HandleFunc("/api/export/wallet-transactions.csv", s.requireAdmin(s.exportWalletTransactionsCSV))
+	mux.HandleFunc("/api/export/revenue.csv", s.requireAdmin(s.exportRevenueCSV))
 	mux.HandleFunc("/api/backup/export", s.requireAdmin(s.backupExport))
 	mux.HandleFunc("/api/backup/import", s.requireAdmin(s.backupImport))
 	mux.HandleFunc("/api/events", s.requireAdmin(s.events))
