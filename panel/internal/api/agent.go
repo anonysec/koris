@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // AgentVersionResponse is the response payload for GET /api/node/agent/version.
@@ -84,13 +86,28 @@ func (s *Server) agentDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Path traversal protection: only serve files from expected directories
+	cleanPath := filepath.Clean(binaryPath)
+	allowedPrefixes := []string{"/opt/KorisPanel/", "/usr/local/bin/", "/tmp/"}
+	pathAllowed := false
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(cleanPath, prefix) {
+			pathAllowed = true
+			break
+		}
+	}
+	if !pathAllowed {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "binary_path_not_allowed"})
+		return
+	}
+
 	// Verify the file exists before serving
-	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "binary_not_found"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="node-agent"`)
-	http.ServeFile(w, r, binaryPath)
+	http.ServeFile(w, r, cleanPath)
 }

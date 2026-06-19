@@ -19,6 +19,7 @@ type Limiter struct {
 	burst          int
 	trustedProxies map[string]bool
 	trustedCIDRs   []*net.IPNet
+	done           chan struct{}
 }
 
 func New(rate float64, burst int, trustedProxies []string) *Limiter {
@@ -37,21 +38,33 @@ func New(rate float64, burst int, trustedProxies []string) *Limiter {
 		burst:          burst,
 		trustedProxies: proxies,
 		trustedCIDRs:   cidrs,
+		done:           make(chan struct{}),
 	}
 	go l.cleanup()
 	return l
 }
 
+// Stop signals the cleanup goroutine to exit.
+func (l *Limiter) Stop() {
+	close(l.done)
+}
+
 func (l *Limiter) cleanup() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
 	for {
-		time.Sleep(time.Minute)
-		l.mu.Lock()
-		for ip, v := range l.visitors {
-			if time.Since(v.lastSeen) > 3*time.Minute {
-				delete(l.visitors, ip)
+		select {
+		case <-ticker.C:
+			l.mu.Lock()
+			for ip, v := range l.visitors {
+				if time.Since(v.lastSeen) > 3*time.Minute {
+					delete(l.visitors, ip)
+				}
 			}
+			l.mu.Unlock()
+		case <-l.done:
+			return
 		}
-		l.mu.Unlock()
 	}
 }
 

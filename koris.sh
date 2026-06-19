@@ -85,6 +85,119 @@ cmd_config() {
     is_node  && { echo -e "${cyan}Node Config:${plain}"; grep -v 'TOKEN' "$NODE_ENV" 2>/dev/null | sed 's/^/  /'; echo "  (token hidden)"; }
 }
 
+cmd_ssl() {
+    [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }
+    echo -e "${bold}${cyan}SSL Certificate Manager${plain}"
+    echo ""
+
+    # Show current SSL status
+    if [[ -f /etc/letsencrypt/live/*/fullchain.pem ]] 2>/dev/null; then
+        CERT_DOMAIN=$(ls /etc/letsencrypt/live/ 2>/dev/null | grep -v README | head -1)
+        if [[ -n "$CERT_DOMAIN" ]]; then
+            EXPIRY=$(openssl x509 -enddate -noout -in "/etc/letsencrypt/live/${CERT_DOMAIN}/fullchain.pem" 2>/dev/null | cut -d= -f2)
+            echo -e "  ${green}●${plain} SSL active for: ${cyan}${CERT_DOMAIN}${plain}"
+            echo -e "  ${dim}Expires: ${EXPIRY}${plain}"
+            echo ""
+        fi
+    else
+        echo -e "  ${yellow}●${plain} No SSL certificate found"
+        echo ""
+    fi
+
+    echo -e "  ${green}1.${plain} Install/renew SSL certificate"
+    echo -e "  ${green}2.${plain} Force renewal"
+    echo -e "  ${green}3.${plain} Remove SSL (revert to HTTP)"
+    echo -e "  ${green}0.${plain} Back"
+    echo ""
+    read -rp "$(echo -e "${cyan}Choose: ${plain}")" ssl_ch
+
+    case "$ssl_ch" in
+        1)
+            read -rp "$(echo -e "${cyan}Domain: ${plain}")" SSL_DOMAIN
+            [[ -z "$SSL_DOMAIN" ]] && { error "Domain required."; return; }
+            read -rp "$(echo -e "${cyan}Email (for renewal notices, blank to skip): ${plain}")" SSL_EMAIL
+
+            # Install certbot if missing
+            if ! command -v certbot >/dev/null 2>&1; then
+                info "Installing Certbot..."
+                if [[ -f /etc/debian_version ]]; then
+                    apt-get update -qq >/dev/null 2>&1
+                    apt-get install -y -qq certbot python3-certbot-nginx >/dev/null 2>&1
+                else
+                    dnf install -y -q certbot python3-certbot-nginx >/dev/null 2>&1
+                fi
+            fi
+
+            if ! command -v certbot >/dev/null 2>&1; then
+                error "Failed to install certbot."; return
+            fi
+
+            # Update nginx server_name
+            if [[ -f /etc/nginx/sites-available/koris-panel.conf ]]; then
+                sed -i "s/server_name .*/server_name ${SSL_DOMAIN};/" /etc/nginx/sites-available/koris-panel.conf
+                nginx -t >/dev/null 2>&1 && systemctl reload nginx
+            fi
+
+            # Obtain certificate
+            EMAIL_ARG="--register-unsafely-without-email"
+            [[ -n "$SSL_EMAIL" ]] && EMAIL_ARG="--email $SSL_EMAIL"
+
+            info "Requesting certificate for ${SSL_DOMAIN}..."
+            if certbot --nginx -d "$SSL_DOMAIN" --non-interactive --agree-tos $EMAIL_ARG --redirect; then
+                info "SSL certificate installed successfully!"
+                # Enable secure cookies
+                if grep -q '^PANEL_SECURE_COOKIES=' "$PANEL_ENV" 2>/dev/null; then
+                    sed -i "s|^PANEL_SECURE_COOKIES=.*|PANEL_SECURE_COOKIES='true'|" "$PANEL_ENV"
+                else
+                    echo "PANEL_SECURE_COOKIES='true'" >> "$PANEL_ENV"
+                fi
+                systemctl restart panel
+                echo ""
+                echo -e "  ${green}✓${plain} https://${SSL_DOMAIN}/dashboard/"
+                echo -e "  ${dim}Auto-renewal is enabled via certbot timer.${plain}"
+            else
+                error "Certbot failed. Check that:"
+                echo "  - DNS A record for ${SSL_DOMAIN} points to this server"
+                echo "  - Port 80 is open (for HTTP-01 challenge)"
+                echo "  - Nginx is running"
+            fi
+            ;;
+        2)
+            info "Forcing certificate renewal..."
+            certbot renew --force-renewal
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx
+            info "Done."
+            ;;
+        3)
+            read -rp "$(echo -e "${yellow}Remove SSL and revert to HTTP? [y/N]: ${plain}")" confirm
+            [[ "$confirm" != "y" && "$confirm" != "Y" ]] && return
+            # Rewrite nginx config without SSL
+            PANEL_ADDR="$(grep -E '^PANEL_ADDR=' "$PANEL_ENV" 2>/dev/null | cut -d= -f2 | tr -d "'\"")"
+            PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8080}"
+            cat > /etc/nginx/sites-available/koris-panel.conf <<NGINX
+server {
+    listen 80 default_server;
+    server_name _;
+    client_max_body_size 20m;
+    location = / { return 302 /dashboard/; }
+    location = /dashboard { return 302 /dashboard/; }
+    location /dashboard/ { proxy_pass http://${PANEL_ADDR}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }
+    location /api/ { proxy_pass http://${PANEL_ADDR}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }
+    location = /portal { return 302 /portal/; }
+    location /portal/ { proxy_pass http://${PANEL_ADDR}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }
+}
+NGINX
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx
+            # Disable secure cookies
+            sed -i "s|^PANEL_SECURE_COOKIES=.*|PANEL_SECURE_COOKIES='false'|" "$PANEL_ENV" 2>/dev/null
+            systemctl restart panel
+            info "SSL removed. Panel is now HTTP-only."
+            ;;
+        0) return ;;
+        *) warn "Invalid." ;;
+    esac
+}
+
 show_menu() {
     clear
     echo -e "${bold}${blue}KorisPanel${plain} v$(get_version)    Panel: $(panel_status)  Node: $(node_status)"
@@ -92,7 +205,8 @@ show_menu() {
     echo -e "  ${green}1.${plain} Start       ${green}5.${plain} Logs          ${green}9.${plain}  Enable autostart"
     echo -e "  ${green}2.${plain} Stop        ${green}6.${plain} Live logs     ${green}10.${plain} Disable autostart"
     echo -e "  ${green}3.${plain} Restart     ${green}7.${plain} Update        ${green}11.${plain} Uninstall"
-    echo -e "  ${green}4.${plain} Status      ${green}8.${plain} Config        ${green}0.${plain}  Exit"
+    echo -e "  ${green}4.${plain} Status      ${green}8.${plain} Config        ${green}12.${plain} SSL Certificate"
+    echo -e "                                    ${green}0.${plain}  Exit"
     echo ""
     read -rp "$(echo -e "${cyan}Choose: ${plain}")" ch
     case "$ch" in
@@ -100,7 +214,7 @@ show_menu() {
         5) cmd_logs;; 6) cmd_follow;; 7) cmd_update;; 8) cmd_config;;
         9) systemctl enable panel node-agent 2>/dev/null; info "Enabled.";;
         10) systemctl disable panel node-agent 2>/dev/null; info "Disabled.";;
-        11) cmd_uninstall;; 0) exit 0;; *) warn "Invalid.";;
+        11) cmd_uninstall;; 12) cmd_ssl;; 0) exit 0;; *) warn "Invalid.";;
     esac
     echo ""; read -rp "Enter to continue..." _; show_menu
 }
@@ -109,12 +223,13 @@ case "${1:-}" in
     start)     cmd_start;; stop) cmd_stop;; restart) cmd_restart;;
     status)    cmd_status;; logs) cmd_logs;; follow|logs-live) cmd_follow;;
     update)    cmd_update;; config) cmd_config;; uninstall) cmd_uninstall;;
+    ssl)       cmd_ssl;;
     enable)    systemctl enable panel node-agent 2>/dev/null; info "Enabled.";;
     disable)   systemctl disable panel node-agent 2>/dev/null; info "Disabled.";;
     node-status)  echo "Node Agent: $(node_status)";;
     node-restart) systemctl restart node-agent 2>/dev/null; info "Node restarted.";;
     node-logs)    journalctl -u node-agent -n 50 --no-pager;;
-    help|-h|--help) echo "Usage: koris [start|stop|restart|status|logs|follow|update|config|uninstall|enable|disable|node-status|node-restart|node-logs]"; echo "Run without args for interactive menu.";;
+    help|-h|--help) echo "Usage: koris [start|stop|restart|status|logs|follow|update|config|ssl|uninstall|enable|disable|node-status|node-restart|node-logs]"; echo "Run without args for interactive menu.";;
     "") show_menu;;
     *) error "Unknown: $1. Run 'koris help'."; exit 1;;
 esac

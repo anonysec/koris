@@ -13,7 +13,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // RestoreFromUpload validates and applies a backup from an uploaded file.
@@ -59,12 +61,9 @@ func (s *Service) RestoreFromUpload(ctx context.Context, file io.Reader, filenam
 	}
 
 	// 6. Create pre-restore safety backup
-	// Release mutex so CreateBackup can acquire it
-	s.mu.Unlock()
+	// Run a lightweight SQL dump directly (without releasing mutex) to avoid race conditions.
 	log.Println("[backup] creating pre-restore safety backup")
-	_, preErr := s.CreateBackup(ctx, "pre_restore")
-	// Re-acquire mutex
-	s.mu.Lock()
+	preErr := s.createPreRestoreBackup(ctx)
 	if preErr != nil {
 		log.Printf("[backup] pre-restore backup failed (continuing): %v", preErr)
 	}
@@ -80,6 +79,38 @@ func (s *Service) RestoreFromUpload(ctx context.Context, file io.Reader, filenam
 	}
 
 	log.Println("[backup] restore completed successfully")
+	return nil
+}
+
+// createPreRestoreBackup performs a quick SQL dump backup without releasing the mutex.
+// This is a simplified version of CreateBackup that doesn't collect node configs.
+func (s *Service) createPreRestoreBackup(ctx context.Context) error {
+	if err := ensureStorageDir(s.cfg.StorageDir); err != nil {
+		return fmt.Errorf("ensure storage dir: %w", err)
+	}
+
+	now := time.Now()
+	filename := fmt.Sprintf("pre-restore-%s.tar.gz", now.Format("20060102-150405"))
+	archivePath := filepath.Join(s.cfg.StorageDir, filename)
+
+	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
+	if err != nil {
+		return err
+	}
+
+	manifest := GenerateManifest(now, s.getPanelVersion(), s.cfg.DBName, nil, nil, nil)
+	if err := WriteArchive(archivePath, dumpReader, nil, manifest); err != nil {
+		return err
+	}
+	if err := dumpWait(); err != nil {
+		os.Remove(archivePath)
+		return err
+	}
+
+	_, _ = s.db.ExecContext(ctx,
+		`INSERT INTO backups (filename, status, type, started_at, completed_at) VALUES (?, 'completed', 'pre_restore', NOW(), NOW())`,
+		filename)
+
 	return nil
 }
 
