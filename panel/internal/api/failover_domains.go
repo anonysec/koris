@@ -1,11 +1,14 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // failoverDomains handles GET (list) and POST (create) for /api/failover/domains.
@@ -46,15 +49,13 @@ func (s *Server) failoverDomainByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		// Failover trigger will be implemented in the orchestrator task
-		writeJSONCode(w, http.StatusNotImplemented, map[string]any{"ok": false, "error": "not_implemented"})
+		s.triggerFailover(w, r, id)
 	case "status":
 		if r.Method != http.MethodGet {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		// Status endpoint will be implemented in the orchestrator task
-		writeJSONCode(w, http.StatusNotImplemented, map[string]any{"ok": false, "error": "not_implemented"})
+		s.failoverDomainStatus(w, r, id)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -390,4 +391,171 @@ func (s *Server) deleteFailoverDomain(w http.ResponseWriter, r *http.Request, id
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "failover_domain.deleted", "failover_domain", strconv.FormatInt(id, 10), map[string]any{"domain": domain}, nil, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// triggerFailover handles POST /api/failover/domains/{id}/failover.
+// It validates the request, invokes the orchestrator, maps errors, and returns the event.
+func (s *Server) triggerFailover(w http.ResponseWriter, r *http.Request, domainID int64) {
+	limitBody(w, r, maxJSONBody)
+
+	var in struct {
+		ToNodeID int64  `json:"to_node_id"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+		return
+	}
+
+	if in.ToNodeID == 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "to_node_id_required"})
+		return
+	}
+
+	// Normalize reason: default to "manual" if blank, truncate to 255 chars
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" {
+		reason = "manual"
+	}
+	if len(reason) > 255 {
+		reason = reason[:255]
+	}
+
+	admin, _, _ := s.currentAdmin(r)
+
+	event, err := s.failoverOrchestrator.TriggerFailover(r.Context(), domainID, in.ToNodeID, reason, admin)
+	if err != nil {
+		errStr := err.Error()
+		switch {
+		case strings.Contains(errStr, "domain_not_found"):
+			writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		case strings.Contains(errStr, "same_node"):
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "same_node", "message": "Target node is the same as the current node"})
+		case strings.Contains(errStr, "node_offline"):
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_offline", "message": "Target node is offline or unreachable"})
+		case strings.Contains(errStr, "failover_in_progress"):
+			writeJSONCode(w, http.StatusConflict, map[string]any{"ok": false, "error": "failover_in_progress", "message": "A failover is already in progress for this domain"})
+		default:
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "failover_failed", "message": errStr})
+		}
+		return
+	}
+
+	s.logAudit(admin, "failover_domain.failover_triggered", "failover_domain", strconv.FormatInt(domainID, 10), nil, map[string]any{
+		"to_node_id": in.ToNodeID,
+		"reason":     reason,
+	}, clientIP(r))
+
+	writeJSON(w, map[string]any{"ok": true, "event": event})
+}
+
+// failoverStatusResponse is the response for GET /api/failover/domains/{id}/status.
+type failoverStatusResponse struct {
+	Domain          string         `json:"domain"`
+	CurrentNodeID   int64          `json:"current_node_id"`
+	CurrentNodeName string         `json:"current_node_name"`
+	CurrentNodeIP   string         `json:"current_node_ip"`
+	IsActive        bool           `json:"is_active"`
+	LastFailoverAt  *string        `json:"last_failover_at"`
+	LatestEvent     *FailoverEvent `json:"latest_event"`
+	DNSHealthy      bool           `json:"dns_healthy"`
+}
+
+// failoverDomainStatus returns the current failover health status of a domain,
+// including the latest event and a live DNS health check.
+func (s *Server) failoverDomainStatus(w http.ResponseWriter, r *http.Request, domainID int64) {
+	// 1. Query failover_domains joined with nodes for domain record
+	var domain string
+	var currentNodeID int64
+	var currentNodeName, currentNodeIP string
+	var isActive bool
+	var lastFailoverAt sql.NullString
+
+	err := s.DB.QueryRow(`
+		SELECT fd.domain, fd.current_node_id, COALESCE(n.name, ''), COALESCE(n.public_ip, ''),
+		       fd.is_active, fd.last_failover_at
+		FROM failover_domains fd
+		LEFT JOIN nodes n ON n.id = fd.current_node_id
+		WHERE fd.id = ?`, domainID).Scan(
+		&domain, &currentNodeID, &currentNodeName, &currentNodeIP,
+		&isActive, &lastFailoverAt,
+	)
+	if err == sql.ErrNoRows {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// 2. Query the latest failover_events row
+	var latestEvent *FailoverEvent
+	var evt FailoverEvent
+	var errMsg sql.NullString
+	var propStarted sql.NullString
+	var propCompleted sql.NullString
+
+	err = s.DB.QueryRow(`
+		SELECT id, domain_id, from_node_id, to_node_id, reason, status,
+		       dns_propagation_started_at, dns_propagation_completed_at,
+		       triggered_by, error_message, created_at
+		FROM failover_events
+		WHERE domain_id = ?
+		ORDER BY id DESC LIMIT 1`, domainID).Scan(
+		&evt.ID, &evt.DomainID, &evt.FromNodeID, &evt.ToNodeID,
+		&evt.Reason, &evt.Status,
+		&propStarted, &propCompleted,
+		&evt.TriggeredBy, &errMsg, &evt.CreatedAt,
+	)
+	if err == nil {
+		if propStarted.Valid {
+			evt.DNSPropagationStartedAt = &propStarted.String
+		}
+		if propCompleted.Valid {
+			evt.DNSPropagationCompletedAt = &propCompleted.String
+		}
+		if errMsg.Valid {
+			evt.ErrorMessage = &errMsg.String
+		}
+		latestEvent = &evt
+	} else if err != sql.ErrNoRows {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// 3. Perform live DNS health check
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	dnsHealthy := false
+	ips, err := net.DefaultResolver.LookupHost(ctx, domain)
+	if err == nil {
+		for _, ip := range ips {
+			if ip == currentNodeIP {
+				dnsHealthy = true
+				break
+			}
+		}
+	}
+
+	// 4. Build response
+	var lastFailoverPtr *string
+	if lastFailoverAt.Valid {
+		lastFailoverPtr = &lastFailoverAt.String
+	}
+
+	resp := failoverStatusResponse{
+		Domain:          domain,
+		CurrentNodeID:   currentNodeID,
+		CurrentNodeName: currentNodeName,
+		CurrentNodeIP:   currentNodeIP,
+		IsActive:        isActive,
+		LastFailoverAt:  lastFailoverPtr,
+		LatestEvent:     latestEvent,
+		DNSHealthy:      dnsHealthy,
+	}
+
+	// 5. Return response
+	writeJSON(w, map[string]any{"ok": true, "status": resp})
 }

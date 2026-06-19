@@ -12,6 +12,7 @@ package-lock.json
 dist/
 /panel-binary
 /node-binary
+*.exe
 
 # OS files
 .DS_Store

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTicketsStore } from '@/stores/tickets'
 import { useI18n } from '@koris/composables/useI18n'
+import { formatDate } from '@koris/composables/useFormatDate'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -78,7 +79,7 @@ onMounted(() => {
             <div class="ticket-row__main">
               <span class="ticket-row__subject">{{ ticket.subject }}</span>
               <span class="ticket-row__meta text-muted">
-                {{ ticket.username }} &middot; {{ ticket.created_at?.slice(0, 10) }}
+                {{ ticket.username }} &middot; {{ formatDate(ticket.created_at) }}
               </span>
             </div>
             <div class="ticket-row__right">

@@ -5,6 +5,7 @@ import { useRealtimeStore } from '@/stores/realtime'
 import { useCustomersStore } from '@/stores/customers'
 import { useNodesStore } from '@/stores/nodes'
 import { useI18n } from '@koris/composables/useI18n'
+import { formatDate } from '@koris/composables/useFormatDate'
 import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
@@ -164,7 +165,7 @@ function formatDuration(seconds: number): string {
               <td>{{ user.display_name }}</td>
               <td><KStatusPill :status="user.status" size="sm" /></td>
               <td>{{ user.plan }}</td>
-              <td class="text-muted">{{ user.created_at?.slice(0, 10) }}</td>
+              <td class="text-muted">{{ formatDate(user.created_at) }}</td>
             </tr>
             <tr v-if="recentUsers.length === 0">
               <td colspan="5" class="text-muted text-center">{{ t('empty.no_users') }}</td>

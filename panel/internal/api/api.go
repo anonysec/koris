@@ -36,16 +36,17 @@ import (
 )
 
 type Server struct {
-	DB               *sql.DB
-	Config           config.Config
-	Auth             auth.Service
-	Notify           *notify.Notifier
-	HealthEngine     *health.DiagnosticsEngine
-	BackupService    *backup.Service
-	prevSessionBytes map[int64]SessionBytes
-	sessionMutex     sync.RWMutex
-	wsNotifMu        sync.RWMutex
-	wsNotifChans     []chan map[string]any
+	DB                   *sql.DB
+	Config               config.Config
+	Auth                 auth.Service
+	Notify               *notify.Notifier
+	HealthEngine         *health.DiagnosticsEngine
+	BackupService        *backup.Service
+	failoverOrchestrator *FailoverOrchestrator
+	prevSessionBytes     map[int64]SessionBytes
+	sessionMutex         sync.RWMutex
+	wsNotifMu            sync.RWMutex
+	wsNotifChans         []chan map[string]any
 }
 
 type SessionBytes struct {
@@ -300,13 +301,14 @@ func New(db *sql.DB, cfg config.Config) *Server {
 	analyzer := health.NewAnalyzer()
 	notifier := notify.New()
 	return &Server{
-		DB:               db,
-		Config:           cfg,
-		Auth:             auth.Service{DB: db},
-		Notify:           notifier,
-		HealthEngine:     health.NewDiagnosticsEngine(db, analyzer, notifier),
-		prevSessionBytes: make(map[int64]SessionBytes),
-		wsNotifChans:     make([]chan map[string]any, 0),
+		DB:                   db,
+		Config:               cfg,
+		Auth:                 auth.Service{DB: db},
+		Notify:               notifier,
+		HealthEngine:         health.NewDiagnosticsEngine(db, analyzer, notifier),
+		failoverOrchestrator: NewFailoverOrchestrator(db, notifier, GetPropagationTimeoutFromDB(db), 10*time.Second),
+		prevSessionBytes:     make(map[int64]SessionBytes),
+		wsNotifChans:         make([]chan map[string]any, 0),
 	}
 }
 

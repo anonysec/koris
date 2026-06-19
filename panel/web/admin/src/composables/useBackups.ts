@@ -1,5 +1,11 @@
 import { ref } from 'vue'
 import { useApi } from '@koris/composables/useApi'
+import { useToast } from '@koris/composables/useToast'
+
+export interface SkippedNode {
+  name: string
+  reason: string
+}
 
 export interface BackupRecord {
   id: number
@@ -9,10 +15,24 @@ export interface BackupRecord {
   size_bytes: number | null
   checksum: string | null
   nodes_included: string[] | null
-  nodes_skipped: string[] | null
+  nodes_skipped: SkippedNode[] | null
   error_message: string | null
   started_at: string
   completed_at: string | null
+}
+
+export interface ManifestData {
+  version: string
+  timestamp: string
+  panel_version: string
+  database: string
+  table_count: number
+  total_row_count: number
+  nodes_included: string[]
+  nodes_skipped: SkippedNode[]
+  files: Record<string, { size: number }>
+  checksum_algorithm: string
+  checksum?: string
 }
 
 export interface BackupSettings {
@@ -22,6 +42,7 @@ export interface BackupSettings {
 
 export function useBackups() {
   const { get, post, del, put } = useApi()
+  const toast = useToast()
   const backups = ref<BackupRecord[]>([])
   const loading = ref(false)
   const settings = ref<BackupSettings>({ schedule: 'daily:02', retention_count: 7 })
@@ -80,6 +101,19 @@ export function useBackups() {
     return res.ok
   }
 
+  async function previewBackup(id: number): Promise<ManifestData | null> {
+    try {
+      const res = await get<{ ok: boolean; manifest: ManifestData }>(`/api/admin/backups/${id}/preview`)
+      if (res.ok && res.manifest) {
+        return res.manifest
+      }
+      return null
+    } catch {
+      toast.error('Failed to load backup preview')
+      return null
+    }
+  }
+
   return {
     backups,
     loading,
@@ -92,5 +126,6 @@ export function useBackups() {
     restoreBackup,
     fetchSettings,
     updateSettings,
+    previewBackup,
   }
 }

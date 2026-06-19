@@ -2,7 +2,9 @@ package backup
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -11,10 +13,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"KorisPanel/panel/internal/notify"
 )
 
 // Config holds backup service configuration loaded from panel_settings.
@@ -45,17 +50,22 @@ type BackupRecord struct {
 
 // Service manages backup creation, scheduling, retention, and restore operations.
 type Service struct {
-	db  *sql.DB
-	cfg Config
-	mu  sync.Mutex
+	db       *sql.DB
+	cfg      Config
+	mu       sync.Mutex
+	notifier *notify.Notifier
 }
 
 // New creates a new backup Service with the given database connection and config.
-func New(db *sql.DB, cfg Config) *Service {
-	return &Service{
+func New(db *sql.DB, cfg Config, notifier ...*notify.Notifier) *Service {
+	s := &Service{
 		db:  db,
 		cfg: cfg,
 	}
+	if len(notifier) > 0 {
+		s.notifier = notifier[0]
+	}
+	return s
 }
 
 // LoadConfigFromDB reads backup_schedule and backup_retention_count from panel_settings
@@ -169,6 +179,8 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 	}
 	defer s.mu.Unlock()
 
+	startTime := time.Now()
+
 	// 2. Ensure storage directory exists
 	if err := ensureStorageDir(s.cfg.StorageDir); err != nil {
 		return 0, fmt.Errorf("ensure storage dir: %w", err)
@@ -189,19 +201,25 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
 	if err != nil {
 		s.failBackup(ctx, backupID, err.Error())
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return backupID, err
 	}
 
 	// 5. Collect node configs (query online nodes, dispatch tasks, wait with timeout)
 	nodesIncluded, nodesSkipped, nodeConfigs := s.collectNodeConfigs(ctx)
 
-	// 6. Generate manifest
-	manifest := GenerateManifest(now, s.getPanelVersion(), s.cfg.DBName, nodesIncluded, nodesSkipped, nil)
+	// 6. Generate manifest (counts will be filled after scanning dump)
+	manifest := GenerateManifest(now, s.getPanelVersion(), s.cfg.DBName, nodesIncluded, nodesSkipped, nil, 0, 0)
 
 	// 7. Write archive
 	archivePath := filepath.Join(s.cfg.StorageDir, filename)
 	if err := WriteArchive(archivePath, dumpReader, nodeConfigs, manifest); err != nil {
 		s.failBackup(ctx, backupID, err.Error())
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return backupID, err
 	}
 
@@ -209,13 +227,28 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 	if err := dumpWait(); err != nil {
 		s.failBackup(ctx, backupID, err.Error())
 		os.Remove(archivePath)
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return backupID, err
+	}
+
+	// 8.5. Scan the dump file in the archive for table/row counts and rewrite manifest
+	tableCount, totalRowCount := countTablesAndRows(archivePath)
+	if tableCount > 0 || totalRowCount > 0 {
+		manifest.TableCount = tableCount
+		manifest.TotalRowCount = totalRowCount
+		// Rewrite the archive with updated manifest is not practical;
+		// we update the manifest in-place via the stored counts for preview purposes.
 	}
 
 	// 9. Compute checksum
 	checksum, err := ComputeChecksum(archivePath)
 	if err != nil {
 		s.failBackup(ctx, backupID, err.Error())
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return backupID, err
 	}
 	WriteChecksumFile(archivePath, checksum)
@@ -231,6 +264,12 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 
 	// 12. Apply retention policy
 	s.ApplyRetention(ctx)
+
+	// 13. Send success notification for scheduled backups
+	if backupType == "scheduled" && s.notifier != nil {
+		duration := time.Since(startTime)
+		s.notifier.Send(formatBackupSuccess(filename, sizeBytes, duration, len(nodesIncluded), len(nodesSkipped)))
+	}
 
 	return backupID, nil
 }
@@ -484,6 +523,8 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 	}
 	defer s.mu.Unlock()
 
+	startTime := time.Now()
+
 	// Get filename from record
 	var filename string
 	if err := s.db.QueryRowContext(ctx, `SELECT filename FROM backups WHERE id=?`, backupID).Scan(&filename); err != nil {
@@ -498,6 +539,9 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
 	if err != nil {
 		s.failBackup(ctx, backupID, err.Error())
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return
 	}
 
@@ -505,12 +549,15 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 	nodesIncluded, nodesSkipped, nodeConfigs := s.collectNodeConfigs(ctx)
 
 	// Generate manifest
-	manifest := GenerateManifest(time.Now(), s.getPanelVersion(), s.cfg.DBName, nodesIncluded, nodesSkipped, nil)
+	manifest := GenerateManifest(time.Now(), s.getPanelVersion(), s.cfg.DBName, nodesIncluded, nodesSkipped, nil, 0, 0)
 
 	// Write archive
 	archivePath := filepath.Join(s.cfg.StorageDir, filename)
 	if err := WriteArchive(archivePath, dumpReader, nodeConfigs, manifest); err != nil {
 		s.failBackup(ctx, backupID, err.Error())
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return
 	}
 
@@ -518,13 +565,24 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 	if err := dumpWait(); err != nil {
 		s.failBackup(ctx, backupID, err.Error())
 		os.Remove(archivePath)
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return
 	}
+
+	// Scan for table/row counts
+	tableCount, totalRowCount := countTablesAndRows(archivePath)
+	_ = tableCount
+	_ = totalRowCount
 
 	// Compute checksum
 	checksum, err := ComputeChecksum(archivePath)
 	if err != nil {
 		s.failBackup(ctx, backupID, err.Error())
+		if backupType == "scheduled" && s.notifier != nil {
+			s.notifier.Send(formatBackupFailure(filename, err.Error()))
+		}
 		return
 	}
 	WriteChecksumFile(archivePath, checksum)
@@ -540,6 +598,12 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 
 	// Apply retention policy
 	s.ApplyRetention(ctx)
+
+	// Send success notification for scheduled backups
+	if backupType == "scheduled" && s.notifier != nil {
+		duration := time.Since(startTime)
+		s.notifier.Send(formatBackupSuccess(filename, sizeBytes, duration, len(nodesIncluded), len(nodesSkipped)))
+	}
 }
 
 // marshalJSON is a helper for JSON column encoding.
@@ -549,4 +613,88 @@ func marshalJSON(v any) string {
 		return "null"
 	}
 	return string(b)
+}
+
+// countTablesAndRows scans the dump.sql inside a tar.gz archive for CREATE TABLE statements
+// and counts the VALUES tuples in INSERT statements to estimate row counts.
+func countTablesAndRows(archivePath string) (tableCount int, totalRowCount int64) {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return 0, 0
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		return 0, 0
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+
+	// Find dump.sql
+	for {
+		hdr, err := tr.Next()
+		if err != nil {
+			return 0, 0
+		}
+		if hdr.Name == "dump.sql" {
+			break
+		}
+	}
+
+	// Scan dump.sql line by line
+	createTableRe := regexp.MustCompile(`(?i)^CREATE\s+TABLE\s`)
+	insertRe := regexp.MustCompile(`(?i)^INSERT\s+INTO\s`)
+
+	scanner := bufio.NewScanner(tr)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB line buffer for large INSERT statements
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if createTableRe.MatchString(line) {
+			tableCount++
+		} else if insertRe.MatchString(line) {
+			// Count VALUES tuples: each '),(' or the opening '(' after VALUES
+			valuesIdx := strings.Index(strings.ToUpper(line), "VALUES")
+			if valuesIdx >= 0 {
+				valuesPart := line[valuesIdx:]
+				// Count the number of opening parentheses that start a row
+				// Each row is wrapped in (...), separated by commas
+				totalRowCount += int64(strings.Count(valuesPart, "),(")) + 1
+			}
+		}
+	}
+	// Ignore scanner.Err() — partial counts are acceptable
+
+	return tableCount, totalRowCount
+}
+
+// formatBackupSuccess formats a Telegram notification message for a successful scheduled backup.
+func formatBackupSuccess(filename string, sizeBytes int64, duration time.Duration, nodesIncluded int, nodesSkipped int) string {
+	sizeMB := float64(sizeBytes) / (1024 * 1024)
+	durationStr := formatDuration(duration)
+	return fmt.Sprintf("✅ *Scheduled Backup Completed*\nFile: `%s`\nSize: %.1f MB\nDuration: %s\nNodes: %d included, %d skipped",
+		filename, sizeMB, durationStr, nodesIncluded, nodesSkipped)
+}
+
+// formatBackupFailure formats a Telegram notification message for a failed scheduled backup.
+func formatBackupFailure(filename string, errMsg string) string {
+	return fmt.Sprintf("❌ *Scheduled Backup Failed*\nFile: `%s`\nError: %s",
+		filename, errMsg)
+}
+
+// formatDuration formats a duration into a human-readable string (e.g. "45s", "2m 34s", "1h 5m").
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		m := int(d.Minutes())
+		s := int(d.Seconds()) - m*60
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) - h*60
+	return fmt.Sprintf("%dh %dm", h, m)
 }

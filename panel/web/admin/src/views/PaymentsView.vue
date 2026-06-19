@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { usePaymentsStore } from '@/stores/payments'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import { formatDate } from '@koris/composables/useFormatDate'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -166,7 +167,7 @@ onMounted(() => {
           <KStatusPill :status="value" size="sm" />
         </template>
         <template #cell-created_at="{ value }">
-          {{ value?.slice(0, 10) }}
+          {{ formatDate(value) }}
         </template>
         <template #cell-actions="{ row }">
           <div v-if="row.status === 'pending'" class="action-btns">
