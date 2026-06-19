@@ -3953,11 +3953,8 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 		}
 	}
 
-	// Add remote-random for load balancing across backup servers
-	remoteRandomLine := ""
-	if strings.Contains(remoteLines, "\n") {
-		remoteRandomLine = "\nremote-random"
-	}
+	// Add remote-random only if explicitly configured (disabled by default)
+	// Load balancing is handled by smart proxy, not client-side randomization
 
 	return fmt.Sprintf(`# KorisPanel generated OpenVPN profile
 # User: %s
@@ -3966,7 +3963,7 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 %s
 client
 dev tun
-%s%s
+%s
 resolv-retry infinite
 nobind
 persist-key
@@ -3980,7 +3977,7 @@ data-ciphers-fallback AES-256-GCM
 explicit-exit-notify 1
 verb 3
 pull
-%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), authComment, remoteLines, remoteRandomLine, authLine, caBlock, tlsCryptBlock)
+%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), authComment, remoteLines, authLine, caBlock, tlsCryptBlock)
 }
 
 func getenvFirst(envName string, paths ...string) string {
