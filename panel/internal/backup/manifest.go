@@ -6,15 +6,17 @@ import (
 
 // Manifest represents the metadata stored in manifest.json within a backup archive.
 type Manifest struct {
-	Version           string            `json:"version"`
-	Timestamp         string            `json:"timestamp"`
-	PanelVersion      string            `json:"panel_version"`
-	Database          string            `json:"database"`
-	NodesIncluded     []string          `json:"nodes_included"`
-	NodesSkipped      []SkippedNode     `json:"nodes_skipped"`
+	Version           string              `json:"version"`
+	Timestamp         string              `json:"timestamp"`
+	PanelVersion      string              `json:"panel_version"`
+	Database          string              `json:"database"`
+	TableCount        int                 `json:"table_count"`
+	TotalRowCount     int64               `json:"total_row_count"`
+	NodesIncluded     []string            `json:"nodes_included"`
+	NodesSkipped      []SkippedNode       `json:"nodes_skipped"`
 	Files             map[string]FileInfo `json:"files"`
-	ChecksumAlgorithm string            `json:"checksum_algorithm"`
-	Checksum          string            `json:"checksum,omitempty"`
+	ChecksumAlgorithm string              `json:"checksum_algorithm"`
+	Checksum          string              `json:"checksum,omitempty"`
 }
 
 // SkippedNode records a node that was skipped during backup with the reason.
@@ -30,12 +32,20 @@ type FileInfo struct {
 }
 
 // GenerateManifest creates a Manifest with the given parameters.
-func GenerateManifest(timestamp time.Time, panelVersion, dbName string, nodesIncluded []string, nodesSkipped []SkippedNode, files map[string]FileInfo) Manifest {
+func GenerateManifest(timestamp time.Time, panelVersion, dbName string, nodesIncluded []string, nodesSkipped []SkippedNode, files map[string]FileInfo, tableCount int, totalRowCount int64) Manifest {
+	if nodesIncluded == nil {
+		nodesIncluded = []string{}
+	}
+	if nodesSkipped == nil {
+		nodesSkipped = []SkippedNode{}
+	}
 	return Manifest{
 		Version:           "1.0",
 		Timestamp:         timestamp.UTC().Format(time.RFC3339),
 		PanelVersion:      panelVersion,
 		Database:          dbName,
+		TableCount:        tableCount,
+		TotalRowCount:     totalRowCount,
 		NodesIncluded:     nodesIncluded,
 		NodesSkipped:      nodesSkipped,
 		Files:             files,

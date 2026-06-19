@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useResellersStore } from '@/stores/resellers'
 import { useI18n } from '@koris/composables/useI18n'
+import { formatDate } from '@koris/composables/useFormatDate'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -136,7 +137,7 @@ onMounted(() => {
         <span class="customer-count">{{ row.customer_count ?? 0 }}</span>
       </template>
       <template #cell-created_at="{ value }">
-        {{ value?.slice(0, 10) }}
+        {{ formatDate(value) }}
       </template>
       <template #cell-actions="{ row }">
         <div class="action-btns">
@@ -161,7 +162,7 @@ onMounted(() => {
           </span>
         </template>
         <template #cell-created_at="{ value }">
-          {{ value?.slice(0, 10) }}
+          {{ formatDate(value) }}
         </template>
       </KDataTable>
     </div>

@@ -13,6 +13,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import { formatDate } from '@koris/composables/useFormatDate'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -313,7 +314,7 @@ onMounted(() => {
         </span>
       </template>
       <template #cell-created_at="{ value }">
-        {{ value?.slice(0, 10) }}
+        {{ formatDate(value) }}
       </template>
       <!-- Actions column with per-row delete button -->
       <template #cell-actions="{ row }">

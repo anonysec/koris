@@ -98,7 +98,7 @@ func (s *Service) createPreRestoreBackup(ctx context.Context) error {
 		return err
 	}
 
-	manifest := GenerateManifest(now, s.getPanelVersion(), s.cfg.DBName, nil, nil, nil)
+	manifest := GenerateManifest(now, s.getPanelVersion(), s.cfg.DBName, nil, nil, nil, 0, 0)
 	if err := WriteArchive(archivePath, dumpReader, nil, manifest); err != nil {
 		return err
 	}

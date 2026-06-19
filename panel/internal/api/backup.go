@@ -1,9 +1,12 @@
 package api
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,26 +31,26 @@ func (s *Server) backupList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type backupJSON struct {
-		ID            int64    `json:"id"`
-		Filename      string   `json:"filename"`
-		Status        string   `json:"status"`
-		Type          string   `json:"type"`
-		SizeBytes     *int64   `json:"size_bytes"`
-		Checksum      *string  `json:"checksum"`
-		NodesIncluded any      `json:"nodes_included"`
-		NodesSkipped  any      `json:"nodes_skipped"`
-		ErrorMessage  *string  `json:"error_message"`
-		StartedAt     string   `json:"started_at"`
-		CompletedAt   *string  `json:"completed_at"`
+		ID            int64   `json:"id"`
+		Filename      string  `json:"filename"`
+		Status        string  `json:"status"`
+		Type          string  `json:"type"`
+		SizeBytes     *int64  `json:"size_bytes"`
+		Checksum      *string `json:"checksum"`
+		NodesIncluded any     `json:"nodes_included"`
+		NodesSkipped  any     `json:"nodes_skipped"`
+		ErrorMessage  *string `json:"error_message"`
+		StartedAt     string  `json:"started_at"`
+		CompletedAt   *string `json:"completed_at"`
 	}
 
 	out := make([]backupJSON, 0, len(records))
 	for _, rec := range records {
 		b := backupJSON{
-			ID:       rec.ID,
-			Filename: rec.Filename,
-			Status:   rec.Status,
-			Type:     rec.Type,
+			ID:        rec.ID,
+			Filename:  rec.Filename,
+			Status:    rec.Status,
+			Type:      rec.Type,
 			StartedAt: rec.StartedAt.Format(time.RFC3339),
 		}
 		if rec.SizeBytes.Valid {
@@ -326,6 +329,12 @@ func (s *Server) backupRoot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) backupByID(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/admin/backups/")
 
+	// /api/admin/backups/{id}/preview
+	if strings.HasSuffix(path, "/preview") {
+		s.backupPreview(w, r)
+		return
+	}
+
 	// /api/admin/backups/{id}/download
 	if strings.HasSuffix(path, "/download") {
 		s.backupDownload(w, r)
@@ -345,6 +354,77 @@ func (s *Server) backupByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not found"})
+}
+
+// backupPreview handles GET /api/admin/backups/{id}/preview — returns the manifest from the archive.
+func (s *Server) backupPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := extractBackupID(r.URL.Path, "/api/admin/backups/", "/preview")
+	if id <= 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid backup id"})
+		return
+	}
+
+	var filename string
+	err := s.DB.QueryRowContext(r.Context(), `SELECT filename FROM backups WHERE id=?`, id).Scan(&filename)
+	if err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "backup not found"})
+		return
+	}
+
+	archivePath := filepath.Join(s.BackupService.StorageDir(), filename)
+	f, err := os.Open(archivePath)
+	if err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "backup_file_not_found"})
+		return
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "invalid archive"})
+		return
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+	var manifestData []byte
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "corrupt archive"})
+			return
+		}
+		if hdr.Name == "manifest.json" {
+			manifestData, err = io.ReadAll(tr)
+			if err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "read manifest failed"})
+				return
+			}
+			break
+		}
+	}
+
+	if manifestData == nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "manifest_not_found"})
+		return
+	}
+
+	var manifest any
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "invalid manifest json"})
+		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true, "manifest": manifest})
 }
 
 // extractBackupID extracts an integer ID from a URL path between prefix and suffix.

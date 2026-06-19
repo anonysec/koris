@@ -5,6 +5,7 @@ import { useCustomersStore } from '@/stores/customers'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
+import { formatDate, formatDateTime } from '@koris/composables/useFormatDate'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -425,7 +426,7 @@ onMounted(() => {
               <tbody>
                 <tr v-for="s in usage?.sessions?.slice(0, 10)" :key="s.id">
                   <td>{{ s.framed_ip }}</td>
-                  <td class="text-muted">{{ s.start_time?.slice(0, 16) }}</td>
+                  <td class="text-muted">{{ formatDateTime(s.start_time) }}</td>
                   <td>{{ Math.floor(s.session_seconds / 60) }}m</td>
                   <td>{{ formatBytes(s.total_bytes) }}</td>
                   <td><KStatusPill :status="s.online ? 'online' : 'offline'" size="sm" /></td>
@@ -445,7 +446,7 @@ onMounted(() => {
               </thead>
               <tbody>
                 <tr v-for="tx in customer.wallet_transactions" :key="tx.id">
-                  <td class="text-muted">{{ tx.created_at?.slice(0, 10) }}</td>
+                  <td class="text-muted">{{ formatDate(tx.created_at) }}</td>
                   <td>{{ tx.type }}</td>
                   <td :class="{ 'text-success': tx.amount > 0, 'text-danger': tx.amount < 0 }">
                     ${{ tx.amount.toFixed(2) }}
@@ -463,8 +464,8 @@ onMounted(() => {
               <tbody>
                 <tr v-for="sub in customer.subscriptions" :key="sub.id">
                   <td>{{ sub.plan_name }}</td>
-                  <td class="text-muted">{{ sub.start_date?.slice(0, 10) }}</td>
-                  <td class="text-muted">{{ sub.end_date?.slice(0, 10) }}</td>
+                  <td class="text-muted">{{ formatDate(sub.start_date) }}</td>
+                  <td class="text-muted">{{ formatDate(sub.end_date) }}</td>
                   <td><KStatusPill :status="sub.status" size="sm" /></td>
                 </tr>
               </tbody>
