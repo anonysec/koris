@@ -3701,14 +3701,21 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	_ = s.DB.QueryRow(`SELECT COALESCE(ipsec_psk,'') FROM vpn_core_settings WHERE id=1`).Scan(&psk)
 	psk = strings.TrimSpace(psk)
 	passwordlessAvailable := s.canUsePasswordless(username)
+
+	// Build filename from node name (supports emoji/UTF-8)
+	fileBase := safeFilename(nodeName)
+	if fileBase == "" {
+		fileBase = safeFilename(username)
+	}
+
 	writeJSON(w, map[string]any{
 		"ok":                     true,
 		"passwordless_available": passwordlessAvailable,
 		"profiles": []map[string]any{
 			{
 				"type":      "openvpn",
-				"name":      "OpenVPN profile",
-				"filename":  username + "-openvpn.ovpn",
+				"name":      "OpenVPN — " + nodeName,
+				"filename":  fileBase + ".ovpn",
 				"available": host != "",
 				"remote":    host,
 				"port":      port,
@@ -3718,8 +3725,8 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			},
 			{
 				"type":      "l2tp",
-				"name":      "L2TP/IPSec (Apple)",
-				"filename":  username + "-l2tp.mobileconfig",
+				"name":      "L2TP/IPSec — " + nodeName,
+				"filename":  fileBase + "-l2tp.mobileconfig",
 				"available": host != "" && psk != "",
 				"remote":    host,
 				"port":      1701,
@@ -3729,8 +3736,8 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			},
 			{
 				"type":      "ikev2",
-				"name":      "IKEv2 (Apple)",
-				"filename":  username + "-ikev2.mobileconfig",
+				"name":      "IKEv2 — " + nodeName,
+				"filename":  fileBase + "-ikev2.mobileconfig",
 				"available": host != "",
 				"remote":    host,
 				"port":      500,
@@ -3763,25 +3770,40 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		} else {
 			profile = s.openVPNProfile(username, r, nodeID)
 		}
-		filename := safeFilename(username) + "-openvpn.ovpn"
+		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
+		fileBase := safeFilename(nodeName)
+		if fileBase == "" {
+			fileBase = safeFilename(username)
+		}
+		filename := fileBase + ".ovpn"
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/l2tp.mobileconfig"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
 		profile := s.l2tpMobileConfig(username, r, nodeID)
-		filename := safeFilename(username) + "-l2tp.mobileconfig"
+		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
+		fileBase := safeFilename(nodeName)
+		if fileBase == "" {
+			fileBase = safeFilename(username)
+		}
+		filename := fileBase + "-l2tp.mobileconfig"
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/ikev2.mobileconfig"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
 		profile := s.ikev2MobileConfig(username, r, nodeID)
-		filename := safeFilename(username) + "-ikev2.mobileconfig"
+		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
+		fileBase := safeFilename(nodeName)
+		if fileBase == "" {
+			fileBase = safeFilename(username)
+		}
+		filename := fileBase + "-ikev2.mobileconfig"
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(profile))
 	default:
