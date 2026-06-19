@@ -76,6 +76,36 @@ func startWorker(db *sql.DB) {
 
 func workerTick(db *sql.DB, notifier *notify.Notifier) {
 	// Find customers whose subscriptions have expired
+	// First attempt auto-renewal for eligible customers
+	autoRenewRows, _ := db.Query(`
+		SELECT c.id, c.username, c.plan_id, p.price, p.duration_days, COALESCE(w.credit, 0) as credit
+		FROM customers c
+		JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username
+		JOIN plans p ON p.id = c.plan_id
+		LEFT JOIN wallets w ON w.username = c.username
+		WHERE c.status = 'active' AND c.auto_renew = 1 AND s.max_expires <= NOW()
+		AND COALESCE(w.credit, 0) >= p.price`)
+	if autoRenewRows != nil {
+		for autoRenewRows.Next() {
+			var cid, planID int64
+			var username string
+			var price, credit float64
+			var durationDays int
+			if autoRenewRows.Scan(&cid, &username, &planID, &price, &durationDays, &credit) == nil {
+				// Deduct from wallet and create new subscription
+				db.Exec(`UPDATE wallets SET credit = credit - ? WHERE username = ?`, price, username)
+				expires := time.Now().AddDate(0, 0, durationDays)
+				db.Exec(`INSERT INTO subscriptions(customer_id, username, plan_id, expires_at, status) VALUES(?,?,?,?,'active')`, cid, username, planID, expires)
+				db.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES(?,?,?,?,?,?)`,
+					cid, username, -price, "purchase", "Auto-renewal", "system")
+				log.Printf("[worker] auto-renewed %s (plan %d, charged %.2f)", username, planID, price)
+				notifier.SendEvent("renewal", fmt.Sprintf("🔄 Auto-renewed: %s", username), fmt.Sprintf("Plan renewed for %d days, charged $%.2f from wallet", durationDays, price))
+			}
+		}
+		autoRenewRows.Close()
+	}
+
+	// Find remaining expired customers (not auto-renewed)
 	expRows, expErr := db.Query(`SELECT c.id, c.username, COALESCE(p.grace_days, 0) as grace_days, s.max_expires
 		FROM customers c
 		JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username
