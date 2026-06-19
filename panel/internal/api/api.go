@@ -1918,6 +1918,25 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+
+	// Create default VPN configs for all protocols on the new node
+	defaultConfigs := []struct {
+		protocol string
+		port     int
+		network  string
+		extra    string
+	}{
+		{"openvpn", 1194, "10.8.0.0/24", `{"transport":"udp","cipher":"AES-256-GCM","tls_mode":"tls-crypt","dns1":"8.8.8.8","dns2":"8.8.4.4","comp_lzo":false,"topology":"subnet","verb":3,"keepalive":"10 120"}`},
+		{"l2tp", 1701, "10.9.0.0/24", `{"ipsec_mode":"ipsec","psk":"","auth_method":"CHAP","dns1":"8.8.8.8","dns2":"8.8.4.4","lcp_echo_interval":30,"lcp_echo_failure":4}`},
+		{"ikev2", 500, "10.10.0.0/24", `{"auth_type":"psk","psk":"","dns1":"8.8.8.8","dns2":"8.8.4.4","dpd_interval":30,"dpd_timeout":150,"rekey_time":"4h","ike_proposals":"aes256-sha256-modp2048","esp_proposals":"aes256-sha256"}`},
+		{"ssh", 2222, "", `{"listen_address":"0.0.0.0","key_type":"ed25519","max_sessions":10,"idle_timeout":0,"shell_access":false,"accounting_enabled":true,"accounting_interval":300}`},
+		{"wireguard", 51820, "10.66.66.0/24", `{"dns_1":"1.1.1.1","dns_2":"8.8.8.8","gaming_optimize":false}`},
+	}
+	for _, dc := range defaultConfigs {
+		_, _ = s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json) VALUES(?, ?, 0, ?, ?, ?)`,
+			id, dc.protocol, dc.port, dc.network, dc.extra)
+	}
+
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.created", "node", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true, "id": id, "token": token})

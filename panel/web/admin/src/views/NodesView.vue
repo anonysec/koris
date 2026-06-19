@@ -136,10 +136,11 @@ function getServiceStatus(node: any, protocol: string): string {
     if (protocol === 'ikev2' && metrics.ikev2_status) return metrics.ikev2_status
     if (protocol === 'ssh' && metrics.ssh_status) return metrics.ssh_status
   }
-  // If there is a config for this protocol, status is pending/unknown; otherwise not configured
-  const hasConfig = getNodeConfig(node.id, protocol)
-  if (!hasConfig) return 'not_configured'
-  // Node is online but no service status reported — likely service not installed
+  // Check if protocol config exists and is enabled/disabled
+  const config = getNodeConfig(node.id, protocol)
+  if (!config) return 'not_configured'
+  if (!config.enabled) return 'disabled'
+  // Node is online, protocol enabled, but no service status — service not running
   return node.status === 'online' ? 'inactive' : 'unknown'
 }
 
