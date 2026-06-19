@@ -75,24 +75,37 @@ func startWorker(db *sql.DB) {
 }
 
 func workerTick(db *sql.DB, notifier *notify.Notifier) {
-	// Find customers about to expire (for WireGuard auto-revocation)
-	expRows, expErr := db.Query(`SELECT c.id FROM customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username WHERE c.status='active' AND s.max_expires <= NOW()`)
+	// Find customers whose subscriptions have expired
+	expRows, expErr := db.Query(`SELECT c.id, c.username, COALESCE(p.grace_days, 0) as grace_days, s.max_expires
+		FROM customers c
+		JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username
+		LEFT JOIN plans p ON p.id = c.plan_id
+		WHERE c.status IN ('active', 'limited') AND s.max_expires <= NOW()`)
 	var expiringCustomerIDs []int64
 	if expErr == nil {
 		for expRows.Next() {
 			var cid int64
-			if expRows.Scan(&cid) == nil {
-				expiringCustomerIDs = append(expiringCustomerIDs, cid)
+			var username string
+			var graceDays int
+			var maxExpires time.Time
+			if expRows.Scan(&cid, &username, &graceDays, &maxExpires) == nil {
+				graceEnd := maxExpires.AddDate(0, 0, graceDays)
+				now := time.Now()
+
+				if graceDays > 0 && now.Before(graceEnd) {
+					// Within grace period → set to 'limited' (not expired yet)
+					db.Exec(`UPDATE customers SET status='limited' WHERE id=? AND status='active'`, cid)
+				} else {
+					// Grace period over (or no grace days) → expire
+					db.Exec(`UPDATE customers SET status='expired' WHERE id=? AND status IN ('active','limited')`, cid)
+					expiringCustomerIDs = append(expiringCustomerIDs, cid)
+				}
 			}
 		}
 		expRows.Close()
 	}
 
-	if _, err := db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`); err != nil {
-		log.Printf("[worker] expire subscriptions: %v", err)
-	}
-
-	// Auto-revoke WireGuard peers for expired customers
+	// Auto-revoke WireGuard peers for fully expired customers
 	for _, cid := range expiringCustomerIDs {
 		api.AutoRevokeWireGuardPeersByDB(db, cid)
 	}
