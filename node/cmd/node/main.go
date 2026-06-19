@@ -1670,16 +1670,23 @@ func checkUnit(unit string) string {
 	}
 }
 
+// cpuState stores the previous /proc/stat reading for non-blocking CPU percentage calculation.
+var cpuPrevIdle, cpuPrevTotal uint64
+
 func cpuPercent() float64 {
-	idle1, total1 := readCPU()
-	time.Sleep(180 * time.Millisecond)
-	idle2, total2 := readCPU()
-	idle := float64(idle2 - idle1)
-	total := float64(total2 - total1)
-	if total <= 0 {
+	idle, total := readCPU()
+	if cpuPrevTotal == 0 {
+		// First call: store baseline and return 0
+		cpuPrevIdle, cpuPrevTotal = idle, total
 		return 0
 	}
-	return round2((1 - idle/total) * 100)
+	idleDelta := float64(idle - cpuPrevIdle)
+	totalDelta := float64(total - cpuPrevTotal)
+	cpuPrevIdle, cpuPrevTotal = idle, total
+	if totalDelta <= 0 {
+		return 0
+	}
+	return round2((1 - idleDelta/totalDelta) * 100)
 }
 
 func readCPU() (idle, total uint64) {

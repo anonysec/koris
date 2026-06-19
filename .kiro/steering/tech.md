@@ -27,3 +27,4 @@ cd panel/web/admin && npm run build && npm run test
 - Migrations: `NNN_desc.sql`, forward-only, use IF NOT EXISTS.
 - Memory: GOMAXPROCS(1), GOGC=50, GOMEMLIMIT=100MB. No unbounded collections.
 - Execute immediately. Don't ask for confirmation. Fix errors and continue.
+- Use SSH protocol for all Git operations (clone, push, pull). Never use HTTPS for Git remotes.
