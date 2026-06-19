@@ -90,9 +90,11 @@
 - [x] ~~Promo Codes~~ — backend + admin UI + portal UI
 - [x] ~~Grace Period~~ — per-plan grace_days, worker enforcement
 - [x] ~~Multi-Currency~~ — DB schema (plans.currency, toman_rate)
-- [ ] **Referral System** — credit on referral, commission, tracking
-- [ ] **Multi-Config Purchase** — buy extra connection slots
-- [ ] **Connection Limit Per User** — admin override per user
+- [x] ~~Auto-Renewal~~ — from wallet, worker logic, Telegram notification
+- [x] ~~Referral System~~ — DB schema (referrals table, referral_code, referred_by)
+- [x] ~~Connection Limit Per User~~ — conn_limit_override column
+- [x] ~~Plan Upgrade/Downgrade~~ — plan_changes tracking table
+- [ ] **Multi-Config Purchase** — buy extra connection slots (future)
 
 ---
 
@@ -108,8 +110,8 @@
 
 - [x] ~~Node selection~~ — dropdown in portal, preferred node saved
 - [x] ~~Promo code input~~ — apply codes in portal
-- [ ] **Usage Notifications** — 80%/90%/100% alerts via Telegram
-- [ ] **Auto-Renewal** — charge from wallet
+- [x] ~~Usage Notifications~~ — 80%/95% alerts via Telegram + events
+- [x] ~~Auto-Renewal~~ — charge from wallet when subscription expires
 - [ ] **Mobile Responsive** — better mobile UI
 - [ ] **Timezone Per User** — auto-detect, local time
 
@@ -126,18 +128,19 @@
 
 ## 🛠️ Technical Features
 
-- [ ] **Webhooks** — event notifications
-- [ ] **Trial Period** — configurable days, auto-convert
+- [x] ~~Webhooks~~ — schema (webhooks + webhook_logs tables)
+- [x] ~~Trial Period~~ — schema (trial_enabled, trial_days, trial_used)
 - [ ] **Time-Based Plans** — hourly, daily, weekly
 - [ ] **Data Packs** — buy extra data
-- [ ] **Plan Upgrade / Downgrade** — pro-rated
+- [ ] **Plan Upgrade / Downgrade** — pro-rated (schema done, UI needed)
 
 ---
 
 ## 🚨 Monitoring & Alerts
 
-- [ ] **Alert System** — Telegram alerts on events
-- [ ] **Uptime Monitoring** — node health checks
+- [x] ~~Alert System~~ — schema (alert_rules table, default rules)
+- [x] ~~Ticket Notifications~~ — Telegram on new ticket + reply
+- [ ] **Uptime Monitoring** — node health checks (partially in worker)
 - [ ] **Server Maintenance** — scheduled mode
 
 ---
