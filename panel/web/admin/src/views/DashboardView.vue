@@ -179,14 +179,19 @@ function formatDuration(seconds: number): string {
         </div>
         <div v-else-if="bandwidthChartData.length > 0" class="bandwidth-chart-wrapper" @mouseleave="hoveredBar = null">
           <KChart
-            type="bar"
+            type="area"
             :data="bandwidthChartData"
             :height="200"
-            :options="{ showGrid: true, showTooltip: false }"
+            :options="{ gradientFill: true, showGrid: true, showLabels: true }"
             :animate="true"
             :interactive="true"
             @point-hover="handleBarHover"
           />
+          <div class="bandwidth-timeline">
+            <span v-if="bandwidthChartData.length > 0">{{ bandwidthChartData[0].label }}</span>
+            <span v-if="bandwidthChartData.length > 2">{{ bandwidthChartData[Math.floor(bandwidthChartData.length / 2)].label }}</span>
+            <span v-if="bandwidthChartData.length > 0">{{ bandwidthChartData[bandwidthChartData.length - 1].label }}</span>
+          </div>
           <!-- Custom Tooltip -->
           <div
             v-if="hoveredPoint"
@@ -364,6 +369,14 @@ function formatDuration(seconds: number): string {
 
 /* ─── Bandwidth Chart ─── */
 .bandwidth-chart-wrapper { position: relative; }
+
+.bandwidth-timeline {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2) 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
 
 .bandwidth-tooltip {
   position: absolute;

@@ -680,16 +680,16 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 	where := "c.deleted_at IS NULL"
 	args := []any{}
 	if q != "" {
-		where += " AND (c.username LIKE ? OR c.display_name LIKE ?)"
+		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(p.name,'') LIKE ? OR c.status LIKE ? OR CAST(c.id AS CHAR) LIKE ?)"
 		like := "%" + q + "%"
-		args = append(args, like, like)
+		args = append(args, like, like, like, like, like)
 	}
 	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),c.created_at
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
 		WHERE %s
-		ORDER BY c.id DESC LIMIT 500`, where)
+		ORDER BY c.id DESC LIMIT 5000`, where)
 	rows, err := s.DB.Query(query, args...)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
