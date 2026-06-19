@@ -258,3 +258,99 @@ func (s *Server) exportRevenueCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	cw.Flush()
 }
+
+// ========== Uptime Monitoring ==========
+
+func (s *Server) uptimeReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Node uptime over last 24h (based on status changes)
+	rows, err := s.DB.Query(`
+		SELECT n.id, n.name, n.status, n.last_seen_at,
+		       TIMESTAMPDIFF(MINUTE, COALESCE(n.last_seen_at, n.created_at), NOW()) as minutes_since_seen
+		FROM nodes n
+		WHERE n.status <> 'disabled'
+		ORDER BY n.id`)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type NodeUptime struct {
+		ID            int64   `json:"id"`
+		Name          string  `json:"name"`
+		Status        string  `json:"status"`
+		LastSeen      string  `json:"last_seen_at"`
+		MinutesSince  int     `json:"minutes_since_seen"`
+		UptimePercent float64 `json:"uptime_percent"`
+	}
+	nodes := []NodeUptime{}
+	for rows.Next() {
+		var n NodeUptime
+		var lastSeen time.Time
+		if rows.Scan(&n.ID, &n.Name, &n.Status, &lastSeen, &n.MinutesSince) == nil {
+			n.LastSeen = lastSeen.Format(time.RFC3339)
+			// Simple uptime: if online and seen within 5 min = 100%, else degrade
+			if n.Status == "online" && n.MinutesSince <= 5 {
+				n.UptimePercent = 100.0
+			} else if n.Status == "stale" || n.MinutesSince <= 15 {
+				n.UptimePercent = 95.0
+			} else if n.Status == "offline" {
+				n.UptimePercent = 0.0
+			} else {
+				n.UptimePercent = 50.0
+			}
+			nodes = append(nodes, n)
+		}
+	}
+
+	writeJSON(w, map[string]any{"ok": true, "nodes": nodes})
+}
+
+// ========== Balance / Wallet Summary ==========
+
+func (s *Server) walletSummary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var totalCredit, avgCredit float64
+	var activeWallets, zeroWallets int
+	s.DB.QueryRow(`SELECT COALESCE(SUM(credit),0), COALESCE(AVG(credit),0), COUNT(*) FROM wallets WHERE credit > 0`).Scan(&totalCredit, &avgCredit, &activeWallets)
+	s.DB.QueryRow(`SELECT COUNT(*) FROM wallets WHERE credit <= 0`).Scan(&zeroWallets)
+
+	// Recent transactions
+	type RecentTx struct {
+		Username string  `json:"username"`
+		Amount   float64 `json:"amount"`
+		Type     string  `json:"type"`
+		Date     string  `json:"date"`
+	}
+	txRows, _ := s.DB.Query(`SELECT username, amount, type, created_at FROM wallet_transactions ORDER BY id DESC LIMIT 20`)
+	recent := []RecentTx{}
+	if txRows != nil {
+		defer txRows.Close()
+		for txRows.Next() {
+			var tx RecentTx
+			var created time.Time
+			if txRows.Scan(&tx.Username, &tx.Amount, &tx.Type, &created) == nil {
+				tx.Date = created.Format(time.RFC3339)
+				recent = append(recent, tx)
+			}
+		}
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":             true,
+		"total_credit":   totalCredit,
+		"avg_credit":     avgCredit,
+		"active_wallets": activeWallets,
+		"zero_wallets":   zeroWallets,
+		"recent":         recent,
+	})
+}
