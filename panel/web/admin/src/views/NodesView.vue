@@ -13,7 +13,6 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
-import WireGuardConfig from '@/components/WireGuardConfig.vue'
 
 const { t } = useI18n()
 const store = useNodesStore()
@@ -82,20 +81,28 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
       accounting_enabled: true, accounting_interval: 300,
     },
   },
+  wireguard: {
+    port: 51820, network: '10.66.66.0/24', enabled: false, mtu: 1420, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      dns_1: '1.1.1.1', dns_2: '8.8.8.8', gaming_optimize: false,
+    },
+  },
 }
 
-const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh'] as const
+const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh', 'wireguard'] as const
 const protocolIcons: Record<string, string> = {
   openvpn: '🔐',
   l2tp: '🔒',
   ikev2: '🛡️',
   ssh: '🖥️',
+  wireguard: '⚡',
 }
 const protocolLabels: Record<string, string> = {
   openvpn: 'OpenVPN',
   l2tp: 'L2TP',
   ikev2: 'IKEv2',
   ssh: 'SSH',
+  wireguard: 'WireGuard',
 }
 
 const editingConfig = ref<{ nodeId: number; protocol: string } | null>(null)
@@ -111,22 +118,29 @@ function formatBps(bps: number): string {
 }
 
 function getServiceStatus(node: any, protocol: string): string {
+  // If node is offline/disabled, all services are effectively offline
+  if (node.status === 'offline' || node.status === 'disabled') {
+    return 'offline'
+  }
+
   const metrics = node.status_metrics
-  // Check node_services array first (all services including SSH are stored here)
+  // Check node_services array first (all services including SSH/WireGuard are stored here)
   if (node.services && Array.isArray(node.services)) {
     const svc = node.services.find((s: any) => s.service === protocol)
     if (svc && svc.status) return svc.status
   }
-  // Fall back to status_metrics for all protocols
+  // Fall back to status_metrics for legacy protocols
   if (metrics) {
     if (protocol === 'openvpn' && metrics.openvpn_status) return metrics.openvpn_status
     if (protocol === 'l2tp' && metrics.l2tp_status) return metrics.l2tp_status
     if (protocol === 'ikev2' && metrics.ikev2_status) return metrics.ikev2_status
     if (protocol === 'ssh' && metrics.ssh_status) return metrics.ssh_status
   }
-  // If there is a config for this protocol, status is unknown; otherwise not configured
+  // If there is a config for this protocol, status is pending/unknown; otherwise not configured
   const hasConfig = getNodeConfig(node.id, protocol)
-  return hasConfig ? 'unknown' : 'not_configured'
+  if (!hasConfig) return 'not_configured'
+  // Node is online but no service status reported — likely service not installed
+  return node.status === 'online' ? 'inactive' : 'unknown'
 }
 
 function getNodeConfig(nodeId: number, protocol: string) {
@@ -814,6 +828,29 @@ onMounted(() => {
                             </template>
                           </KFormField>
                         </template>
+
+                        <!-- WireGuard networking -->
+                        <template v-if="proto === 'wireguard'">
+                          <KFormField :name="`${proto}-dns1`" :label="t('wireguard.primary_dns')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns_1" placeholder="1.1.1.1" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-dns2`" :label="t('wireguard.secondary_dns')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns_2" placeholder="8.8.8.8" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-gaming`" :label="t('wireguard.gaming_optimize')">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.gaming_optimize" @change="configForm.extra_json.gaming_optimize = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                              <span class="toggle-hint">{{ t('wireguard.gaming_optimize_hint') }}</span>
+                            </template>
+                          </KFormField>
+                        </template>
                       </div>
                     </div>
 
@@ -1066,12 +1103,6 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
-              <!-- WireGuard Config Panel (per-node) -->
-              <WireGuardConfig
-                :node-id="node.id"
-                :current-config="getNodeConfig(node.id, 'wireguard')"
-                @saved="store.loadNodeVpnConfigs(node.id)"
-              />
             </div>
           </div>
         </div>

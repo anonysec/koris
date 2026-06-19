@@ -11,6 +11,7 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KButton from '@koris/ui/KButton.vue'
+import BackupView from '@/views/BackupView.vue'
 
 const props = defineProps<{ tab?: string }>()
 
@@ -764,33 +765,7 @@ onMounted(async () => {
 
       <!-- Backup -->
       <template #backup>
-        <div class="settings-panel">
-          <h4 class="section-title">{{ t('settings.backup') }}</h4>
-          <p class="text-muted text-sm">{{ t('settings.backup_desc') }}</p>
-
-          <div class="backup-section">
-            <h5 class="subsection-title">{{ t('settings.export_backup') }}</h5>
-            <p class="text-muted text-sm">{{ t('settings.backup_format') }}</p>
-            <KButton variant="primary" size="sm" :loading="exporting" @click="downloadBackup">
-              {{ t('settings.export_backup') }}
-            </KButton>
-          </div>
-
-          <div class="backup-section">
-            <h5 class="subsection-title">{{ t('settings.import_backup') }}</h5>
-            <p class="text-muted text-sm">{{ t('settings.import_backup_desc') }}</p>
-            <input
-              ref="importFileInput"
-              type="file"
-              accept=".json"
-              class="hidden-input"
-              @change="handleImportFile"
-            />
-            <KButton variant="ghost" size="sm" :loading="importing" @click="triggerImport">
-              {{ t('settings.import_backup') }}
-            </KButton>
-          </div>
-        </div>
+        <BackupView />
       </template>
     </KTabs>
   </div>
