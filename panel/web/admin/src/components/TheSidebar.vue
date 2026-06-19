@@ -97,11 +97,6 @@ const navGroups = computed<NavGroup[]>(() => [
         label: t('nav.settings'),
         icon: 'settings',
       },
-      {
-        route: 'backups',
-        label: t('nav.backups'),
-        icon: 'backups',
-      },
     ],
   },
 ])
