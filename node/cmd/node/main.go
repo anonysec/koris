@@ -529,6 +529,52 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			changesList[k] = map[string]string{"old": v[0], "new": v[1]}
 		}
 		return "succeeded", map[string]any{"changes": changesList}, ""
+
+	case "agent.update_config":
+		// Panel pushes config key-value pairs to the agent env file.
+		// Accepts: { "config": { "KEY": "VALUE", ... } }
+		// This allows the panel to manage NODE_NAME, PANEL_URL, etc.
+		configMap, ok := payload["config"].(map[string]any)
+		if !ok || len(configMap) == 0 {
+			return "failed", map[string]any{}, "config map required"
+		}
+		// Read current env file
+		envData, err := os.ReadFile(envFile)
+		if err != nil {
+			return "failed", map[string]any{}, "read env file: " + err.Error()
+		}
+		lines := strings.Split(string(envData), "\n")
+		updated := map[string]bool{}
+		// Update existing keys
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			eqIdx := strings.Index(trimmed, "=")
+			if eqIdx == -1 {
+				continue
+			}
+			key := trimmed[:eqIdx]
+			if newVal, exists := configMap[key]; exists {
+				lines[i] = fmt.Sprintf("%s=%s", key, fmt.Sprint(newVal))
+				updated[key] = true
+			}
+		}
+		// Append new keys that weren't in the file
+		for key, val := range configMap {
+			if !updated[key] {
+				lines = append(lines, fmt.Sprintf("%s=%s", key, fmt.Sprint(val)))
+			}
+		}
+		// Write back
+		if err := os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0600); err != nil {
+			return "failed", map[string]any{}, "write env file: " + err.Error()
+		}
+		// Reload config
+		cfg.Reload(envFile)
+		log.Info("config updated via panel task", map[string]any{"keys": configMap})
+		return "succeeded", map[string]any{"updated_keys": configMap}, ""
 	case "wireguard.setup":
 		return executeWireGuardSetup(payload)
 	case "wireguard.add_peer":

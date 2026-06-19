@@ -1983,6 +1983,15 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.updated", "node", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
+
+	// Push config update to the node agent so NODE_NAME stays in sync
+	configPayload := map[string]any{
+		"NODE_NAME": in.Name,
+	}
+	payloadJSON, _ := json.Marshal(map[string]any{"config": configPayload})
+	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'agent.update_config', ?, 'pending', ?)`,
+		id, string(payloadJSON), actor)
+
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -1992,6 +2001,16 @@ func (s *Server) rotateNodeToken(w http.ResponseWriter, r *http.Request, id int6
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+
+	// Push new token to the node agent before returning
+	// The agent will update its NODE_TOKEN env var and reload
+	configPayload := map[string]any{
+		"NODE_TOKEN": token,
+	}
+	payloadJSON, _ := json.Marshal(map[string]any{"config": configPayload})
+	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'agent.update_config', ?, 'pending', ?)`,
+		id, string(payloadJSON), "system")
+
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.token_rotated", "node", strconv.FormatInt(id, 10), nil, nil, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true, "token": token})
