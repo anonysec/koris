@@ -110,6 +110,40 @@ func workerTick(db *sql.DB, notifier *notify.Notifier) {
 		api.AutoRevokeWireGuardPeersByDB(db, cid)
 	}
 
+	// Usage warnings: notify admin via Telegram when users hit thresholds (80%, 95%)
+	warnRows, warnErr := db.Query(`
+		SELECT c.username, CAST(r.value AS UNSIGNED) as max_bytes, a.used
+		FROM customers c
+		JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data'
+		JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username
+		WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0`)
+	if warnErr == nil {
+		for warnRows.Next() {
+			var username string
+			var maxBytes, used int64
+			if warnRows.Scan(&username, &maxBytes, &used) == nil && maxBytes > 0 {
+				percent := int(float64(used) / float64(maxBytes) * 100)
+				// Notify at 80% and 95% (check if not already notified via events)
+				if percent >= 95 {
+					var already int
+					db.QueryRow(`SELECT COUNT(*) FROM events WHERE related=? AND type='data_warning' AND title LIKE '%95%' AND created_at > NOW() - INTERVAL 1 DAY`, username).Scan(&already)
+					if already == 0 {
+						notifier.SendEvent("data_warning", fmt.Sprintf("⚠️ %s at 95%% data", username), fmt.Sprintf("User %s has used 95%% of their data limit", username))
+						db.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES('data_warning','warning',?,?,?,?)`, fmt.Sprintf("%s at 95%% data", username), fmt.Sprintf("Used %d%% of data limit", percent), "system", username)
+					}
+				} else if percent >= 80 {
+					var already int
+					db.QueryRow(`SELECT COUNT(*) FROM events WHERE related=? AND type='data_warning' AND title LIKE '%80%' AND created_at > NOW() - INTERVAL 1 DAY`, username).Scan(&already)
+					if already == 0 {
+						notifier.SendEvent("data_warning", fmt.Sprintf("📊 %s at 80%% data", username), fmt.Sprintf("User %s has used 80%% of their data limit", username))
+						db.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES('data_warning','info',?,?,?,?)`, fmt.Sprintf("%s at 80%% data", username), fmt.Sprintf("Used %d%% of data limit", percent), "system", username)
+					}
+				}
+			}
+		}
+		warnRows.Close()
+	}
+
 	if _, err := db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`); err != nil {
 		log.Printf("[worker] data limit enforcement: %v", err)
 	}
