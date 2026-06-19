@@ -381,6 +381,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/plans", s.requireCustomer(s.portalPlans))
 	mux.HandleFunc("/api/portal/renew", s.requireCustomer(s.portalRenew))
 	mux.HandleFunc("/api/portal/password", s.requireCustomer(s.portalPassword))
+	mux.HandleFunc("/api/portal/preferred-node", s.requireCustomer(s.portalPreferredNode))
 	mux.HandleFunc("/api/portal/payments", s.requireCustomer(s.portalPayments))
 	mux.HandleFunc("/api/portal/payment-methods", s.requireCustomer(s.portalPaymentMethods))
 	mux.HandleFunc("/api/portal/tickets", s.requireCustomer(s.portalTickets))
@@ -3730,7 +3731,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
-	host, port, proto, nodeName := s.openVPNEndpointNode(r, nodeID)
+	host, port, _, nodeName := s.openVPNEndpointNode(r, nodeID)
 	var psk string
 	_ = s.DB.QueryRow(`SELECT COALESCE(ipsec_psk,'') FROM vpn_core_settings WHERE id=1`).Scan(&psk)
 	psk = strings.TrimSpace(psk)
@@ -3744,26 +3745,45 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		nodeBase = "vpn"
 	}
 	userBase := safeFilename(username)
-	genericFilename := nodeBase + ".ovpn"
+	genericFilenameUDP := nodeBase + ".ovpn"
+	genericFilenameTCP := nodeBase + "-TCP.ovpn"
 	perUserOvpn := userBase + "-" + nodeBase + ".ovpn"
 	perUserL2TP := userBase + "-" + nodeBase + ".mobileconfig"
 	perUserIKEv2 := userBase + "-" + nodeBase + "-ikev2.mobileconfig"
 
+	// Get user's preferred node
+	var preferredNodeID int64
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
+
 	writeJSON(w, map[string]any{
 		"ok":                     true,
 		"passwordless_available": passwordlessAvailable,
+		"preferred_node_id":      preferredNodeID,
 		"profiles": []map[string]any{
 			{
-				"type":                  "openvpn",
-				"name":                  "OpenVPN — " + nodeName,
-				"filename":              genericFilename,
+				"type":                  "openvpn-udp",
+				"name":                  "OpenVPN UDP — " + nodeName,
+				"filename":              genericFilenameUDP,
 				"filename_passwordless": perUserOvpn,
 				"available":             host != "",
 				"remote":                host,
 				"port":                  port,
-				"protocol":              proto,
+				"protocol":              "udp",
 				"node":                  nodeName,
 				"download":              fmt.Sprintf("/api/portal/profiles/openvpn.ovpn?node_id=%d", nodeID),
+				"description":           "Fast, best for gaming. Direct connection with failover.",
+			},
+			{
+				"type":        "openvpn-tcp",
+				"name":        "OpenVPN TCP — " + nodeName,
+				"filename":    genericFilenameTCP,
+				"available":   host != "",
+				"remote":      host,
+				"port":        443,
+				"protocol":    "tcp",
+				"node":        nodeName,
+				"download":    fmt.Sprintf("/api/portal/profiles/openvpn-tcp.ovpn?node_id=%d", nodeID),
+				"description": "Stable, supports node selection. Works behind firewalls.",
 			},
 			{
 				"type":      "l2tp",
@@ -3803,6 +3823,19 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	path := r.URL.Path
 	switch {
+	case strings.HasSuffix(path, "/openvpn-tcp.ovpn"):
+		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
+		profile := s.openVPNProfileTCP(username, r, nodeID)
+		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
+		nodeBase := safeFilename(nodeName)
+		if nodeBase == "" {
+			nodeBase = "vpn"
+		}
+		filename := nodeBase + "-TCP.ovpn"
+		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/openvpn.ovpn"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
 		passwordless := r.URL.Query().Get("passwordless") == "true"
@@ -3892,6 +3925,83 @@ func (s *Server) openVPNProfile(username string, r *http.Request, nodeID int64) 
 
 func (s *Server) openVPNProfilePasswordless(username string, r *http.Request, nodeID int64) string {
 	return s.openVPNProfileWithAuth(username, r, nodeID, false)
+}
+
+// openVPNProfileTCP generates a TCP-based OpenVPN config on port 443.
+// Uses the user's preferred node as primary, with backup nodes as fallback.
+func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int64) string {
+	host, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
+	if nodeName == "" {
+		nodeName = host
+	}
+	caBlock := inlineOpenVPNBlock("ca", getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt"))
+	tlsCryptBlock := inlineOpenVPNBlock("tls-crypt", getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key"))
+
+	// Build remote lines for TCP: preferred node first, then backups
+	remoteLines := fmt.Sprintf("remote %s 443 tcp", host)
+
+	// Get user's preferred node — put it first if different from default
+	var preferredNodeID int64
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
+	if preferredNodeID > 0 && preferredNodeID != nodeID {
+		var prefDomain, prefIP string
+		if s.DB.QueryRow(`SELECT COALESCE(domain,''), public_ip FROM nodes WHERE id=? AND status <> 'disabled'`, preferredNodeID).Scan(&prefDomain, &prefIP) == nil {
+			prefHost := strings.TrimSpace(prefDomain)
+			if prefHost == "" {
+				prefHost = strings.TrimSpace(prefIP)
+			}
+			if prefHost != "" && prefHost != host {
+				// Preferred node goes first
+				remoteLines = fmt.Sprintf("remote %s 443 tcp\nremote %s 443 tcp", prefHost, host)
+			}
+		}
+	}
+
+	// Add other active nodes as backup
+	rows, err := s.DB.Query(`
+		SELECT COALESCE(n.domain,''), n.public_ip
+		FROM nodes n
+		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = 1
+		WHERE n.status <> 'disabled' AND n.id <> ? AND n.id <> ?
+		ORDER BY n.id`, nodeID, preferredNodeID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var domain, ip string
+			if rows.Scan(&domain, &ip) == nil {
+				backupHost := strings.TrimSpace(domain)
+				if backupHost == "" {
+					backupHost = strings.TrimSpace(ip)
+				}
+				if backupHost != "" && backupHost != host {
+					remoteLines += fmt.Sprintf("\nremote %s 443 tcp", backupHost)
+				}
+			}
+		}
+	}
+
+	return fmt.Sprintf(`# KorisPanel OpenVPN TCP Profile
+# User: %s
+# Node: %s
+# Generated: %s
+# TCP mode — supports node selection via portal
+client
+dev tun
+%s
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+setenv CLIENT_CERT 0
+auth-user-pass
+auth-nocache
+auth SHA256
+data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
+data-ciphers-fallback AES-256-GCM
+verb 3
+pull
+%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), remoteLines, caBlock, tlsCryptBlock)
 }
 
 // canUsePasswordless checks if a customer is allowed to generate passwordless configs.
@@ -4381,6 +4491,47 @@ func (s *Server) portalPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	s.createEvent("account", "info", "Password changed", "Customer changed their VPN password", username, username)
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// portalPreferredNode allows customers to get/set their preferred VPN node.
+// GET: returns current preferred node ID
+// POST: sets preferred node (0 = random/auto)
+func (s *Server) portalPreferredNode(w http.ResponseWriter, r *http.Request) {
+	username, ok := s.currentCustomer(r)
+	if !ok {
+		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		var preferredNodeID int64
+		_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
+		writeJSON(w, map[string]any{"ok": true, "preferred_node_id": preferredNodeID})
+	case http.MethodPost:
+		var in struct {
+			NodeID int64 `json:"node_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+			return
+		}
+		// Validate node exists and is active (0 = auto/random)
+		if in.NodeID > 0 {
+			var exists int
+			if err := s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id=? AND status <> 'disabled'`, in.NodeID).Scan(&exists); err != nil || exists == 0 {
+				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_node"})
+				return
+			}
+		}
+		if in.NodeID == 0 {
+			_, _ = s.DB.Exec(`UPDATE customers SET preferred_node_id=NULL WHERE username=? AND deleted_at IS NULL`, username)
+		} else {
+			_, _ = s.DB.Exec(`UPDATE customers SET preferred_node_id=? WHERE username=? AND deleted_at IS NULL`, in.NodeID, username)
+		}
+		writeJSON(w, map[string]any{"ok": true, "preferred_node_id": in.NodeID})
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
 }
 
 func (s *Server) portalPayments(w http.ResponseWriter, r *http.Request) {
