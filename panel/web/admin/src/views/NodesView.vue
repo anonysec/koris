@@ -53,21 +53,21 @@ const nodeForm = ref({
 // ─── Protocol Defaults & Config State ────────────────────────────────────────
 const PROTOCOL_DEFAULTS: Record<string, any> = {
   openvpn: {
-    port: 1194, network: '10.8.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    port: 1194, network: '10.8.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
     extra_json: {
       transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4',
       comp_lzo: false, push_routes: '', fragment: 0, mssfix: 0, keepalive: '10 120', topology: 'subnet', verb: 3, custom_directives: '',
     },
   },
   l2tp: {
-    port: 1701, network: '10.9.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    port: 1701, network: '10.9.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
     extra_json: {
       ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4',
       lcp_echo_interval: 30, lcp_echo_failure: 4, idle_timeout: 0,
     },
   },
   ikev2: {
-    port: 500, network: '10.10.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    port: 500, network: '10.10.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
     extra_json: {
       auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
       dpd_interval: 30, dpd_timeout: 150, rekey_time: '4h', ike_proposals: 'aes256-sha256-modp2048', esp_proposals: 'aes256-sha256', left_id: '', right_id: '%any', fragment_size: 0,
@@ -82,7 +82,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     },
   },
   wireguard: {
-    port: 51820, network: '10.66.66.0/24', enabled: false, mtu: 1420, max_clients: 0, enable_logs: true, conn_limit: 0,
+    port: 51820, network: '10.66.0.0/20', enabled: false, mtu: 1420, max_clients: 0, enable_logs: true, conn_limit: 0,
     extra_json: {
       dns_1: '1.1.1.1', dns_2: '8.8.8.8', gaming_optimize: false,
     },
@@ -726,7 +726,7 @@ onMounted(() => {
                         </KFormField>
                         <KFormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')" :class="{ 'field--invalid': configForm.network && !isCidrValid(configForm.network) }">
                           <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
+                            <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/20" />
                             <span v-if="configForm.network && !isCidrValid(configForm.network)" class="validation-msg">{{ t('nodes.validation_cidr') }}</span>
                           </template>
                         </KFormField>
