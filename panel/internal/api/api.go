@@ -3927,6 +3927,38 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 		authComment = "# Passwordless mode — no credentials required."
 	}
 
+	// Build remote lines: primary + backup nodes for failover
+	remoteLines := fmt.Sprintf("remote %s %d %s", host, port, proto)
+
+	// Add backup remotes: all other active nodes with OpenVPN enabled
+	rows, err := s.DB.Query(`
+		SELECT COALESCE(n.domain,''), n.public_ip
+		FROM nodes n
+		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = 1
+		WHERE n.status <> 'disabled' AND n.id <> ?
+		ORDER BY n.id`, nodeID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var domain, ip string
+			if rows.Scan(&domain, &ip) == nil {
+				backupHost := strings.TrimSpace(domain)
+				if backupHost == "" {
+					backupHost = strings.TrimSpace(ip)
+				}
+				if backupHost != "" && backupHost != host {
+					remoteLines += fmt.Sprintf("\nremote %s %d %s", backupHost, port, proto)
+				}
+			}
+		}
+	}
+
+	// Add remote-random for load balancing across backup servers
+	remoteRandomLine := ""
+	if strings.Contains(remoteLines, "\n") {
+		remoteRandomLine = "\nremote-random"
+	}
+
 	return fmt.Sprintf(`# KorisPanel generated OpenVPN profile
 # User: %s
 # Node: %s
@@ -3934,8 +3966,7 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 %s
 client
 dev tun
-proto %s
-remote %s %d
+%s%s
 resolv-retry infinite
 nobind
 persist-key
@@ -3949,7 +3980,7 @@ data-ciphers-fallback AES-256-GCM
 explicit-exit-notify 1
 verb 3
 pull
-%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), authComment, proto, host, port, authLine, caBlock, tlsCryptBlock)
+%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), authComment, remoteLines, remoteRandomLine, authLine, caBlock, tlsCryptBlock)
 }
 
 func getenvFirst(envName string, paths ...string) string {
