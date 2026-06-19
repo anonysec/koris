@@ -50,6 +50,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.unavailable': 'N/A',
     'portal.vpn.noProfiles': 'No VPN files yet',
     'portal.vpn.noProfilesDesc': 'Your connection files will show up here when ready.',
+    'portal.vpn.preferredNode': 'Server',
+    'portal.vpn.autoRandom': '🌐 Auto (best available)',
 
     // WireGuard section
     'portal.wireguard.title': 'WireGuard VPN',
@@ -134,6 +136,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.unavailable': 'ندارد',
     'portal.vpn.noProfiles': 'هنوز فایلی نیست',
     'portal.vpn.noProfilesDesc': 'فایل‌های اتصال شما وقتی آماده شوند اینجا نمایش داده می‌شوند.',
+    'portal.vpn.preferredNode': 'سرور',
+    'portal.vpn.autoRandom': '🌐 خودکار (بهترین موجود)',
 
     // WireGuard section
     'portal.wireguard.title': 'وایرگارد VPN',
@@ -218,6 +222,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.unavailable': '不可用',
     'portal.vpn.noProfiles': '暂无VPN文件',
     'portal.vpn.noProfilesDesc': '连接文件准备好后会显示在这里。',
+    'portal.vpn.preferredNode': '服务器',
+    'portal.vpn.autoRandom': '🌐 自动（最佳可用）',
 
     // WireGuard section
     'portal.wireguard.title': 'WireGuard VPN',
@@ -302,6 +308,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.unavailable': 'Н/Д',
     'portal.vpn.noProfiles': 'Пока нет файлов VPN',
     'portal.vpn.noProfilesDesc': 'Файлы подключения появятся здесь, когда будут готовы.',
+    'portal.vpn.preferredNode': 'Сервер',
+    'portal.vpn.autoRandom': '🌐 Авто (лучший доступный)',
 
     // WireGuard section
     'portal.wireguard.title': 'WireGuard VPN',
