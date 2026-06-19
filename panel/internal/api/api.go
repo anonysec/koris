@@ -3662,23 +3662,37 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 	port = 1194
 	proto = "udp"
 	_ = s.DB.QueryRow(`SELECT openvpn_port,openvpn_protocol FROM vpn_core_settings WHERE id=1`).Scan(&port, &proto)
+
+	// Priority 0: Global VPN domain (static config — same domain for all nodes, DNS-based failover)
+	var globalVPNDomain string
+	_ = s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key='vpn_domain'`).Scan(&globalVPNDomain)
+	globalVPNDomain = strings.TrimSpace(globalVPNDomain)
+	if globalVPNDomain != "" {
+		host = globalVPNDomain
+	}
+
 	if nodeID > 0 {
-		// Priority 1: Check for active failover domain pointing to this node
-		var failoverDomain string
-		if err := s.DB.QueryRow(
-			`SELECT domain FROM failover_domains WHERE current_node_id = ? AND is_active = 1 LIMIT 1`, nodeID,
-		).Scan(&failoverDomain); err == nil && strings.TrimSpace(failoverDomain) != "" {
-			host = strings.TrimSpace(failoverDomain)
+		// Get node name regardless
+		var domain, publicIP string
+		_ = s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE id=? AND status <> 'disabled' LIMIT 1`, nodeID).Scan(&nodeName, &domain, &publicIP)
+
+		if host == "" {
+			// Priority 1: Check for active failover domain pointing to this node
+			var failoverDomain string
+			if err := s.DB.QueryRow(
+				`SELECT domain FROM failover_domains WHERE current_node_id = ? AND is_active = 1 LIMIT 1`, nodeID,
+			).Scan(&failoverDomain); err == nil && strings.TrimSpace(failoverDomain) != "" {
+				host = strings.TrimSpace(failoverDomain)
+			}
 		}
 
-		// Priority 2 & 3: Node's domain field, then public_ip
-		var domain, publicIP string
-		if err := s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE id=? AND status <> 'disabled' LIMIT 1`, nodeID).Scan(&nodeName, &domain, &publicIP); err == nil {
+		if host == "" {
+			// Priority 2 & 3: Node's domain field, then public_ip
+			var domain2, publicIP2 string
+			_ = s.DB.QueryRow(`SELECT COALESCE(domain,''),public_ip FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&domain2, &publicIP2)
+			host = strings.TrimSpace(domain2)
 			if host == "" {
-				host = strings.TrimSpace(domain)
-			}
-			if host == "" {
-				host = strings.TrimSpace(publicIP)
+				host = strings.TrimSpace(publicIP2)
 			}
 		}
 	}
@@ -3704,6 +3718,7 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 	}
 	return host, port, proto, nodeName
 }
+
 func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
