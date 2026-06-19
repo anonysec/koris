@@ -36,38 +36,38 @@ type DiagnosticsReport struct {
 
 // WireGuardPeerStat holds per-peer statistics from `wg show wg0 dump`.
 type WireGuardPeerStat struct {
-	PublicKey        string `json:"public_key"`
-	Endpoint         string `json:"endpoint"`
-	AllowedIPs       string `json:"allowed_ips"`
-	LatestHandshake  int64  `json:"latest_handshake"`
-	RxBytes          int64  `json:"rx_bytes"`
-	TxBytes          int64  `json:"tx_bytes"`
-	Active           bool   `json:"active"`
+	PublicKey       string `json:"public_key"`
+	Endpoint        string `json:"endpoint"`
+	AllowedIPs      string `json:"allowed_ips"`
+	LatestHandshake int64  `json:"latest_handshake"`
+	RxBytes         int64  `json:"rx_bytes"`
+	TxBytes         int64  `json:"tx_bytes"`
+	Active          bool   `json:"active"`
 }
 
 type Push struct {
-	Token         string             `json:"token"`
-	Type          string             `json:"type"`
-	Hostname      string             `json:"hostname"`
-	PublicIP      string             `json:"public_ip"`
-	PublicIPv6    string             `json:"public_ipv6"`
-	OS            string             `json:"os"`
-	Timestamp     time.Time          `json:"timestamp"`
-	CPUPercent    float64            `json:"cpu_percent"`
-	RAMPercent    float64            `json:"ram_percent"`
-	DiskPercent   float64            `json:"disk_percent"`
-	RxBps         int64              `json:"rx_bps"`
-	TxBps         int64              `json:"tx_bps"`
-	RxBytes       int64              `json:"rx_bytes"`
-	TxBytes       int64              `json:"tx_bytes"`
-	OnlineUsers   int                `json:"online_users"`
-	OpenVPNStatus string             `json:"openvpn_status"`
-	L2TPStatus    string             `json:"l2tp_status"`
-	IKEv2Status   string             `json:"ikev2_status"`
-	WireGuardStatus    string              `json:"wireguard_status"`
-	Services           map[string]string   `json:"services"`
-	Diagnostics        *DiagnosticsReport  `json:"diagnostics,omitempty"`
-	PerUserBandwidth   []UserBandwidth     `json:"per_user_bandwidth,omitempty"`
+	Token                string              `json:"token"`
+	Type                 string              `json:"type"`
+	Hostname             string              `json:"hostname"`
+	PublicIP             string              `json:"public_ip"`
+	PublicIPv6           string              `json:"public_ipv6"`
+	OS                   string              `json:"os"`
+	Timestamp            time.Time           `json:"timestamp"`
+	CPUPercent           float64             `json:"cpu_percent"`
+	RAMPercent           float64             `json:"ram_percent"`
+	DiskPercent          float64             `json:"disk_percent"`
+	RxBps                int64               `json:"rx_bps"`
+	TxBps                int64               `json:"tx_bps"`
+	RxBytes              int64               `json:"rx_bytes"`
+	TxBytes              int64               `json:"tx_bytes"`
+	OnlineUsers          int                 `json:"online_users"`
+	OpenVPNStatus        string              `json:"openvpn_status"`
+	L2TPStatus           string              `json:"l2tp_status"`
+	IKEv2Status          string              `json:"ikev2_status"`
+	WireGuardStatus      string              `json:"wireguard_status"`
+	Services             map[string]string   `json:"services"`
+	Diagnostics          *DiagnosticsReport  `json:"diagnostics,omitempty"`
+	PerUserBandwidth     []UserBandwidth     `json:"per_user_bandwidth,omitempty"`
 	WireGuardPeers       []WireGuardPeerStat `json:"wireguard_peers,omitempty"`
 	WireGuardActivePeers int                 `json:"wireguard_active_peers"`
 }
@@ -732,9 +732,9 @@ func executeBackupCollectConfigs(log *logger.Logger) (string, map[string]any, st
 			}
 			if totalSize+fi.Size() > maxTotalSize {
 				log.Warn("backup config collection size limit reached", map[string]any{
-					"limit_mb":   10,
-					"current":    totalSize,
-					"skipped":    path,
+					"limit_mb": 10,
+					"current":  totalSize,
+					"skipped":  path,
 				})
 				return nil
 			}
@@ -1726,19 +1726,6 @@ func memPercent() float64 {
 	return round2((total - available) / total * 100)
 }
 
-func diskPercent(mount string) float64 {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(mount, &stat); err != nil {
-		return 0
-	}
-	total := float64(stat.Blocks)
-	free := float64(stat.Bavail)
-	if total <= 0 {
-		return 0
-	}
-	return round2((total - free) / total * 100)
-}
-
 func netBytes() (rx, tx int64) {
 	b, err := os.ReadFile("/proc/net/dev")
 	if err != nil {
@@ -1811,13 +1798,13 @@ func parseWgDump(output string, nowUnix int64) ([]WireGuardPeerStat, int) {
 		active := handshake > 0 && (nowUnix-handshake) < 180
 
 		peers = append(peers, WireGuardPeerStat{
-			PublicKey:        pubKey,
-			Endpoint:         endpoint,
-			AllowedIPs:       allowedIPs,
-			LatestHandshake:  handshake,
-			RxBytes:          rxBytes,
-			TxBytes:          txBytes,
-			Active:           active,
+			PublicKey:       pubKey,
+			Endpoint:        endpoint,
+			AllowedIPs:      allowedIPs,
+			LatestHandshake: handshake,
+			RxBytes:         rxBytes,
+			TxBytes:         txBytes,
+			Active:          active,
 		})
 
 		if active {
