@@ -63,7 +63,8 @@ case "$OS" in
     ubuntu|debian)
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq git curl openssl ca-certificates mariadb-server \
-            freeradius freeradius-mysql freeradius-utils nginx golang-go iproute2 >/dev/null 2>&1
+            freeradius freeradius-mysql freeradius-utils nginx golang-go iproute2 \
+            wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
         # Node.js for frontend build
         if ! command -v npm >/dev/null 2>&1; then
             curl -fsSL https://deb.nodesource.com/setup_20.x 2>/dev/null | bash - >/dev/null 2>&1 || true
@@ -72,7 +73,8 @@ case "$OS" in
         ;;
     centos|almalinux|rocky|rhel|fedora)
         dnf install -y -q git curl openssl ca-certificates mariadb-server \
-            freeradius freeradius-mysql freeradius-utils nginx golang iproute >/dev/null 2>&1
+            freeradius freeradius-mysql freeradius-utils nginx golang iproute \
+            wireguard-tools openvpn strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
         ;;
     *) fatal "Unsupported OS: $OS" ;;
 esac
@@ -85,14 +87,32 @@ mysql -u root <<SQL
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 SCHEMA="/etc/freeradius/3.0/mods-config/sql/main/mysql/schema.sql"
 if [[ -f "$SCHEMA" ]]; then
     mysql -u root "$DB_NAME" -N -B -e "SHOW TABLES LIKE 'radcheck';" 2>/dev/null | grep -q '^radcheck$' || mysql -u root "$DB_NAME" < "$SCHEMA"
 fi
-info "Database ready."
+
+# MariaDB performance tuning
+cat > /etc/mysql/mariadb.conf.d/99-koris-performance.cnf <<MYCNF
+[mysqld]
+innodb_buffer_pool_size = 1G
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+max_connections = 300
+thread_cache_size = 32
+tmp_table_size = 64M
+max_heap_table_size = 64M
+skip-name-resolve
+MYCNF
+systemctl restart mariadb >/dev/null 2>&1
+info "Database ready (optimized)."
 
 # FreeRADIUS
 info "Configuring FreeRADIUS..."
@@ -124,8 +144,14 @@ go mod tidy >/dev/null 2>&1
 go build -ldflags="-s -w" -o /usr/local/bin/panel ./panel/cmd/panel
 chmod +x /usr/local/bin/panel
 
+info "Building node agent..."
+go build -ldflags="-s -w" -o /usr/local/bin/panel-node ./node/cmd/node
+chmod +x /usr/local/bin/panel-node
+
 # Build frontend
 if command -v npm >/dev/null 2>&1; then
+    info "Building shared components..."
+    (cd panel/web/shared && npm install --no-audit --no-fund --silent 2>/dev/null) || true
     info "Building admin frontend..."
     (cd panel/web/admin && npm install --no-audit --no-fund --silent 2>/dev/null && npm run build >/dev/null 2>&1) || true
     info "Building portal frontend..."
@@ -165,11 +191,59 @@ PANEL_VERSION='${VERSION}'
 ENV
 chmod 600 "${CONFIG_DIR}/panel.env"
 
-# Systemd
-info "Installing service..."
-cp "$INSTALL_DIR/panel/systemd/panel.service" /etc/systemd/system/panel.service
+# Systemd — Panel
+info "Installing panel service..."
+cp "$INSTALL_DIR/panel/systemd/panel.service" /etc/systemd/system/panel.service 2>/dev/null || cat > /etc/systemd/system/panel.service <<SVC
+[Unit]
+Description=Koris Next Panel
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=${CONFIG_DIR}/panel.env
+ExecStart=/usr/local/bin/panel
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
+SVC
+
+# Systemd — Node Agent
+info "Installing node agent service..."
+NODE_TOKEN="kn_$(gen_secret 24)"
+mkdir -p /etc/panel-node
+cat > /etc/panel-node/node.env <<NENV
+PANEL_URL='http://${PANEL_ADDR}'
+NODE_TOKEN='${NODE_TOKEN}'
+NODE_NAME='$(hostname -s)'
+NENV
+chmod 600 /etc/panel-node/node.env
+
+cat > /etc/systemd/system/node-agent.service <<SVC
+[Unit]
+Description=Koris Next Node Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/panel-node/node.env
+ExecStart=/usr/local/bin/panel-node
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/opt/KorisPanel
+
+[Install]
+WantedBy=multi-user.target
+SVC
+
 systemctl daemon-reload
 systemctl enable --now panel >/dev/null 2>&1
+systemctl enable --now node-agent >/dev/null 2>&1
 systemctl restart panel
 sleep 2
 
@@ -214,10 +288,13 @@ echo -e "  ${cyan}Dashboard:${plain}  http://${SERVER_IP}/dashboard/"
 echo -e "  ${cyan}Portal:${plain}     http://${SERVER_IP}/portal/"
 echo -e "  ${cyan}Setup Key:${plain}  ${yellow}${SETUP_KEY}${plain}"
 echo -e "  ${cyan}DB Pass:${plain}    ${DB_PASS}"
+echo -e "  ${cyan}Node Token:${plain} ${NODE_TOKEN}"
 echo -e "  ${cyan}Version:${plain}    ${VERSION}"
 echo -e "${bold}${green}───────────────────────────────────────────────${plain}"
 echo -e "  ${cyan}Manage:${plain}     koris"
+echo -e "  ${cyan}SSL:${plain}        koris ssl"
 echo -e "  ${cyan}Commands:${plain}   koris status|restart|update|logs|uninstall"
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
 echo ""
 echo -e "${yellow}Open the Dashboard and use the Setup Key to create your admin account.${plain}"
+echo -e "${yellow}SSL: run 'koris ssl' to setup HTTPS with Let's Encrypt.${plain}"
