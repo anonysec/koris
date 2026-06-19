@@ -8,6 +8,9 @@ import (
 
 type Config struct {
 	Addr           string
+	TLSAddr        string
+	TLSCert        string
+	TLSKey         string
 	DBDSN          string
 	SetupKey       string
 	SessionSecret  string
@@ -93,6 +96,9 @@ func Load() Config {
 
 	return Config{
 		Addr:           getenv("PANEL_ADDR", ":8080"),
+		TLSAddr:        getenv("PANEL_TLS_ADDR", ":443"),
+		TLSCert:        getenv("PANEL_TLS_CERT", "/etc/panel/cert.pem"),
+		TLSKey:         getenv("PANEL_TLS_KEY", "/etc/panel/key.pem"),
 		DBDSN:          dbDSN,
 		SetupKey:       setupKey,
 		SessionSecret:  sessionSecret,

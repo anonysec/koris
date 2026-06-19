@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -58,52 +60,66 @@ func startWorker(db *sql.DB) {
 	ticker := time.NewTicker(time.Minute)
 	go func() {
 		for range ticker.C {
-			// Find customers about to expire (for WireGuard auto-revocation)
-			expRows, expErr := db.Query(`SELECT c.id FROM customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username WHERE c.status='active' AND s.max_expires <= NOW()`)
-			var expiringCustomerIDs []int64
-			if expErr == nil {
-				for expRows.Next() {
-					var cid int64
-					if expRows.Scan(&cid) == nil {
-						expiringCustomerIDs = append(expiringCustomerIDs, cid)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[worker] recovered from panic: %v", r)
 					}
-				}
-				expRows.Close()
-			}
-
-			if _, err := db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`); err != nil {
-				log.Printf("[worker] expire subscriptions: %v", err)
-			}
-
-			// Auto-revoke WireGuard peers for expired customers
-			for _, cid := range expiringCustomerIDs {
-				api.AutoRevokeWireGuardPeersByDB(db, cid)
-			}
-
-			if _, err := db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`); err != nil {
-				log.Printf("[worker] data limit enforcement: %v", err)
-			}
-			_, _ = db.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Stalled session' WHERE acctstoptime IS NULL AND acctupdatetime < (NOW() - INTERVAL 5 MINUTE)`)
-
-			// Mark nodes offline and notify via Telegram
-			rows, err := db.Query(`SELECT name, public_ip FROM nodes WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
-			if err == nil {
-				for rows.Next() {
-					var name, ip string
-					if rows.Scan(&name, &ip) == nil {
-						notifier.NotifyNodeOffline(name, ip)
-					}
-				}
-				rows.Close()
-			}
-			_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
-
-			// PAYG Billing: deduct from wallet based on usage for pay-as-you-go plans
-			processPaygBilling(db)
-
-			// Backup scheduling handled by backup.Service.StartScheduler()
+				}()
+				workerTick(db, notifier)
+			}()
 		}
 	}()
+}
+
+func workerTick(db *sql.DB, notifier *notify.Notifier) {
+	// Find customers about to expire (for WireGuard auto-revocation)
+	expRows, expErr := db.Query(`SELECT c.id FROM customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username WHERE c.status='active' AND s.max_expires <= NOW()`)
+	var expiringCustomerIDs []int64
+	if expErr == nil {
+		for expRows.Next() {
+			var cid int64
+			if expRows.Scan(&cid) == nil {
+				expiringCustomerIDs = append(expiringCustomerIDs, cid)
+			}
+		}
+		expRows.Close()
+	}
+
+	if _, err := db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`); err != nil {
+		log.Printf("[worker] expire subscriptions: %v", err)
+	}
+
+	// Auto-revoke WireGuard peers for expired customers
+	for _, cid := range expiringCustomerIDs {
+		api.AutoRevokeWireGuardPeersByDB(db, cid)
+	}
+
+	if _, err := db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`); err != nil {
+		log.Printf("[worker] data limit enforcement: %v", err)
+	}
+	_, _ = db.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Stalled session' WHERE acctstoptime IS NULL AND acctupdatetime < (NOW() - INTERVAL 5 MINUTE)`)
+
+	// Mark nodes offline and notify via Telegram
+	rows, err := db.Query(`SELECT name, public_ip FROM nodes WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+	if err == nil {
+		for rows.Next() {
+			var name, ip string
+			if rows.Scan(&name, &ip) == nil {
+				notifier.NotifyNodeOffline(name, ip)
+			}
+		}
+		rows.Close()
+	}
+	_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+
+	// PAYG Billing: deduct from wallet based on usage for pay-as-you-go plans
+	processPaygBilling(db)
+
+	// Data retention: prune old snapshots to prevent unbounded growth
+	// Keep last 7 days of node_usage_snapshots, last 24h of user_bandwidth_snapshots
+	_, _ = db.Exec(`DELETE FROM node_usage_snapshots WHERE created_at < NOW() - INTERVAL 7 DAY`)
+	_, _ = db.Exec(`DELETE FROM user_bandwidth_snapshots WHERE created_at < NOW() - INTERVAL 24 HOUR`)
 }
 
 // processPaygBilling deducts wallet credit for customers on pay-as-you-go plans
@@ -214,7 +230,7 @@ func processPaygBilling(db *sql.DB) {
 // loadBotConfigFromDB reads telegram_token and telegram_chat_id from the panel_settings table.
 // Returns empty values if the table doesn't exist or the keys are not set.
 func loadBotConfigFromDB(database *sql.DB) (token string, chatIDs []int64) {
-	rows, err := database.Query(`SELECT key_name, value FROM panel_settings WHERE key_name IN ('telegram_token', 'telegram_chat_id')`)
+	rows, err := database.Query(`SELECT setting_key, setting_value FROM panel_settings WHERE setting_key IN ('telegram_token', 'telegram_chat_id')`)
 	if err != nil {
 		// Table might not exist yet on first run
 		return "", nil
@@ -351,7 +367,7 @@ func main() {
 	mux := srv.Routes()
 
 	// Bot restart endpoint (hot-reload)
-	mux.HandleFunc("/api/admin/bot/restart", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/admin/bot/restart", srv.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -382,22 +398,27 @@ func main() {
 		})
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"ok":true,"message":"bot restarted"}`))
-	})
+	}))
 
 	// Certificate status endpoint
-	mux.HandleFunc("/api/admin/cert-status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/admin/cert-status", srv.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		certPath := "/etc/panel/cert.pem"
-		keyPath := "/etc/panel/key.pem"
+		certPath := cfg.TLSCert
+		keyPath := cfg.TLSKey
 		certExists := fileExists(certPath)
 		keyExists := fileExists(keyPath)
+		tlsActive := certExists && keyExists && r.TLS != nil
 		result := map[string]any{
 			"ok":          true,
 			"cert_exists": certExists,
 			"key_exists":  keyExists,
+			"tls_active":  tlsActive,
+			"tls_addr":    cfg.TLSAddr,
+			"cert_path":   certPath,
+			"key_path":    keyPath,
 			"expiry":      "",
 			"issuer":      "",
 		}
@@ -408,10 +429,10 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
-	})
+	}))
 
 	// Certificate upload endpoint
-	mux.HandleFunc("/api/admin/cert-upload", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/admin/cert-upload", srv.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -439,24 +460,48 @@ func main() {
 		}
 		defer keyFile.Close()
 
-		os.MkdirAll("/etc/panel", 0755)
 		certData, _ := io.ReadAll(certFile)
 		keyData, _ := io.ReadAll(keyFile)
-		if err := os.WriteFile("/etc/panel/cert.pem", certData, 0600); err != nil {
+
+		// Validate that cert and key form a valid TLS pair
+		if _, err := tls.X509KeyPair(certData, keyData); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "invalid certificate/key pair: " + err.Error()})
+			return
+		}
+
+		// Save to the configured paths
+		certPath := cfg.TLSCert
+		keyPath := cfg.TLSKey
+		os.MkdirAll(filepath.Dir(certPath), 0755)
+		if err := os.WriteFile(certPath, certData, 0600); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(`{"ok":false,"error":"failed to save cert"}`))
 			return
 		}
-		if err := os.WriteFile("/etc/panel/key.pem", keyData, 0600); err != nil {
+		if err := os.WriteFile(keyPath, keyData, 0600); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(`{"ok":false,"error":"failed to save key"}`))
 			return
 		}
+
+		// Parse cert info for response
+		expiry, issuer := parseCertInfo(certPath)
+
+		log.Printf("[tls] new certificate uploaded, expires=%s issuer=%s — restart required for HTTPS", expiry, issuer)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true,"message":"certificates saved"}`))
-	})
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":               true,
+			"message":          "Certificate saved. Restart the panel service to enable HTTPS.",
+			"restart_required": true,
+			"expiry":           expiry,
+			"issuer":           issuer,
+			"tls_addr":         cfg.TLSAddr,
+		})
+	}))
 
 	log.Printf("panel listening on %s", cfg.Addr)
 
@@ -466,5 +511,43 @@ func main() {
 	// Apply no-cache middleware on API responses
 	handler := api.NoCacheMiddleware(mux)
 
-	log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)))
+	// Start server: use TLS if cert and key files exist
+	tlsCert := cfg.TLSCert
+	tlsKey := cfg.TLSKey
+	if fileExists(tlsCert) && fileExists(tlsKey) {
+		log.Printf("TLS enabled: cert=%s key=%s addr=%s", tlsCert, tlsKey, cfg.TLSAddr)
+		log.Printf("HTTP redirect: %s -> %s", cfg.Addr, cfg.TLSAddr)
+
+		// Start HTTP server that redirects to HTTPS
+		go func() {
+			redirectMux := http.NewServeMux()
+			redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				// Preserve path and query for the redirect
+				target := "https://" + r.Host + r.URL.RequestURI()
+				// If TLS is on non-standard port, adjust
+				if cfg.TLSAddr != ":443" {
+					host := r.Host
+					if idx := strings.Index(host, ":"); idx != -1 {
+						host = host[:idx]
+					}
+					target = "https://" + host + cfg.TLSAddr + r.URL.RequestURI()
+				}
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+			})
+			// Health check still works on HTTP for load balancers
+			redirectMux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"ok":true,"service":"panel","tls":true}`))
+			})
+			if err := http.ListenAndServe(cfg.Addr, redirectMux); err != nil {
+				log.Printf("HTTP redirect server error: %v", err)
+			}
+		}()
+
+		// Start HTTPS server
+		log.Fatal(http.ListenAndServeTLS(cfg.TLSAddr, tlsCert, tlsKey, limiter.Middleware(handler)))
+	} else {
+		log.Printf("TLS disabled: cert/key not found at %s / %s", tlsCert, tlsKey)
+		log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)))
+	}
 }
