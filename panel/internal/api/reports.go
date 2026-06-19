@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/csv"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -155,6 +156,118 @@ func (s *Server) userReport(w http.ResponseWriter, r *http.Request) {
 		"limited":       limited,
 		"disabled":      disabled,
 		"expired":       expired,
+	})
+}
+
+// ========== Bandwidth Stats (Dashboard) ==========
+
+func (s *Server) bandwidthStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "1d"
+	}
+
+	// Validate period
+	var whereClause, groupBy, labelFormat string
+	switch period {
+	case "1d":
+		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL 1 DAY"
+		groupBy = "HOUR(acctstarttime)"
+		labelFormat = "hour"
+	case "7d":
+		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL 7 DAY"
+		groupBy = "DATE(acctstarttime)"
+		labelFormat = "date"
+	case "30d":
+		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL 30 DAY"
+		groupBy = "DATE(acctstarttime)"
+		labelFormat = "date"
+	case "all":
+		whereClause = ""
+		groupBy = "DATE_FORMAT(acctstarttime, '%Y-%m')"
+		labelFormat = "month"
+	default:
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_period"})
+		return
+	}
+
+	// Get total download/upload for the period
+	totalQuery := fmt.Sprintf(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct %s`, whereClause)
+	var totalDownload, totalUpload int64
+	_ = s.DB.QueryRow(totalQuery).Scan(&totalDownload, &totalUpload)
+
+	// Get data points grouped by interval
+	var pointsQuery string
+	switch labelFormat {
+	case "hour":
+		pointsQuery = fmt.Sprintf(`SELECT HOUR(acctstarttime) as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
+			FROM radacct %s GROUP BY %s ORDER BY lbl ASC`, whereClause, groupBy)
+	case "date":
+		pointsQuery = fmt.Sprintf(`SELECT DATE_FORMAT(DATE(acctstarttime), '%%Y-%%m-%%d') as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
+			FROM radacct %s GROUP BY %s ORDER BY lbl ASC`, whereClause, groupBy)
+	case "month":
+		pointsQuery = fmt.Sprintf(`SELECT DATE_FORMAT(acctstarttime, '%%Y-%%m') as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
+			FROM radacct GROUP BY %s ORDER BY lbl ASC LIMIT 12`, groupBy)
+	}
+
+	rows, err := s.DB.Query(pointsQuery)
+	if err != nil {
+		log.Printf("[bandwidth-stats] query error: %v", err)
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "query_failed"})
+		return
+	}
+	defer rows.Close()
+
+	type DataPoint struct {
+		Label    string `json:"label"`
+		Download int64  `json:"download"`
+		Upload   int64  `json:"upload"`
+	}
+	points := []DataPoint{}
+
+	for rows.Next() {
+		var dp DataPoint
+		if labelFormat == "hour" {
+			var hour int
+			if rows.Scan(&hour, &dp.Download, &dp.Upload) == nil {
+				dp.Label = fmt.Sprintf("%02d:00", hour)
+				points = append(points, dp)
+			}
+		} else {
+			if rows.Scan(&dp.Label, &dp.Download, &dp.Upload) == nil {
+				points = append(points, dp)
+			}
+		}
+	}
+
+	// For 1d period, fill in missing hours
+	if labelFormat == "hour" {
+		filled := make([]DataPoint, 24)
+		hourMap := map[string]DataPoint{}
+		for _, p := range points {
+			hourMap[p.Label] = p
+		}
+		for h := 0; h < 24; h++ {
+			label := fmt.Sprintf("%02d:00", h)
+			if dp, ok := hourMap[label]; ok {
+				filled[h] = dp
+			} else {
+				filled[h] = DataPoint{Label: label, Download: 0, Upload: 0}
+			}
+		}
+		points = filled
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":             true,
+		"total_download": totalDownload,
+		"total_upload":   totalUpload,
+		"points":         points,
 	})
 }
 
