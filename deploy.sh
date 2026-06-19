@@ -51,6 +51,10 @@ chmod +x /usr/local/bin/panel
 copy_dir() {
   local src="$1"
   local dst="$2"
+  # Skip if source and destination are the same path (in-place builds)
+  if [ "$(realpath "$src" 2>/dev/null)" = "$(realpath "$dst" 2>/dev/null)" ]; then
+    return
+  fi
   mkdir -p "$(dirname "$dst")"
   rm -rf "$dst"
   if [ -d "$src" ]; then

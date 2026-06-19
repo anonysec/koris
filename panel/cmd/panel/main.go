@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -276,10 +278,119 @@ func parseCertInfo(certPath string) (expiry string, issuer string) {
 	}
 	expiry = cert.NotAfter.Format(time.RFC3339)
 	issuer = cert.Issuer.CommonName
-	if issuer == "" {
+	if issuer == "" && len(cert.Issuer.Organization) > 0 {
 		issuer = cert.Issuer.Organization[0]
 	}
 	return
+}
+
+func generateNginxConfig(domain, panelAddr string, withSSL bool) string {
+	if withSSL {
+		return fmt.Sprintf(`# KorisPanel nginx config (auto-generated)
+# Domain: %s | SSL: Let's Encrypt (managed by certbot)
+
+server {
+    listen 80;
+    server_name %s;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name %s;
+    client_max_body_size 20m;
+
+    ssl_certificate /etc/letsencrypt/live/%s/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/%s/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    location = / { return 302 /dashboard/; }
+    location = /dashboard { return 302 /dashboard/; }
+    location /dashboard/ {
+        proxy_pass http://%s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /api/ {
+        proxy_pass http://%s;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /portal { return 302 /portal/; }
+    location /portal/ {
+        proxy_pass http://%s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /portal/sub {
+        proxy_pass http://%s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+`, domain, domain, domain, domain, domain, panelAddr, panelAddr, panelAddr, panelAddr)
+	}
+
+	// HTTP only (no SSL)
+	return fmt.Sprintf(`# KorisPanel nginx config (auto-generated)
+# Domain: %s | SSL: disabled
+
+server {
+    listen 80 default_server;
+    server_name %s;
+    client_max_body_size 20m;
+
+    location = / { return 302 /dashboard/; }
+    location = /dashboard { return 302 /dashboard/; }
+    location /dashboard/ {
+        proxy_pass http://%s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /api/ {
+        proxy_pass http://%s;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /portal { return 302 /portal/; }
+    location /portal/ {
+        proxy_pass http://%s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /portal/sub {
+        proxy_pass http://%s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+`, domain, domain, panelAddr, panelAddr, panelAddr, panelAddr)
 }
 
 func main() {
@@ -501,6 +612,112 @@ func main() {
 			"issuer":           issuer,
 			"tls_addr":         cfg.TLSAddr,
 		})
+	}))
+
+	// ─── Nginx & Domain Management ─────────────────────────────────────────
+	mux.HandleFunc("/api/admin/domain", srv.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			domain := ""
+			_ = database.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key='panel_domain'`).Scan(&domain)
+			sslActive := fileExists("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
+			var expiry, issuer string
+			if sslActive {
+				expiry, issuer = parseCertInfo("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
+			} else if fileExists(cfg.TLSCert) {
+				expiry, issuer = parseCertInfo(cfg.TLSCert)
+				sslActive = true
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":         true,
+				"domain":     domain,
+				"ssl_active": sslActive,
+				"expiry":     expiry,
+				"issuer":     issuer,
+			})
+
+		case http.MethodPost:
+			var in struct {
+				Domain string `json:"domain"`
+				SSL    bool   `json:"ssl"`
+				Email  string `json:"email"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "bad_json"})
+				return
+			}
+			in.Domain = strings.TrimSpace(in.Domain)
+			if in.Domain == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "domain_required"})
+				return
+			}
+			_, _ = database.Exec(`INSERT INTO panel_settings(setting_key,setting_value) VALUES('panel_domain',?) ON DUPLICATE KEY UPDATE setting_value=?`, in.Domain, in.Domain)
+
+			panelAddr := cfg.Addr
+			if panelAddr == "" {
+				panelAddr = "127.0.0.1:8088"
+			}
+			nginxConf := generateNginxConfig(in.Domain, panelAddr, in.SSL)
+			nginxPath := "/etc/nginx/sites-available/koris-panel.conf"
+			enabledPath := "/etc/nginx/sites-enabled/panel-next.conf"
+			if err := os.WriteFile(nginxPath, []byte(nginxConf), 0644); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "write_nginx: " + err.Error()})
+				return
+			}
+			os.Remove(enabledPath)
+			os.Symlink(nginxPath, enabledPath)
+
+			testCmd := exec.Command("nginx", "-t")
+			if out, err := testCmd.CombinedOutput(); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "nginx_test_failed: " + string(out)})
+				return
+			}
+			_ = exec.Command("systemctl", "reload", "nginx").Run()
+
+			sslResult := ""
+			if in.SSL {
+				args := []string{"--nginx", "-d", in.Domain, "--non-interactive", "--agree-tos", "--redirect"}
+				if in.Email != "" {
+					args = append(args, "--email", in.Email)
+				} else {
+					args = append(args, "--register-unsafely-without-email")
+				}
+				out, err := exec.Command("certbot", args...).CombinedOutput()
+				if err != nil {
+					sslResult = "certbot_failed: " + string(out)
+					log.Printf("[domain] certbot failed for %s: %s", in.Domain, string(out))
+				} else {
+					sslResult = "ssl_installed"
+					log.Printf("[domain] SSL installed for %s", in.Domain)
+					certSrc := "/etc/letsencrypt/live/" + in.Domain + "/fullchain.pem"
+					keySrc := "/etc/letsencrypt/live/" + in.Domain + "/privkey.pem"
+					if fileExists(certSrc) && fileExists(keySrc) {
+						os.MkdirAll("/etc/panel", 0755)
+						exec.Command("cp", certSrc, cfg.TLSCert).Run()
+						exec.Command("cp", keySrc, cfg.TLSKey).Run()
+					}
+				}
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":         true,
+				"domain":     in.Domain,
+				"ssl_result": sslResult,
+				"nginx":      "configured",
+			})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	}))
 
 	log.Printf("panel listening on %s", cfg.Addr)
