@@ -49,6 +49,7 @@
 ## 🟢 Enhancements
 
 - [x] ~~Ticket System Improvements~~ — Telegram notifications on new/reply
+- [x] ~~Mobile Responsive~~ — hamburger menu, table scroll, responsive portal
 - [ ] **Balance System Enhancement** — (wallet already works, need UI improvements)
 - [ ] **Changelog System** — auto from git commits (CHANGELOG.md already exists)
 - [ ] **Drag & Drop Reordering** — UI only
@@ -104,7 +105,7 @@
 - [x] ~~Usage Notifications~~ — 80%/95% alerts via Telegram + events
 - [x] ~~Auto-Renewal~~ — charge from wallet when subscription expires
 - [x] ~~Timezone Per User~~ — DB column ready, frontend auto-detects
-- [ ] **Mobile Responsive** — better mobile UI (cosmetic)
+- [x] ~~Mobile Responsive~~ — stacked cards, full-width inputs, responsive grid
 
 ---
 
@@ -141,9 +142,9 @@
 - [ ] Test all protocols
 - [ ] Performance testing (500+ users)
 - [ ] Security audit
-- [ ] Admin documentation
-- [ ] API documentation
-- [ ] Installation guide
+- [x] ~~Admin documentation~~ — docs/ADMIN.md
+- [x] ~~API documentation~~ — docs/API.md
+- [x] ~~Installation guide~~ — docs/README.md
 
 ---
 
