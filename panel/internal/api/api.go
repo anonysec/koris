@@ -6793,13 +6793,25 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 		"wireguard": "wg-quick@wg0",
 	}
 	if svcName, ok := serviceMap[in.Protocol]; ok {
-		action := "service.stop"
 		if in.Enabled {
-			action = "service.restart"
+			if in.Protocol == "wireguard" {
+				// WireGuard needs setup first (generate keys, create config) before starting
+				setupPayload, _ := json.Marshal(map[string]any{
+					"port":    in.Port,
+					"network": strings.TrimSpace(in.Network),
+				})
+				_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'wireguard.setup', ?, 'pending', ?)`,
+					nodeID, string(setupPayload), actor)
+			} else {
+				payload, _ := json.Marshal(map[string]any{"service": svcName})
+				_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'service.restart', ?, 'pending', ?)`,
+					nodeID, string(payload), actor)
+			}
+		} else {
+			payload, _ := json.Marshal(map[string]any{"service": svcName})
+			_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'service.stop', ?, 'pending', ?)`,
+				nodeID, string(payload), actor)
 		}
-		payload, _ := json.Marshal(map[string]any{"service": svcName})
-		_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, ?, ?, 'pending', ?)`,
-			nodeID, action, string(payload), actor)
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
