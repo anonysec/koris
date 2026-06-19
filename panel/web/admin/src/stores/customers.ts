@@ -210,12 +210,12 @@ export const useCustomersStore = defineStore('customers', () => {
     if (query) {
       result = result.filter(
         (c) =>
-          c.username.toLowerCase().includes(query) ||
-          c.display_name.toLowerCase().includes(query) ||
+          (c.username ?? '').toLowerCase().includes(query) ||
+          (c.display_name ?? '').toLowerCase().includes(query) ||
           (c.plan ?? '').toLowerCase().includes(query) ||
-          c.status.toLowerCase().includes(query) ||
+          (c.status ?? '').toLowerCase().includes(query) ||
           String(c.id).includes(query) ||
-          String(c.credit).includes(query)
+          String(c.credit ?? 0).includes(query)
       )
     }
 
