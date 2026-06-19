@@ -45,6 +45,8 @@ interface ProfilesResponse {
 
 const profiles = ref<VpnProfile[]>([])
 const subUrl = ref('')
+const preferredNodeId = ref(0)
+const availableNodes = ref<{ id: number; name: string }[]>([])
 
 // ---- App Links ----
 interface AppLink {
@@ -131,8 +133,18 @@ onMounted(async () => {
   try {
     const res = await get<ProfilesResponse>('/api/portal/profiles')
     profiles.value = res.profiles || []
+    if ((res as any).preferred_node_id) {
+      preferredNodeId.value = (res as any).preferred_node_id
+    }
   } catch {
     // keep empty state
+  }
+
+  try {
+    const nodesRes = await get<{ ok: boolean; nodes: { id: number; name: string }[] }>('/api/portal/nodes')
+    availableNodes.value = nodesRes.nodes || []
+  } catch {
+    // no nodes
   }
 
   try {
@@ -156,10 +168,26 @@ function handleCopySubUrl() {
 
 function getProfileIcon(type: string): string {
   switch (type) {
+    case 'openvpn-udp': return '⚡'
+    case 'openvpn-tcp': return '🔐'
     case 'openvpn': return '🔐'
     case 'l2tp': return '🔒'
     case 'ikev2': return '🛡️'
     default: return '📄'
+  }
+}
+
+async function handleNodeChange(event: Event) {
+  const nodeId = Number((event.target as HTMLSelectElement).value)
+  preferredNodeId.value = nodeId
+  try {
+    const { post: postApi } = useApi()
+    await postApi('/api/portal/preferred-node', { node_id: nodeId })
+    // Reload profiles to reflect new preferred node in TCP config
+    const res = await get<ProfilesResponse>('/api/portal/profiles')
+    profiles.value = res.profiles || []
+  } catch {
+    // ignore
   }
 }
 
@@ -289,6 +317,17 @@ function handleBackToList() {
           </div>
         </div>
 
+        <!-- Node selector -->
+        <div class="sp__node-selector">
+          <label class="sp__node-label">{{ t('portal.vpn.preferredNode') }}</label>
+          <select class="sp__node-select" :value="preferredNodeId" @change="handleNodeChange($event)">
+            <option value="0">{{ t('portal.vpn.autoRandom') }}</option>
+            <option v-for="node in availableNodes" :key="node.id" :value="node.id">
+              {{ node.name }}
+            </option>
+          </select>
+        </div>
+
         <!-- Profile list -->
         <KEmptyState
           v-if="!profiles.length"
@@ -302,7 +341,10 @@ function handleBackToList() {
             <div class="sp__profile-icon">{{ getProfileIcon(profile.type) }}</div>
             <div class="sp__profile-info">
               <div class="sp__profile-name">{{ profile.name }}</div>
-              <div class="sp__profile-meta">{{ profile.node }}</div>
+              <div class="sp__profile-meta">
+                <span v-if="profile.description" class="sp__profile-desc">{{ profile.description }}</span>
+                <span v-else>{{ profile.node }}</span>
+              </div>
             </div>
             <a
               v-if="profile.available"
@@ -563,6 +605,31 @@ function handleBackToList() {
   font-size: var(--text-sm);
   font-family: monospace;
   min-width: 0;
+}
+.sp__node-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.sp__node-label {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.sp__node-select {
+  flex: 1;
+  max-width: 240px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+.sp__profile-desc {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
 }
 .sp__profiles-list {
   display: flex;
