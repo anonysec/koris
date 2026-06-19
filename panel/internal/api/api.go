@@ -3023,6 +3023,8 @@ func (s *Server) createTicket(w http.ResponseWriter, r *http.Request, senderType
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 			"read":      false,
 		})
+		// Telegram notification to admin
+		s.Notify.SendEvent("ticket", fmt.Sprintf("🎫 New Ticket #%d", id), fmt.Sprintf("From: %s\nSubject: %s\nPriority: %s", in.Username, in.Subject, in.Priority))
 	}
 	writeJSON(w, map[string]any{"ok": true, "id": id})
 }
@@ -3083,6 +3085,10 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request, id int64, s
 		ticketUser = tu
 	}
 	s.createEvent("ticket", "info", fmt.Sprintf("Ticket #%d replied", id), fmt.Sprintf("%s replied to ticket #%d", sender, id), sender, ticketUser)
+	// Telegram notification when customer replies to admin
+	if senderType == "customer" {
+		s.Notify.SendEvent("ticket", fmt.Sprintf("💬 Ticket #%d Reply", id), fmt.Sprintf("From: %s\nMessage: %s", sender, in.Message[:min(len(in.Message), 100)]))
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
