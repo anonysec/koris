@@ -397,6 +397,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
 	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
 	mux.HandleFunc("/api/audit-logs", s.requireAdmin(s.auditLogs))
+	mux.HandleFunc("/api/admin/bandwidth-stats", s.requireAdmin(s.bandwidthStats))
 	mux.HandleFunc("/api/reports/revenue", s.requireAdmin(s.revenueReport))
 	mux.HandleFunc("/api/reports/users", s.requireAdmin(s.userReport))
 	mux.HandleFunc("/api/reports/bandwidth", s.requireAdmin(s.bandwidthReport))

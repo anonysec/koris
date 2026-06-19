@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRealtimeStore } from '@/stores/realtime'
 import { useCustomersStore } from '@/stores/customers'
 import { useNodesStore } from '@/stores/nodes'
 import { useI18n } from '@koris/composables/useI18n'
+import { useApi } from '@koris/composables/useApi'
 import { formatDate } from '@koris/composables/useFormatDate'
 import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
@@ -15,6 +16,7 @@ const router = useRouter()
 const realtime = useRealtimeStore()
 const customers = useCustomersStore()
 const nodes = useNodesStore()
+const api = useApi()
 
 customers.loadCustomers()
 nodes.loadNodes()
@@ -30,29 +32,81 @@ function handleStatClick(routeName: string) {
   router.push({ name: routeName })
 }
 
-const trafficChartData = computed(() => {
-  // Compute cumulative data usage (bytes) from bps history.
-  // Each sample in rxHistory/txHistory is a bps value pushed every ~3 seconds.
-  // To convert to bytes transferred per interval: (bps * 3) / 8
-  let cumulative = 0
-  return realtime.rxHistory.map((rx, i) => {
-    const intervalBps = rx + (realtime.txHistory[i] || 0)
-    const intervalBytes = (intervalBps * 3) / 8
-    cumulative += intervalBytes
-    return {
-      label: `${i}`,
-      value: cumulative,
+// ─── Bandwidth Stats (new period-based) ───
+type BandwidthPeriod = '1d' | '7d' | '30d' | 'all'
+interface BandwidthPoint {
+  label: string
+  download: number
+  upload: number
+}
+interface BandwidthResponse {
+  ok: boolean
+  total_download: number
+  total_upload: number
+  points: BandwidthPoint[]
+}
+
+const selectedPeriod = ref<BandwidthPeriod>('1d')
+const bandwidthData = ref<BandwidthResponse | null>(null)
+const bandwidthLoading = ref(false)
+const hoveredBar = ref<number | null>(null)
+const tooltipPos = ref({ x: 0, y: 0 })
+
+const periodLabels: Record<BandwidthPeriod, string> = {
+  '1d': '1D',
+  '7d': '1W',
+  '30d': '1M',
+  'all': 'All',
+}
+
+async function fetchBandwidthStats() {
+  bandwidthLoading.value = true
+  try {
+    const data = await api.get<BandwidthResponse>(`/api/admin/bandwidth-stats?period=${selectedPeriod.value}`)
+    if (data && data.ok) {
+      bandwidthData.value = data
     }
-  })
+  } catch {
+    // silently fail, chart just shows empty
+  } finally {
+    bandwidthLoading.value = false
+  }
+}
+
+const bandwidthChartData = computed(() => {
+  if (!bandwidthData.value?.points) return []
+  return bandwidthData.value.points.map((p) => ({
+    label: p.label,
+    value: p.download + p.upload,
+    color: 'var(--color-primary)',
+  }))
 })
 
-/** Total data transferred — use server-reported totals (includes all sessions, not just active) */
-const totalDownloaded = computed(() =>
-  realtime.stats.total_input_bytes || realtime.liveSessions.reduce((sum, s) => sum + (s.input_bytes || 0), 0)
-)
-const totalUploaded = computed(() =>
-  realtime.stats.total_output_bytes || realtime.liveSessions.reduce((sum, s) => sum + (s.output_bytes || 0), 0)
-)
+function handleBarHover(payload: { point: { label: string; value: number }; index: number }) {
+  hoveredBar.value = payload.index
+}
+
+const hoveredPoint = computed(() => {
+  if (hoveredBar.value === null || !bandwidthData.value?.points) return null
+  return bandwidthData.value.points[hoveredBar.value] ?? null
+})
+
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  fetchBandwidthStats()
+  refreshInterval = setInterval(fetchBandwidthStats, 60000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
+})
+
+watch(selectedPeriod, () => {
+  fetchBandwidthStats()
+})
+
+// ─── End Bandwidth Stats ───
 
 const userStatusData = computed(() => {
   const active = customers.list.filter(c => c.status === 'active').length
@@ -99,36 +153,64 @@ function formatDuration(seconds: number): string {
     <!-- Charts Row -->
     <section class="charts-row">
       <div class="chart-panel chart-panel--traffic">
-        <h4 class="panel-title">{{ t('dashboard.data_usage') }}</h4>
-        <div v-if="trafficChartData.length > 2">
+        <div class="panel-header">
+          <h4 class="panel-title">{{ t('dashboard.data_usage') }}</h4>
+          <div class="period-pills">
+            <button
+              v-for="(label, key) in periodLabels"
+              :key="key"
+              class="period-pill"
+              :class="{ 'period-pill--active': selectedPeriod === key }"
+              @click="selectedPeriod = key as BandwidthPeriod"
+            >
+              {{ label }}
+            </button>
+          </div>
+        </div>
+        <div v-if="bandwidthLoading && !bandwidthData" class="traffic-fallback">
+          <KSkeleton variant="rect" :width="'100%'" :height="200" />
+        </div>
+        <div v-else-if="bandwidthChartData.length > 0" class="bandwidth-chart-wrapper" @mouseleave="hoveredBar = null">
           <KChart
-            type="area"
-            :data="trafficChartData"
+            type="bar"
+            :data="bandwidthChartData"
             :height="200"
-            :options="{ gradientFill: true, showGrid: true }"
+            :options="{ showGrid: true, showTooltip: false }"
             :animate="true"
             :interactive="true"
+            @point-hover="handleBarHover"
           />
+          <!-- Custom Tooltip -->
+          <div
+            v-if="hoveredPoint"
+            class="bandwidth-tooltip"
+            role="tooltip"
+          >
+            <span class="bandwidth-tooltip__label">{{ hoveredPoint.label }}</span>
+            <div class="bandwidth-tooltip__row">
+              <span class="bandwidth-tooltip__dot bandwidth-tooltip__dot--download"></span>
+              <span>Download: {{ formatBytes(hoveredPoint.download) }}</span>
+            </div>
+            <div class="bandwidth-tooltip__row">
+              <span class="bandwidth-tooltip__dot bandwidth-tooltip__dot--upload"></span>
+              <span>Upload: {{ formatBytes(hoveredPoint.upload) }}</span>
+            </div>
+            <div class="bandwidth-tooltip__total">
+              Total: {{ formatBytes(hoveredPoint.download + hoveredPoint.upload) }}
+            </div>
+          </div>
         </div>
         <div v-else class="traffic-fallback">
           <p class="traffic-note">{{ t('dashboard.chart_loading') }}</p>
         </div>
-        <div class="traffic-live">
+        <div class="traffic-summary">
           <div class="traffic-stat">
             <span class="traffic-stat__label">{{ t('dashboard.total_downloaded') }}</span>
-            <span class="traffic-stat__value">{{ formatBytes(totalDownloaded) }}</span>
+            <span class="traffic-stat__value">{{ formatBytes(bandwidthData?.total_download ?? 0) }}</span>
           </div>
           <div class="traffic-stat">
             <span class="traffic-stat__label">{{ t('dashboard.total_uploaded') }}</span>
-            <span class="traffic-stat__value">{{ formatBytes(totalUploaded) }}</span>
-          </div>
-          <div class="traffic-stat">
-            <span class="traffic-stat__label">{{ t('dashboard.today_downloaded') }}</span>
-            <span class="traffic-stat__value">{{ formatBytes(realtime.stats.today_input_bytes) }}</span>
-          </div>
-          <div class="traffic-stat">
-            <span class="traffic-stat__label">{{ t('dashboard.today_uploaded') }}</span>
-            <span class="traffic-stat__value">{{ formatBytes(realtime.stats.today_output_bytes) }}</span>
+            <span class="traffic-stat__value">{{ formatBytes(bandwidthData?.total_upload ?? 0) }}</span>
           </div>
         </div>
       </div>
@@ -238,15 +320,65 @@ function formatDuration(seconds: number): string {
 .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4); }
 .chart-panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 
+/* ─── Panel Header with Period Pills ─── */
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+.period-pills { display: flex; gap: var(--space-1); }
+.period-pill {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+.period-pill:hover { color: var(--color-text); border-color: var(--color-primary); }
+.period-pill--active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* ─── Bandwidth Chart ─── */
+.bandwidth-chart-wrapper { position: relative; }
+
+.bandwidth-tooltip {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  z-index: var(--z-tooltip, 50);
+  font-size: var(--text-xs);
+  min-width: 140px;
+}
+.bandwidth-tooltip__label { font-weight: var(--font-semibold); color: var(--color-text); margin-bottom: 2px; }
+.bandwidth-tooltip__row { display: flex; align-items: center; gap: var(--space-1); color: var(--color-muted); }
+.bandwidth-tooltip__dot { width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; }
+.bandwidth-tooltip__dot--download { background: var(--color-primary); }
+.bandwidth-tooltip__dot--upload { background: var(--color-accent); }
+.bandwidth-tooltip__total { font-weight: var(--font-semibold); color: var(--color-text); border-top: 1px solid var(--color-border); padding-top: var(--space-1); margin-top: var(--space-1); }
+
+/* ─── Traffic Summary ─── */
+.traffic-summary { display: flex; gap: var(--space-6); margin-top: var(--space-3); }
 .traffic-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: var(--space-4); }
-.traffic-live { display: flex; gap: var(--space-6); }
 .traffic-stat { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
 .traffic-stat__label { font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wider); }
 .traffic-stat__value { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--color-text); }
 .traffic-note { font-size: var(--text-xs); color: var(--color-muted); margin: 0; }
 
 .panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-.panel-title { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
+.panel-title { margin: 0; font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
 
 .mini-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .mini-table th { text-align: left; padding: var(--space-2) var(--space-3); color: var(--color-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); border-bottom: 1px solid var(--color-border); }
@@ -276,6 +408,6 @@ function formatDuration(seconds: number): string {
 
 @media (max-width: 768px) {
   .charts-row, .bottom-row { grid-template-columns: 1fr; }
+  .traffic-summary { flex-direction: column; align-items: center; }
 }
-
 </style>
