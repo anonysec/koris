@@ -301,6 +301,12 @@ var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{3,64}$`)
 
 var resellerEmojis = []string{"🔵", "🟢", "🟡", "🔴", "🟣", "🟠", "⭐", "💎", "🌙", "🔥", "🌊", "🍀", "🎯", "🦋", "🐬", "🌸", "🎭", "🌈", "⚡", "🎪"}
 
+var defaultEmojis = []string{"🦊", "🐻", "🐼", "🐨", "🦁", "🐯", "🐸", "🐙", "🦋", "🌟", "🔥", "💎", "🎯", "🚀", "⚡", "🌈", "🎪", "🎭", "🏆", "👑"}
+
+func randomEmoji() string {
+	return defaultEmojis[time.Now().UnixNano()%int64(len(defaultEmojis))]
+}
+
 func New(db *sql.DB, cfg config.Config) *Server {
 	analyzer := health.NewAnalyzer()
 	notifier := notify.New()
@@ -693,7 +699,7 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		like := "%" + q + "%"
 		args = append(args, like, like, like, like, like)
 	}
-	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),COALESCE(a.avatar,''),c.created_at
+	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),COALESCE(c.avatar, a.avatar, ''),c.created_at
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
@@ -783,6 +789,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		IPLimit           *int     `json:"ip_limit"`
 		ActivateOnConnect bool     `json:"activate_on_connect"`
 		TemplateID        *int64   `json:"template_id"`
+		Avatar            *string  `json:"avatar"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -904,7 +911,15 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO customers(username,display_name,plan_id,sub_token,created_by) VALUES(?,?,?,?,?)`, in.Username, in.DisplayName, in.PlanID, auth.RandomToken(24), actor)
+	// Determine avatar: if explicitly provided use it, otherwise admin/owner gets random emoji, reseller leaves NULL (inherits)
+	var avatarVal any
+	if in.Avatar != nil && *in.Avatar != "" {
+		avatarVal = *in.Avatar
+	} else if role != "reseller" {
+		avatarVal = randomEmoji()
+	}
+
+	res, err := tx.Exec(`INSERT INTO customers(username,display_name,plan_id,sub_token,created_by,avatar) VALUES(?,?,?,?,?,?)`, in.Username, in.DisplayName, in.PlanID, auth.RandomToken(24), actor, avatarVal)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1145,11 +1160,11 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 	var c CustomerDetail
 	var planID sql.NullInt64
 	var created sql.NullTime
-	err := s.DB.QueryRow(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),c.created_at,COALESCE(c.notes,''),COALESCE(c.sub_token,'')
+	err := s.DB.QueryRow(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),c.created_at,COALESCE(c.notes,''),COALESCE(c.sub_token,''),COALESCE(c.avatar, (SELECT a.avatar FROM admins a WHERE a.username=c.created_by AND a.role='reseller' LIMIT 1), '')
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		WHERE c.id=? AND c.deleted_at IS NULL LIMIT 1`, id).Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created, &c.Notes, &c.SubToken)
+		WHERE c.id=? AND c.deleted_at IS NULL LIMIT 1`, id).Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created, &c.Notes, &c.SubToken, &c.Avatar)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -1259,6 +1274,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		SpeedMbps   *float64 `json:"speed_mbps"`
 		Days        *int     `json:"days"`
 		IPLimit     *int     `json:"ip_limit"`
+		Avatar      *string  `json:"avatar"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -1301,6 +1317,14 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 	if in.Notes != nil {
 		sets = append(sets, "notes=?")
 		args = append(args, strings.TrimSpace(*in.Notes))
+	}
+	if in.Avatar != nil {
+		sets = append(sets, "avatar=?")
+		if *in.Avatar == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *in.Avatar)
+		}
 	}
 	if len(sets) > 0 {
 		args = append(args, id)
