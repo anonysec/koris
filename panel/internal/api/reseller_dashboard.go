@@ -363,3 +363,69 @@ func (s *Server) closeResellerTicket(w http.ResponseWriter, actor string, ticket
 	_, _ = s.DB.Exec(`UPDATE reseller_tickets SET status='closed', updated_at=NOW() WHERE id=?`, ticketID)
 	writeJSON(w, map[string]any{"ok": true})
 }
+
+// ─── Reseller User Wallet ───────────────────────────────────────────────────
+
+// resellerWalletAdjust allows resellers to adjust their own users' wallet balance.
+// POST /api/reseller/users/:id/wallet with { amount: 10.00, description: "top-up" }
+// Validates that the user belongs to this reseller.
+func (s *Server) resellerWalletAdjust(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	actor, role, ok := s.currentAdmin(r)
+	if !ok || role != "reseller" {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "reseller_only"})
+		return
+	}
+
+	// Extract customer ID from path: /api/reseller/users/:id/wallet
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/reseller/users/"), "/")
+	if len(parts) < 2 || parts[1] != "wallet" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_path"})
+		return
+	}
+	customerID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_id"})
+		return
+	}
+
+	// Verify this customer belongs to the reseller
+	var username string
+	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? AND created_by=? AND deleted_at IS NULL`, customerID, actor).Scan(&username); err != nil {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "not_your_user"})
+		return
+	}
+
+	limitBody(w, r, maxJSONBody)
+	var in struct {
+		Amount      float64 `json:"amount"`
+		Description string  `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+		return
+	}
+	if in.Amount == 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "amount_required"})
+		return
+	}
+
+	desc := in.Description
+	if desc == "" {
+		if in.Amount > 0 {
+			desc = fmt.Sprintf("Reseller %s added credit", actor)
+		} else {
+			desc = fmt.Sprintf("Reseller %s deducted credit", actor)
+		}
+	}
+
+	if err := s.applyWalletChangeRef(username, in.Amount, "adjustment", desc, actor, "", nil); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true})
+}

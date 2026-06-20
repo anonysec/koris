@@ -495,6 +495,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/reseller/tickets", s.requireAdmin(s.resellerTickets))
 	mux.HandleFunc("/api/reseller/tickets/", s.requireAdmin(s.resellerTickets))
 	mux.HandleFunc("/api/reseller/transactions", s.requireAdmin(s.resellerTransactions))
+	mux.HandleFunc("/api/reseller/users/", s.requireAdmin(s.resellerWalletAdjust))
 	mux.HandleFunc("/api/sessions/kill", s.requireFullAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub/", s.subscriptionLink)
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
