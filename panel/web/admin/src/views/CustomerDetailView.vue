@@ -544,7 +544,8 @@ onMounted(() => {
         <template #history>
           <div class="history-tab">
             <h4 class="section-title">{{ t('customer.wallet_transactions') }}</h4>
-            <table class="mini-table" role="table">
+            <div v-if="!customer.wallet_transactions?.length" class="text-muted text-sm">No transactions yet.</div>
+            <table v-else class="mini-table" role="table">
               <thead>
                 <tr><th>{{ t('customer.th_date') }}</th><th>{{ t('customer.th_type') }}</th><th>{{ t('customer.th_amount') }}</th><th>{{ t('customer.th_description') }}</th></tr>
               </thead>
@@ -561,15 +562,16 @@ onMounted(() => {
             </table>
 
             <h4 class="section-title">{{ t('customer.subscriptions') }}</h4>
-            <table class="mini-table" role="table">
+            <div v-if="!customer.subscriptions?.length" class="text-muted text-sm">No subscriptions yet.</div>
+            <table v-else class="mini-table" role="table">
               <thead>
                 <tr><th>{{ t('customer.th_plan') }}</th><th>{{ t('customer.th_start') }}</th><th>{{ t('customer.th_end') }}</th><th>{{ t('customer.th_status') }}</th></tr>
               </thead>
               <tbody>
                 <tr v-for="sub in customer.subscriptions" :key="sub.id">
                   <td>{{ sub.plan_name }}</td>
-                  <td class="text-muted">{{ formatDate(sub.start_date) }}</td>
-                  <td class="text-muted">{{ formatDate(sub.end_date) }}</td>
+                  <td class="text-muted">{{ sub.started_at ? formatDate(sub.started_at) : 'Pending' }}</td>
+                  <td class="text-muted">{{ sub.expires_at ? formatDate(sub.expires_at) : 'Unlimited' }}</td>
                   <td><KStatusPill :status="sub.status" size="sm" /></td>
                 </tr>
               </tbody>

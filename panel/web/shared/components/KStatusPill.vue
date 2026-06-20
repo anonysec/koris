@@ -25,9 +25,9 @@ const props = withDefaults(defineProps<KStatusPillProps>(), {
   size: 'md',
 })
 
-const okStatuses = ['active', 'running', 'online']
-const warnStatuses = ['limited', 'pending', 'expired']
-const badStatuses = ['disabled', 'failed', 'rejected']
+const okStatuses = ['active', 'running', 'online', 'open', 'approved', 'completed']
+const warnStatuses = ['limited', 'pending', 'expired', 'stale']
+const badStatuses = ['disabled', 'failed', 'rejected', 'closed', 'cancelled', 'offline']
 
 const computedVariant = computed<'ok' | 'warn' | 'bad' | 'idle'>(() => {
   const s = props.status.toLowerCase()

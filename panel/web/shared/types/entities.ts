@@ -34,8 +34,8 @@ export interface Subscription {
 export interface SubscriptionHistory {
   id: number
   plan_name: string
-  start_date: string
-  end_date: string
+  started_at: string
+  expires_at: string
   status: string
 }
 
