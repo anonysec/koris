@@ -110,6 +110,10 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
 
       totpRequired.value = false
       await checkAuth()
+      // Ensure isAuthenticated is set even if checkAuth had a race condition
+      if (!isAuthenticated.value) {
+        isAuthenticated.value = true
+      }
       return true
     } catch (err: any) {
       // Expose the error message so LoginView can display it

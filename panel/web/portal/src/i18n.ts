@@ -7,6 +7,8 @@ const messages: Record<Locale, Record<string, string>> = {
   en: {
     // Nav / Shell
     'portal.nav.dashboard': 'Dashboard',
+    'portal.nav.home': 'Home',
+    'portal.nav.billing': 'Billing',
     'portal.nav.support': 'Support',
     'portal.nav.vpn': 'My VPN',
     'portal.nav.profile': 'Profile Settings',
@@ -80,6 +82,27 @@ const messages: Record<Locale, Record<string, string>> = {
     // Apps section
     'portal.apps.title': 'Download Apps',
     'portal.apps.desc': 'Get the app for your device to connect easily.',
+
+    // Profile page
+    'portal.profile.title': 'Profile Settings',
+    'portal.profile.back': 'Back',
+    'portal.profile.accountInfo': 'Account Information',
+    'portal.profile.username': 'Username',
+    'portal.profile.status': 'Status',
+    'portal.profile.plan': 'Plan',
+    'portal.profile.displayName': 'Display Name',
+    'portal.profile.updateName': 'Update Name',
+    'portal.profile.changePassword': 'Change Password',
+    'portal.profile.currentPassword': 'Current Password',
+    'portal.profile.newPassword': 'New Password',
+    'portal.profile.confirmPassword': 'Confirm New Password',
+    'portal.profile.updated': 'Profile updated successfully.',
+    'portal.profile.passwordChanged': 'Password changed successfully.',
+    'portal.profile.fillAll': 'Please fill in all password fields.',
+    'portal.profile.mismatch': 'New passwords do not match.',
+    'portal.profile.tooShort': 'New password must be at least 6 characters.',
+    'portal.profile.changeFailed': 'Failed to change password.',
+
     'portal.support.newTicket': 'Ask for Help',
     'portal.support.subject': 'What is the problem?',
     'portal.support.subjectPlaceholder': 'Short description...',
@@ -101,6 +124,8 @@ const messages: Record<Locale, Record<string, string>> = {
   fa: {
     // Nav / Shell
     'portal.nav.dashboard': 'داشبورد',
+    'portal.nav.home': 'خانه',
+    'portal.nav.billing': 'صورتحساب',
     'portal.nav.support': 'پشتیبانی',
     'portal.nav.vpn': 'وی‌پی‌ان من',
     'portal.nav.profile': 'تنظیمات حساب',
@@ -174,6 +199,27 @@ const messages: Record<Locale, Record<string, string>> = {
     // Apps section
     'portal.apps.title': 'دانلود اپلیکیشن',
     'portal.apps.desc': 'اپ مناسب دستگاه خود را دانلود کنید تا راحت وصل شوید.',
+
+    // Profile page
+    'portal.profile.title': 'تنظیمات پروفایل',
+    'portal.profile.back': 'بازگشت',
+    'portal.profile.accountInfo': 'اطلاعات حساب',
+    'portal.profile.username': 'نام کاربری',
+    'portal.profile.status': 'وضعیت',
+    'portal.profile.plan': 'پلن',
+    'portal.profile.displayName': 'نام نمایشی',
+    'portal.profile.updateName': 'بروزرسانی نام',
+    'portal.profile.changePassword': 'تغییر رمز عبور',
+    'portal.profile.currentPassword': 'رمز عبور فعلی',
+    'portal.profile.newPassword': 'رمز عبور جدید',
+    'portal.profile.confirmPassword': 'تأیید رمز عبور جدید',
+    'portal.profile.updated': 'پروفایل با موفقیت بروزرسانی شد.',
+    'portal.profile.passwordChanged': 'رمز عبور با موفقیت تغییر کرد.',
+    'portal.profile.fillAll': 'لطفاً تمام فیلدهای رمز عبور را پر کنید.',
+    'portal.profile.mismatch': 'رمزهای عبور جدید مطابقت ندارند.',
+    'portal.profile.tooShort': 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.',
+    'portal.profile.changeFailed': 'تغییر رمز عبور ناموفق بود.',
+
     'portal.support.newTicket': 'درخواست کمک',
     'portal.support.subject': 'مشکل چیست؟',
     'portal.support.subjectPlaceholder': 'توضیح کوتاه...',
@@ -195,6 +241,8 @@ const messages: Record<Locale, Record<string, string>> = {
   zh: {
     // Nav / Shell
     'portal.nav.dashboard': '仪表盘',
+    'portal.nav.home': '首页',
+    'portal.nav.billing': '账单',
     'portal.nav.support': '客服支持',
     'portal.nav.vpn': '我的VPN',
     'portal.nav.profile': '账户设置',
@@ -268,6 +316,27 @@ const messages: Record<Locale, Record<string, string>> = {
     // Apps section
     'portal.apps.title': '下载应用',
     'portal.apps.desc': '下载适合您设备的应用，轻松连接。',
+
+    // Profile page
+    'portal.profile.title': '账户设置',
+    'portal.profile.back': '返回',
+    'portal.profile.accountInfo': '账户信息',
+    'portal.profile.username': '用户名',
+    'portal.profile.status': '状态',
+    'portal.profile.plan': '套餐',
+    'portal.profile.displayName': '显示名称',
+    'portal.profile.updateName': '更新名称',
+    'portal.profile.changePassword': '修改密码',
+    'portal.profile.currentPassword': '当前密码',
+    'portal.profile.newPassword': '新密码',
+    'portal.profile.confirmPassword': '确认新密码',
+    'portal.profile.updated': '个人资料更新成功。',
+    'portal.profile.passwordChanged': '密码修改成功。',
+    'portal.profile.fillAll': '请填写所有密码字段。',
+    'portal.profile.mismatch': '两次输入的新密码不一致。',
+    'portal.profile.tooShort': '新密码至少需要6个字符。',
+    'portal.profile.changeFailed': '密码修改失败。',
+
     'portal.support.newTicket': '寻求帮助',
     'portal.support.subject': '问题是什么？',
     'portal.support.subjectPlaceholder': '简短描述...',
@@ -289,6 +358,8 @@ const messages: Record<Locale, Record<string, string>> = {
   ru: {
     // Nav / Shell
     'portal.nav.dashboard': 'Панель',
+    'portal.nav.home': 'Главная',
+    'portal.nav.billing': 'Оплата',
     'portal.nav.support': 'Поддержка',
     'portal.nav.vpn': 'Мой VPN',
     'portal.nav.profile': 'Настройки профиля',
@@ -352,6 +423,29 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.apps.title': 'Скачать приложения',
     'portal.apps.desc': 'Скачайте приложение для вашего устройства.',
 
+    // Profile page
+    'portal.profile.title': 'Настройки профиля',
+    'portal.profile.back': 'Назад',
+    'portal.profile.accountInfo': 'Информация об аккаунте',
+    'portal.profile.username': 'Имя пользователя',
+    'portal.profile.status': 'Статус',
+    'portal.profile.plan': 'Тариф',
+    'portal.profile.displayName': 'Отображаемое имя',
+    'portal.profile.updateName': 'Обновить имя',
+    'portal.profile.changePassword': 'Изменить пароль',
+    'portal.profile.currentPassword': 'Текущий пароль',
+    'portal.profile.newPassword': 'Новый пароль',
+    'portal.profile.confirmPassword': 'Подтвердите новый пароль',
+    'portal.profile.updated': 'Профиль успешно обновлен.',
+    'portal.profile.passwordChanged': 'Пароль успешно изменен.',
+    'portal.profile.fillAll': 'Пожалуйста, заполните все поля пароля.',
+    'portal.profile.mismatch': 'Новые пароли не совпадают.',
+    'portal.profile.tooShort': 'Новый пароль должен содержать не менее 6 символов.',
+    'portal.profile.changeFailed': 'Не удалось изменить пароль.',
+
+    // Support section
+    'portal.support.title': 'Помощь и поддержка',
+
     // Promo Code
     'portal.promo.title': 'Промокод',
     'portal.promo.placeholder': 'Введите код',
@@ -360,8 +454,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.promo.success_fixed': 'Скидка ${value} применена!',
     'portal.promo.invalid': 'Недействительный или истекший промокод.',
 
-    // Support section
-    'portal.support.title': 'Помощь и поддержка',
     'portal.support.newTicket': 'Задать вопрос',
     'portal.support.subject': 'В чем проблема?',
     'portal.support.subjectPlaceholder': 'Краткое описание...',

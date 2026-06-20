@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
+import { useI18n } from '@koris/composables/useI18n'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 
+const router = useRouter()
 const auth = usePortalAuthStore()
+const { t } = useI18n()
 
 const profileForm = ref({
   display_name: auth.user?.display_name || '',
@@ -26,7 +30,7 @@ async function handleUpdateProfile() {
     display_name: profileForm.value.display_name,
   })
   if (success) {
-    notice.value = 'Profile updated successfully.'
+    notice.value = t('portal.profile.updated')
   }
 }
 
@@ -35,17 +39,17 @@ async function handleChangePassword() {
   passwordError.value = ''
 
   if (!passwordForm.value.current_password || !passwordForm.value.new_password) {
-    passwordError.value = 'Please fill in all password fields.'
+    passwordError.value = t('portal.profile.fillAll')
     return
   }
 
   if (passwordForm.value.new_password !== passwordForm.value.confirm_password) {
-    passwordError.value = 'New passwords do not match.'
+    passwordError.value = t('portal.profile.mismatch')
     return
   }
 
   if (passwordForm.value.new_password.length < 6) {
-    passwordError.value = 'New password must be at least 6 characters.'
+    passwordError.value = t('portal.profile.tooShort')
     return
   }
 
@@ -55,33 +59,39 @@ async function handleChangePassword() {
   })
 
   if (success) {
-    notice.value = 'Password changed successfully.'
+    notice.value = t('portal.profile.passwordChanged')
     passwordForm.value = { current_password: '', new_password: '', confirm_password: '' }
   } else {
-    passwordError.value = auth.error || 'Failed to change password.'
+    passwordError.value = auth.error || t('portal.profile.changeFailed')
   }
 }
 </script>
 <template>
   <div class="profile">
-    <h1 class="profile__title">Profile Settings</h1>
+    <div class="profile__back">
+      <KButton variant="ghost" size="sm" @click="router.push({ name: 'portal-home' })">
+        ← {{ t('portal.profile.back') }}
+      </KButton>
+    </div>
+
+    <h1 class="profile__title">{{ t('portal.profile.title') }}</h1>
 
     <div v-if="notice" class="profile__notice" role="status">{{ notice }}</div>
 
     <!-- Account Info -->
     <section class="profile__section">
-      <h2 class="profile__section-title">Account Information</h2>
+      <h2 class="profile__section-title">{{ t('portal.profile.accountInfo') }}</h2>
       <div class="profile__info">
         <div class="profile__info-item">
-          <span class="profile__info-label">Username</span>
+          <span class="profile__info-label">{{ t('portal.profile.username') }}</span>
           <span class="profile__info-value">{{ auth.username }}</span>
         </div>
         <div class="profile__info-item">
-          <span class="profile__info-label">Status</span>
+          <span class="profile__info-label">{{ t('portal.profile.status') }}</span>
           <span class="profile__info-value">{{ auth.status }}</span>
         </div>
         <div class="profile__info-item">
-          <span class="profile__info-label">Plan</span>
+          <span class="profile__info-label">{{ t('portal.profile.plan') }}</span>
           <span class="profile__info-value">{{ auth.planName }}</span>
         </div>
       </div>
@@ -89,31 +99,31 @@ async function handleChangePassword() {
 
     <!-- Update Display Name -->
     <section class="profile__section">
-      <h2 class="profile__section-title">Display Name</h2>
+      <h2 class="profile__section-title">{{ t('portal.profile.displayName') }}</h2>
       <form class="profile__form" @submit.prevent="handleUpdateProfile">
-        <KFormField label="Display Name">
-          <KInput v-model="profileForm.display_name" placeholder="Your display name" />
+        <KFormField :label="t('portal.profile.displayName')">
+          <KInput v-model="profileForm.display_name" :placeholder="t('portal.profile.displayName')" />
         </KFormField>
         <KButton type="submit" variant="primary" :loading="auth.loading">
-          Update Name
+          {{ t('portal.profile.updateName') }}
         </KButton>
       </form>
     </section>
 
     <!-- Change Password -->
     <section class="profile__section">
-      <h2 class="profile__section-title">Change Password</h2>
+      <h2 class="profile__section-title">{{ t('portal.profile.changePassword') }}</h2>
       <form class="profile__form" @submit.prevent="handleChangePassword">
-        <KFormField label="Current Password" :required="true">
-          <KInput v-model="passwordForm.current_password" type="password" placeholder="Current password" autocomplete="current-password" />
+        <KFormField :label="t('portal.profile.currentPassword')" :required="true">
+          <KInput v-model="passwordForm.current_password" type="password" :placeholder="t('portal.profile.currentPassword')" autocomplete="current-password" />
         </KFormField>
 
-        <KFormField label="New Password" :required="true">
-          <KInput v-model="passwordForm.new_password" type="password" placeholder="New password" autocomplete="new-password" />
+        <KFormField :label="t('portal.profile.newPassword')" :required="true">
+          <KInput v-model="passwordForm.new_password" type="password" :placeholder="t('portal.profile.newPassword')" autocomplete="new-password" />
         </KFormField>
 
-        <KFormField label="Confirm New Password" :required="true">
-          <KInput v-model="passwordForm.confirm_password" type="password" placeholder="Confirm new password" autocomplete="new-password" />
+        <KFormField :label="t('portal.profile.confirmPassword')" :required="true">
+          <KInput v-model="passwordForm.confirm_password" type="password" :placeholder="t('portal.profile.confirmPassword')" autocomplete="new-password" />
         </KFormField>
 
         <div v-if="passwordError" class="profile__error" role="alert">
@@ -121,13 +131,16 @@ async function handleChangePassword() {
         </div>
 
         <KButton type="submit" variant="primary" :loading="auth.loading">
-          Change Password
+          {{ t('portal.profile.changePassword') }}
         </KButton>
       </form>
     </section>
   </div>
 </template>
 <style scoped>
+.profile__back {
+  margin-bottom: var(--space-4);
+}
 .profile__title {
   font-size: var(--text-2xl);
   font-weight: 700;
