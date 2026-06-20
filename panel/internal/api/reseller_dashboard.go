@@ -31,12 +31,25 @@ func (s *Server) resellerDashboard(w http.ResponseWriter, r *http.Request) {
 	var totalUsageBytes int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = ? AND c.deleted_at IS NULL`, actor).Scan(&totalUsageBytes)
 
+	// Daily usage for last 7 days
+	dailyUsage := make([]int64, 7)
+	now := time.Now().UTC()
+	for i := 6; i >= 0; i-- {
+		day := now.AddDate(0, 0, -i)
+		start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
+		end := start.Add(24 * time.Hour)
+		var bytes int64
+		_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = ? AND c.deleted_at IS NULL AND ra.acctstarttime >= ? AND ra.acctstarttime < ?`, actor, start, end).Scan(&bytes)
+		dailyUsage[6-i] = bytes
+	}
+
 	writeJSON(w, map[string]any{
 		"ok":                true,
 		"credit":            credit,
 		"total_users":       totalUsers,
 		"active_users":      activeUsers,
 		"total_usage_bytes": totalUsageBytes,
+		"daily_usage":       dailyUsage,
 	})
 }
 
