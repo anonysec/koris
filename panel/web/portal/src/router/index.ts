@@ -23,12 +23,20 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach(async (to, from) => {
+router.beforeEach(async (to) => {
   const { usePortalAuthStore } = await import('@/stores/auth')
   const auth = usePortalAuthStore()
 
-  // Skip auth check if already authenticated or currently loading (login in progress)
-  if (!auth.isAuthenticated && !auth.loading) {
+  // If already authenticated (e.g. just logged in), skip the network check
+  if (auth.isAuthenticated) {
+    if (to.name === 'portal-login') {
+      return { name: 'portal-home' }
+    }
+    return // allow navigation
+  }
+
+  // Not authenticated yet — try to verify session with the server
+  if (!auth.loading) {
     await auth.checkAuth()
   }
 
