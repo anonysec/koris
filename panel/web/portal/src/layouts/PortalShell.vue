@@ -132,8 +132,9 @@ const langLabels: Record<Locale, string> = {
 </template>
 <style scoped>
 .portal-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-bg);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .portal-header {
   display: flex;

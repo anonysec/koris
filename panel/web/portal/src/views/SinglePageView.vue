@@ -55,12 +55,13 @@ interface AppLink {
 }
 const appLinks = ref<AppLink[]>([])
 
-const displayAppLinks = computed(() => appLinks.value)
+const displayAppLinks = computed(() => appLinks.value.filter(l => l.url && l.url !== '#'))
 
 // ---- Support ----
 const showCreateForm = ref(false)
 const ticketForm = ref({ subject: '', message: '' })
 const notice = ref('')
+const supportTab = ref<'open' | 'closed'>('open')
 
 // ---- Computed ----
 const displayName = computed(() => auth.displayName)
@@ -363,7 +364,7 @@ async function handleViewTicket(id: number) {
 
       <div v-if="notice" class="sp__notice" role="status">{{ notice }}</div>
 
-      <KSkeleton v-if="ticketsStore.loading && !ticketsStore.list.length && !selectedTicket" type="card" :count="1" />
+      <KSkeleton v-if="ticketsStore.loading && !ticketsStore.list.length" type="card" :count="1" />
 
       <template v-else>
         <div class="sp__support-simple">
@@ -414,7 +415,7 @@ async function handleViewTicket(id: number) {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  padding-bottom: var(--space-8);
+  padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 20px));
 }
 
 /* Welcome */
@@ -667,30 +668,30 @@ async function handleViewTicket(id: number) {
   margin-bottom: var(--space-4);
   border: 1px solid rgba(34, 197, 94, 0.2);
 }
-.sp__new-ticket {
-  margin-bottom: var(--space-4);
+.sp__support-simple {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
-.sp__new-ticket-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
+.sp__support-desc {
   font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  min-height: 44px;
-  transition: opacity 0.2s;
+  color: var(--color-muted);
+  margin: 0;
 }
-.sp__new-ticket-btn:hover {
-  opacity: 0.9;
+.sp__support-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.sp__support-count {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 .sp__ticket-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 .sp__form-actions {
   display: flex;
@@ -730,43 +731,6 @@ async function handleViewTicket(id: number) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sp__ticket-row-status {
-  flex-shrink: 0;
-}
-.sp__ticket-detail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.sp__back-btn {
-  display: inline-flex;
-  align-items: center;
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  padding: var(--space-1) 0;
-  min-height: 44px;
-}
-.sp__ticket-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-.sp__ticket-subject {
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-.sp__reply-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
 
 /* ===== Mobile responsive ===== */
 @media (max-width: 768px) {
@@ -780,12 +744,6 @@ async function handleViewTicket(id: number) {
 
   .sp__hello {
     font-size: var(--text-lg);
-  }
-
-  .sp__usage-content {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
   }
 
   .sp__account-grid {
@@ -811,15 +769,6 @@ async function handleViewTicket(id: number) {
     max-width: 100%;
   }
 
-  .sp__promo-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .sp__promo-input {
-    max-width: 100%;
-  }
-
   .sp__profile-card {
     flex-wrap: wrap;
     gap: var(--space-2);
@@ -836,12 +785,6 @@ async function handleViewTicket(id: number) {
 
   .sp__apps-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .sp__ticket-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
   }
 
   .sp__form-actions {
