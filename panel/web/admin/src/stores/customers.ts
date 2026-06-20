@@ -50,6 +50,7 @@ export interface CreateCustomerPayload {
   speed_mbps: number
   days: number
   template_id?: number
+  avatar?: string
 }
 
 /**
@@ -64,6 +65,7 @@ export interface UpdateCustomerPayload {
   speed_mbps?: number
   days?: number
   allowed_protocols?: string[]
+  avatar?: string
 }
 
 /**

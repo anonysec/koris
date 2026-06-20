@@ -117,11 +117,14 @@ const form = ref({
   speed_mbps: '',
   days: '',
   notes: '',
+  avatar: '',
 })
 
 const customer = computed(() => store.detail)
 const usage = computed(() => store.usage)
 const isNew = computed(() => props.id === 'new')
+
+const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '🐙', '🦋', '🌟', '🔥', '💎', '🎯', '🚀', '⚡', '🌈', '🎪', '🎭', '🏆', '👑']
 
 function populateForm() {
   if (customer.value) {
@@ -135,6 +138,7 @@ function populateForm() {
       speed_mbps: '',
       days: '',
       notes: customer.value.notes || '',
+      avatar: customer.value.avatar || '',
     }
   }
 }
@@ -148,6 +152,7 @@ async function saveProfile() {
     display_name: form.value.display_name,
     status: form.value.status,
     notes: form.value.notes,
+    avatar: form.value.avatar,
   })
   saving.value = false
 }
@@ -327,7 +332,7 @@ onMounted(() => {
       <!-- Header -->
       <header class="detail-header">
         <div class="detail-header__left">
-          <KAvatar :name="customer.display_name || customer.username" size="lg" />
+          <KAvatar :name="customer.display_name || customer.username" size="lg" :emoji="customer.avatar || undefined" />
           <div class="detail-header__info">
             <h2 class="detail-header__username">{{ customer.username }}</h2>
             <div class="detail-header__meta">
@@ -383,6 +388,21 @@ onMounted(() => {
             <KFormField name="notes" :label="t('customer.notes')">
               <template #default="{ fieldId }">
                 <KTextarea :id="fieldId" v-model="form.notes" rows="3" />
+              </template>
+            </KFormField>
+
+            <KFormField name="user-avatar" :label="t('user.avatar')">
+              <template #default>
+                <div class="emoji-picker">
+                  <button
+                    v-for="em in defaultEmojis"
+                    :key="em"
+                    type="button"
+                    class="emoji-btn"
+                    :class="{ 'emoji-btn--active': form.avatar === em }"
+                    @click="form.avatar = form.avatar === em ? '' : em"
+                  >{{ em }}</button>
+                </div>
               </template>
             </KFormField>
 
@@ -721,5 +741,34 @@ onMounted(() => {
   margin-top: var(--space-4);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
+}
+
+/* Emoji Picker for user avatar */
+.emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.emoji-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.emoji-btn:hover {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+}
+.emoji-btn--active {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.15);
+  transform: scale(1.1);
 }
 </style>

@@ -67,6 +67,7 @@ const userForm = ref({
   speed_mbps: '',
   days: '',
   template_id: '' as string | number,
+  avatar: '',
 })
 
 const resellerForm = ref({
@@ -78,7 +79,7 @@ const resellerForm = ref({
 
 const creditForm = ref({ amount: '' })
 
-// Default avatar emojis for reseller selection
+// Default avatar emojis for user and reseller selection
 const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '🐙', '🦋', '🌟', '🔥', '💎', '🎯', '🚀', '⚡', '🌈', '🎪', '🎭', '🏆', '👑']
 
 // ─── Plan Options ───────────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ function handleRowClick(row: any) {
 }
 
 function openNewUserSlideOver() {
-  userForm.value = { username: '', password: '', display_name: '', plan_id: '', data_gb: '', speed_mbps: '', days: '', template_id: '' }
+  userForm.value = { username: '', password: '', display_name: '', plan_id: '', data_gb: '', speed_mbps: '', days: '', template_id: '', avatar: '' }
   showUserSlideOver.value = true
 }
 
@@ -214,6 +215,7 @@ async function handleCreateUser() {
     speed_mbps: userForm.value.speed_mbps ? Number(userForm.value.speed_mbps) : 0,
     days: userForm.value.days ? Number(userForm.value.days) : 0,
     template_id: userForm.value.template_id ? Number(userForm.value.template_id) : undefined,
+    avatar: userForm.value.avatar || undefined,
   })
   saving.value = false
   if (success) {
@@ -574,6 +576,20 @@ onMounted(() => {
             </template>
           </KFormField>
         </div>
+        <KFormField name="user-avatar" :label="t('user.avatar')">
+          <template #default>
+            <div class="emoji-picker">
+              <button
+                v-for="em in defaultEmojis"
+                :key="em"
+                type="button"
+                class="emoji-btn"
+                :class="{ 'emoji-btn--active': userForm.avatar === em }"
+                @click="userForm.avatar = userForm.avatar === em ? '' : em"
+              >{{ em }}</button>
+            </div>
+          </template>
+        </KFormField>
         <div class="slide-form__footer">
           <KButton variant="ghost" @click="showUserSlideOver = false">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">{{ t('btn.create') }}</KButton>

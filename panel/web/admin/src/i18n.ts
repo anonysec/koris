@@ -68,6 +68,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.created_by': 'Created By',
     'user.display_name': 'Display Name',
     'user.notes': 'Notes',
+    'user.avatar': 'Avatar',
     // Empty states
     'empty.no_users': 'No users found',
     'empty.no_sessions': 'No active sessions',
@@ -751,6 +752,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.created_by': 'ایجاد شده توسط',
     'user.display_name': 'نام نمایشی',
     'user.notes': 'یادداشت‌ها',
+    'user.avatar': 'آواتار',
     // Empty states
     'empty.no_users': 'کاربری یافت نشد',
     'empty.no_sessions': 'نشست فعالی وجود ندارد',
@@ -1388,6 +1390,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.created_by': '创建者',
     'user.display_name': '显示名称',
     'user.notes': '备注',
+    'user.avatar': '头像',
     // Empty states
     'empty.no_users': '未找到用户',
     'empty.no_sessions': '没有活跃会话',
@@ -2026,6 +2029,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.created_by': 'Создан',
     'user.display_name': 'Отображаемое имя',
     'user.notes': 'Заметки',
+    'user.avatar': 'Аватар',
     // Empty states
     'empty.no_users': 'Пользователи не найдены',
     'empty.no_sessions': 'Нет активных сессий',
