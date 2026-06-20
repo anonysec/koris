@@ -854,7 +854,13 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		var planDataGB, planSpeedMbps float64
 		var planDays int
 		var planPrice float64
-		if err := s.DB.QueryRow(`SELECT data_gb,speed_mbps,duration_days,price FROM plans WHERE id=? AND is_active=1 LIMIT 1`, *in.PlanID).Scan(&planDataGB, &planSpeedMbps, &planDays, &planPrice); err == nil {
+		var planBillingType string
+		if err := s.DB.QueryRow(`SELECT data_gb,speed_mbps,duration_days,price,COALESCE(billing_type,'quota') FROM plans WHERE id=? AND is_active=1 LIMIT 1`, *in.PlanID).Scan(&planDataGB, &planSpeedMbps, &planDays, &planPrice, &planBillingType); err == nil {
+			// Resellers can only assign quota plans, not pay-as-you-go
+			if role == "reseller" && planBillingType == "payg" {
+				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "reseller_quota_only"})
+				return
+			}
 			if in.DataGB == nil {
 				dataGB = planDataGB
 			}
@@ -6278,6 +6284,32 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.logAudit(actor, "reseller.deleted", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername}, clientIP(r))
+		writeJSON(w, map[string]any{"ok": true})
+		return
+	}
+
+	if r.Method == http.MethodPost && len(parts) > 1 && parts[1] == "update" {
+		var in struct {
+			Password      string `json:"password"`
+			DefaultPlanID *int64 `json:"default_plan_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+			return
+		}
+		if in.Password != "" {
+			if len(in.Password) < 4 {
+				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "password_too_short"})
+				return
+			}
+			ph, err := auth.HashPassword(in.Password)
+			if err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			_, _ = s.DB.Exec(`UPDATE admins SET password_hash=? WHERE id=?`, ph, id)
+		}
+		s.logAudit(actor, "reseller.updated", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername}, clientIP(r))
 		writeJSON(w, map[string]any{"ok": true})
 		return
 	}

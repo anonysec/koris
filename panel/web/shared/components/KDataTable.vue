@@ -304,7 +304,77 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 .k-table__td--center { text-align: center; }
 .k-table__td--right { text-align: right; }
 .k-table__td--check { width: 32px; padding: var(--space-3) var(--space-2); }
-.k-table__checkbox { width: 14px; height: 14px; accent-color: var(--color-primary); cursor: pointer; }
+.k-table__checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.k-table__checkbox:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+.k-table__checkbox:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  animation: k-check-pop 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.k-table__checkbox:checked::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 4.5px;
+  width: 4.5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(1);
+  animation: k-checkmark 0.2s 0.05s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.k-table__checkbox:indeterminate {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  animation: k-check-pop 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.k-table__checkbox:indeterminate::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 2px;
+  background: #fff;
+  border-radius: 1px;
+  transform: translate(-50%, -50%) scaleX(1);
+  animation: k-dash 0.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.k-table__checkbox:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+@keyframes k-check-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.85); }
+  100% { transform: scale(1); }
+}
+@keyframes k-checkmark {
+  0% { transform: rotate(45deg) scale(0); opacity: 0; }
+  100% { transform: rotate(45deg) scale(1); opacity: 1; }
+}
+@keyframes k-dash {
+  0% { transform: translate(-50%, -50%) scaleX(0); }
+  100% { transform: translate(-50%, -50%) scaleX(1); }
+}
 
 /* Empty */
 .k-table__empty { padding: var(--space-12) var(--space-4); text-align: center; color: var(--color-muted); font-size: var(--text-base); }
