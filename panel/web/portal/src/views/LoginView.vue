@@ -107,7 +107,7 @@ async function handleLogin() {
 </template>
 <style scoped>
 .login-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: 1fr 1fr;
   background: var(--color-bg);
