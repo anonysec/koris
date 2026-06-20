@@ -55,7 +55,7 @@ interface AppLink {
 }
 const appLinks = ref<AppLink[]>([])
 
-const displayAppLinks = computed(() => appLinks.value.filter(l => l.url && l.url !== '#'))
+const displayAppLinks = computed(() => appLinks.value)
 
 // ---- Support ----
 const showCreateForm = ref(false)
@@ -73,7 +73,7 @@ const totalUsageBytes = computed(() => usageStore.totalUsageBytes)
 const expiresAt = computed(() => auth.user?.subscription?.expires_at ?? '')
 const isOnline = computed(() => usageStore.isOnline)
 
-const { remainingBytes, progressColor, daysRemaining } = useUsageDisplay(
+const { progressColor, daysRemaining } = useUsageDisplay(
   totalUsageBytes,
   maxDataBytes,
   expiresAt
@@ -108,10 +108,6 @@ const formattedExpiry = computed(() => {
   }).format(new Date(expiresAt.value))
 })
 
-const remainingDisplay = computed(() => {
-  if (!maxDataBytes.value) return t('portal.unlimitedData')
-  return `${formatBytes(remainingBytes.value)} / ${formatBytes(maxDataBytes.value)}`
-})
 
 // ---- Lifecycle ----
 onMounted(async () => {
@@ -198,7 +194,27 @@ async function handleViewTicket(id: number) {
   await ticketsStore.loadTicketDetail(id)
 }
 
+function hasUnreadReply(ticket: any): boolean {
+  if (ticket.last_reply_by) {
+    return ticket.status === 'open' && ticket.last_reply_by === 'admin'
+  }
+  return false
+}
 
+const replyMessage = ref('')
+
+function handleBackToList() {
+  ticketsStore.clearDetail()
+}
+
+async function handleReply() {
+  if (!replyMessage.value.trim() || !ticketsStore.detail) return
+  const success = await ticketsStore.replyToTicket(ticketsStore.detail.id, replyMessage.value)
+  if (success) {
+    replyMessage.value = ''
+    notice.value = t('portal.support.replySent')
+  }
+}
 </script>
 <template>
   <div class="sp">
@@ -299,8 +315,6 @@ async function handleViewTicket(id: number) {
           </select>
         </div>
 
-        <!-- Promo Code - only shown in billing context (BillingView.vue) -->
-
         <!-- Profile list -->
         <KEmptyState
           v-if="!profiles.length"
@@ -378,14 +392,25 @@ async function handleViewTicket(id: number) {
             </span>
           </div>
 
-          <!-- Simple ticket list (just subjects, clickable) -->
+          <!-- Ticket tabs -->
+          <div v-if="ticketsStore.list.length" class="sp__ticket-tabs">
+            <button :class="['sp__ticket-tab', { 'sp__ticket-tab--active': supportTab === 'open' }]" @click="supportTab = 'open'">
+              {{ t('portal.support.open') }} ({{ ticketsStore.openTickets.length }})
+            </button>
+            <button :class="['sp__ticket-tab', { 'sp__ticket-tab--active': supportTab === 'closed' }]" @click="supportTab = 'closed'">
+              {{ t('portal.support.closed') }} ({{ ticketsStore.closedTickets.length }})
+            </button>
+          </div>
+
+          <!-- Filtered ticket list -->
           <div v-if="ticketsStore.list.length" class="sp__tickets-list">
-            <div v-for="ticket in ticketsStore.list.slice(0, 5)" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
+            <div v-for="ticket in (supportTab === 'open' ? ticketsStore.openTickets : ticketsStore.closedTickets)" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
               <div class="sp__ticket-row-info">
                 <span class="sp__ticket-row-subject">{{ ticket.subject }}</span>
-                <KStatusPill :status="ticket.status === 'open' ? 'active' : 'disabled'" size="sm">
+                <KStatusPill :status="ticket.status === 'open' || ticket.status === 'pending' ? 'active' : 'disabled'" size="sm">
                   {{ ticket.status }}
                 </KStatusPill>
+                <span v-if="hasUnreadReply(ticket)" class="sp__ticket-unread">●</span>
               </div>
             </div>
           </div>
@@ -731,6 +756,78 @@ async function handleViewTicket(id: number) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sp__ticket-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sp__back-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  min-height: 44px;
+}
+.sp__ticket-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.sp__ticket-subject {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.sp__messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sp__message {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.sp__message--admin {
+  background: rgba(99, 102, 241, 0.05);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+.sp__message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+.sp__message-sender {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.sp__message-time {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+.sp__message-body {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.sp__reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.sp__ticket-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); margin-top: var(--space-3); }
+.sp__ticket-tab { padding: 6px 14px; font-size: var(--text-xs); font-weight: 500; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: transparent; color: var(--color-muted); cursor: pointer; min-height: 36px; }
+.sp__ticket-tab--active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.sp__ticket-unread { color: var(--color-primary); font-size: 10px; margin-left: auto; }
 
 /* ===== Mobile responsive ===== */
 @media (max-width: 768px) {
@@ -793,6 +890,12 @@ async function handleViewTicket(id: number) {
 
   .sp__form-actions > * {
     width: 100%;
+  }
+
+  .sp__ticket-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
   }
 }
 
