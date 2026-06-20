@@ -28,6 +28,28 @@ const { get } = useApi()
 const activeTab = ref('profile')
 const saving = ref(false)
 
+// ─── Reseller Wallet Adjust ─────────────────────────────────────────────────
+const showWalletAdjust = ref(false)
+const walletAmount = ref('')
+const walletAdjusting = ref(false)
+
+async function adjustWallet() {
+  if (!store.detail || !walletAmount.value) return
+  walletAdjusting.value = true
+  try {
+    const { post } = useApi()
+    await post(`/api/reseller/users/${store.detail.id}/wallet`, { amount: Number(walletAmount.value) })
+    toast.success('Credit adjusted')
+    await store.loadDetail(store.detail.id)
+    showWalletAdjust.value = false
+    walletAmount.value = ''
+  } catch {
+    toast.error('Failed to adjust credit')
+  } finally {
+    walletAdjusting.value = false
+  }
+}
+
 // ─── Traffic Reset State (Requirement 3.4) ───────────────────────────────────
 const resettingTraffic = ref(false)
 
@@ -375,11 +397,27 @@ onMounted(() => {
               <KStatusPill :status="customer.status" />
               <span class="detail-header__balance">${{ customer.credit.toFixed(2) }}</span>
               <span class="detail-header__plan">{{ customer.plan || 'No plan' }}</span>
+              <KButton v-if="isReseller" type="button" variant="ghost" size="sm" @click="showWalletAdjust = true">+ Credit</KButton>
             </div>
           </div>
         </div>
         <KButton variant="ghost" @click="router.back()">{{ t('customer.back') }}</KButton>
       </header>
+
+      <!-- Reseller Wallet Adjust Modal -->
+      <div v-if="showWalletAdjust && isReseller" class="wallet-adjust-panel">
+        <div class="wallet-adjust-form">
+          <KFormField name="wallet-amount" label="Amount">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="walletAmount" type="number" placeholder="10.00" />
+            </template>
+          </KFormField>
+          <div class="wallet-adjust-actions">
+            <KButton type="button" variant="ghost" size="sm" @click="showWalletAdjust = false">Cancel</KButton>
+            <KButton type="button" variant="primary" size="sm" :loading="walletAdjusting" @click="adjustWallet">Save</KButton>
+          </div>
+        </div>
+      </div>
 
       <!-- Tabs -->
       <KTabs v-model="activeTab" :tabs="tabs" aria-label="Customer details">
@@ -664,6 +702,10 @@ onMounted(() => {
 .detail-header__username { margin: 0; font-size: var(--text-lg); font-weight: var(--font-bold); }
 .detail-header__meta { display: flex; align-items: center; gap: var(--space-3); }
 .detail-header__balance { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-accent); }
+
+.wallet-adjust-panel { padding: var(--space-3) var(--space-4); background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: var(--space-4); }
+.wallet-adjust-form { display: flex; align-items: flex-end; gap: var(--space-3); }
+.wallet-adjust-actions { display: flex; gap: var(--space-2); }
 
 .profile-form { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4) 0; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
