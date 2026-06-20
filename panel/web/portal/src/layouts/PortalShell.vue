@@ -293,6 +293,31 @@ const langLabels: Record<Locale, string> = {
 .portal-header__dropdown-item--danger:hover {
   background: var(--color-danger-bg, #fef2f2);
 }
+.portal-nav {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.portal-nav__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.portal-nav__link:hover {
+  color: var(--color-text);
+}
+.portal-nav__link--active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
 .portal-main {
   padding: var(--space-5);
   max-width: 720px;
@@ -315,6 +340,15 @@ const langLabels: Record<Locale, string> = {
   }
   .portal-header__user-name {
     display: none;
+  }
+  .portal-nav {
+    padding: 0 var(--space-2);
+    overflow-x: auto;
+  }
+  .portal-nav__link {
+    padding: var(--space-2);
+    font-size: var(--text-xs);
+    white-space: nowrap;
   }
   .portal-main {
     padding: var(--space-3);

@@ -14,8 +14,6 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 import KInput from '@koris/ui/KInput.vue'
-import UsageGauge from '@/components/UsageGauge.vue'
-import TicketThread from '@/components/TicketThread.vue'
 
 // ---- Composables ----
 const auth = usePortalAuthStore()
@@ -57,21 +55,12 @@ interface AppLink {
 }
 const appLinks = ref<AppLink[]>([])
 
-const defaultAppLinks: AppLink[] = [
-  { name: 'iOS', url: '#', platform: 'ios', icon: '🍎' },
-  { name: 'Android', url: '#', platform: 'android', icon: '🤖' },
-  { name: 'Windows', url: '#', platform: 'windows', icon: '🪟' },
-  { name: 'macOS', url: '#', platform: 'macos', icon: '💻' },
-]
-
-const displayAppLinks = computed(() => appLinks.value.length ? appLinks.value : defaultAppLinks)
+const displayAppLinks = computed(() => appLinks.value)
 
 // ---- Support ----
 const showCreateForm = ref(false)
 const ticketForm = ref({ subject: '', message: '' })
-const replyMessage = ref('')
 const notice = ref('')
-const selectedTicketId = ref<number | null>(null)
 
 // ---- Computed ----
 const displayName = computed(() => auth.displayName)
@@ -122,8 +111,6 @@ const remainingDisplay = computed(() => {
   if (!maxDataBytes.value) return t('portal.unlimitedData')
   return `${formatBytes(remainingBytes.value)} / ${formatBytes(maxDataBytes.value)}`
 })
-
-const selectedTicket = computed(() => ticketsStore.detail)
 
 // ---- Lifecycle ----
 onMounted(async () => {
@@ -203,63 +190,14 @@ async function handleCreateTicket() {
     notice.value = t('portal.support.ticketCreated')
     ticketForm.value = { subject: '', message: '' }
     showCreateForm.value = false
-    await ticketsStore.loadTicketDetail(id)
-    selectedTicketId.value = id
   }
 }
 
 async function handleViewTicket(id: number) {
-  selectedTicketId.value = id
   await ticketsStore.loadTicketDetail(id)
 }
 
-async function handleReply() {
-  if (!selectedTicket.value || !replyMessage.value.trim()) return
-  notice.value = ''
-  const success = await ticketsStore.replyToTicket(selectedTicket.value.id, replyMessage.value)
-  if (success) {
-    notice.value = t('portal.support.replySent')
-    replyMessage.value = ''
-  }
-}
 
-function handleBackToList() {
-  selectedTicketId.value = null
-  ticketsStore.clearDetail()
-}
-
-// ---- Promo Code ----
-const promoCode = ref('')
-const promoApplying = ref(false)
-const promoMessage = ref('')
-const promoError = ref(false)
-const appliedPromo = ref<{ code: string; type: string; value: number } | null>(null)
-
-async function applyPromoCode() {
-  if (!promoCode.value.trim()) return
-  promoApplying.value = true
-  promoMessage.value = ''
-  promoError.value = false
-  try {
-    const { post: postApi } = useApi()
-    const res = await postApi<{ ok: boolean; code: string; type: string; value: number; discount_amount: number; final_amount: number }>('/api/portal/apply-promo', {
-      code: promoCode.value.trim(),
-    })
-    appliedPromo.value = { code: res.code, type: res.type, value: res.value }
-    if (res.type === 'percent') {
-      promoMessage.value = t('portal.promo.success_percent').replace('{value}', String(res.value))
-    } else {
-      promoMessage.value = t('portal.promo.success_fixed').replace('{value}', String(res.value))
-    }
-    promoError.value = false
-  } catch {
-    promoMessage.value = t('portal.promo.invalid')
-    promoError.value = true
-    appliedPromo.value = null
-  } finally {
-    promoApplying.value = false
-  }
-}
 </script>
 <template>
   <div class="sp">
@@ -312,18 +250,17 @@ async function applyPromoCode() {
 
       <KSkeleton v-if="usageStore.loading && !usageStore.usage" type="card" :count="1" />
       <template v-else>
-        <div class="sp__usage-content">
-          <UsageGauge :percent="usagePercent" :size="140" />
-          <div class="sp__usage-info">
-            <div class="sp__usage-remaining">{{ remainingDisplay }}</div>
-            <div class="sp__usage-label">{{ t('portal.usage.remaining') }}</div>
-            <div class="sp__progress-bar">
-              <div class="sp__progress-bar-fill" :style="{ width: `${Math.min(100, usagePercent)}%`, backgroundColor: progressBarColor }"></div>
-            </div>
-            <div class="sp__progress-labels">
-              <span>{{ formatBytes(totalUsageBytes) }} {{ t('portal.usage.used') }}</span>
-              <span>{{ maxDataBytes ? formatBytes(maxDataBytes) : t('portal.unlimitedData') }}</span>
-            </div>
+        <div class="sp__usage-compact">
+          <div class="sp__usage-compact-header">
+            <span class="sp__usage-compact-percent">{{ usagePercent }}% used</span>
+            <span class="sp__usage-compact-values">{{ formatBytes(totalUsageBytes) }} / {{ maxDataBytes ? formatBytes(maxDataBytes) : 'Unlimited' }}</span>
+          </div>
+          <div class="sp__progress-bar">
+            <div class="sp__progress-bar-fill" :style="{ width: `${Math.min(100, usagePercent)}%`, backgroundColor: progressBarColor }"></div>
+          </div>
+          <div class="sp__usage-compact-footer">
+            <span>{{ daysRemaining }} days remaining</span>
+            <span>Expires {{ formattedExpiry }}</span>
           </div>
         </div>
       </template>
@@ -396,7 +333,7 @@ async function applyPromoCode() {
     </section>
 
     <!-- ===== Section: Download Apps ===== -->
-    <section class="sp__section">
+    <section v-if="appLinks.length > 0" class="sp__section">
       <h2 class="sp__section-title">
         <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
         {{ t('portal.apps.title') }}
@@ -428,76 +365,46 @@ async function applyPromoCode() {
 
       <KSkeleton v-if="ticketsStore.loading && !ticketsStore.list.length && !selectedTicket" type="card" :count="1" />
 
-      <!-- Ticket detail -->
-      <template v-else-if="selectedTicket && selectedTicketId">
-        <div class="sp__ticket-detail">
-          <button class="sp__back-btn" @click="handleBackToList">
-            &larr; {{ t('portal.support.backToList') }}
-          </button>
-          <div class="sp__ticket-header">
-            <h3 class="sp__ticket-subject">#{{ selectedTicket.id }}: {{ selectedTicket.subject }}</h3>
-            <KStatusPill :status="selectedTicket.status === 'open' ? 'active' : 'disabled'">
-              {{ selectedTicket.status === 'open' ? t('portal.support.open') : t('portal.support.closed') }}
-            </KStatusPill>
-          </div>
-          <TicketThread :messages="selectedTicket.messages" />
-          <form v-if="selectedTicket.status === 'open'" class="sp__reply-form" @submit.prevent="handleReply">
-            <KFormField :label="t('portal.support.yourReply')">
-              <KTextarea v-model="replyMessage" :placeholder="t('portal.support.replyPlaceholder')" :rows="3" />
-            </KFormField>
-            <KButton type="submit" variant="primary" :loading="ticketsStore.loading" :disabled="!replyMessage.trim()">
-              {{ t('portal.support.send') }}
-            </KButton>
-          </form>
-        </div>
-      </template>
-
-      <!-- Create form + list -->
       <template v-else>
-        <!-- New ticket form -->
-        <div class="sp__new-ticket">
-          <button v-if="!showCreateForm" class="sp__new-ticket-btn" @click="showCreateForm = true">
-            + {{ t('portal.support.newTicket') }}
-          </button>
-          <form v-if="showCreateForm" class="sp__ticket-form" @submit.prevent="handleCreateTicket">
-            <KFormField :label="t('portal.support.subject')" :required="true">
-              <KInput v-model="ticketForm.subject" :placeholder="t('portal.support.subjectPlaceholder')" />
-            </KFormField>
-            <KFormField :label="t('portal.support.message')" :required="true">
-              <KTextarea v-model="ticketForm.message" :placeholder="t('portal.support.messagePlaceholder')" :rows="4" />
-            </KFormField>
-            <div class="sp__form-actions">
-              <KButton variant="ghost" size="sm" @click="showCreateForm = false">{{ t('portal.support.cancel') }}</KButton>
-              <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!ticketForm.subject || !ticketForm.message">
-                {{ t('portal.support.create') }}
-              </KButton>
-            </div>
-          </form>
-        </div>
+        <div class="sp__support-simple">
+          <p class="sp__support-desc">{{ t('portal.support.noTicketsDesc') }}</p>
+          <div class="sp__support-actions">
+            <KButton variant="primary" size="sm" @click="showCreateForm = true">
+              + {{ t('portal.support.newTicket') }}
+            </KButton>
+            <span v-if="ticketsStore.openTickets.length" class="sp__support-count">
+              {{ ticketsStore.openTickets.length }} open ticket{{ ticketsStore.openTickets.length > 1 ? 's' : '' }}
+            </span>
+          </div>
 
-        <!-- Ticket list -->
-        <KEmptyState
-          v-if="!ticketsStore.list.length && !showCreateForm"
-          :title="t('portal.support.noTickets')"
-          :description="t('portal.support.noTicketsDesc')"
-          icon="🎫"
-        />
-
-        <div v-else-if="ticketsStore.list.length" class="sp__tickets-list">
-          <div
-            v-for="ticket in ticketsStore.list"
-            :key="ticket.id"
-            class="sp__ticket-row"
-            @click="handleViewTicket(ticket.id)"
-          >
-            <div class="sp__ticket-row-info">
-              <span class="sp__ticket-row-subject">{{ ticket.subject }}</span>
-              <KStatusPill :status="ticket.status === 'open' ? 'active' : 'disabled'" class="sp__ticket-row-status">
-                {{ ticket.status === 'open' ? t('portal.support.open') : t('portal.support.closed') }}
-              </KStatusPill>
+          <!-- Simple ticket list (just subjects, clickable) -->
+          <div v-if="ticketsStore.list.length" class="sp__tickets-list">
+            <div v-for="ticket in ticketsStore.list.slice(0, 5)" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
+              <div class="sp__ticket-row-info">
+                <span class="sp__ticket-row-subject">{{ ticket.subject }}</span>
+                <KStatusPill :status="ticket.status === 'open' ? 'active' : 'disabled'" size="sm">
+                  {{ ticket.status }}
+                </KStatusPill>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Create form (hidden by default) -->
+        <form v-if="showCreateForm" class="sp__ticket-form" @submit.prevent="handleCreateTicket">
+          <KFormField :label="t('portal.support.subject')" :required="true">
+            <KInput v-model="ticketForm.subject" :placeholder="t('portal.support.subjectPlaceholder')" />
+          </KFormField>
+          <KFormField :label="t('portal.support.message')" :required="true">
+            <KTextarea v-model="ticketForm.message" :placeholder="t('portal.support.messagePlaceholder')" :rows="4" />
+          </KFormField>
+          <div class="sp__form-actions">
+            <KButton variant="ghost" size="sm" @click="showCreateForm = false">{{ t('portal.support.cancel') }}</KButton>
+            <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!ticketForm.subject || !ticketForm.message">
+              {{ t('portal.support.create') }}
+            </KButton>
+          </div>
+        </form>
       </template>
     </section>
   </div>
@@ -571,23 +478,30 @@ async function applyPromoCode() {
 }
 
 /* Usage */
-.sp__usage-content {
+.sp__usage-compact {
   display: flex;
-  align-items: center;
-  gap: var(--space-6);
+  flex-direction: column;
+  gap: var(--space-2);
 }
-.sp__usage-info {
-  flex: 1;
+.sp__usage-compact-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
 }
-.sp__usage-remaining {
+.sp__usage-compact-percent {
   font-size: var(--text-lg);
   font-weight: 700;
-  margin-bottom: var(--space-1);
 }
-.sp__usage-label {
+.sp__usage-compact-values {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.sp__usage-compact-footer {
+  display: flex;
+  justify-content: space-between;
   font-size: var(--text-xs);
   color: var(--color-muted);
-  margin-bottom: var(--space-3);
+  margin-top: var(--space-1);
 }
 .sp__progress-bar {
   height: 8px;
@@ -599,13 +513,6 @@ async function applyPromoCode() {
   height: 100%;
   border-radius: 4px;
   transition: width 0.4s ease, background-color 0.3s ease;
-}
-.sp__progress-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-xs);
-  color: var(--color-muted);
-  margin-top: var(--space-2);
 }
 
 /* VPN */
@@ -661,41 +568,6 @@ async function applyPromoCode() {
   border-radius: var(--radius-md);
   color: var(--color-text);
   font-size: var(--text-sm);
-}
-/* Promo Code */
-.sp__promo-section {
-  margin-bottom: var(--space-4);
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-.sp__promo-label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text);
-  display: block;
-  margin-bottom: var(--space-2);
-}
-.sp__promo-row {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-.sp__promo-input {
-  flex: 1;
-  max-width: 200px;
-}
-.sp__promo-message {
-  margin-top: var(--space-2);
-  font-size: var(--text-xs);
-  margin-bottom: 0;
-}
-.sp__promo-message--success {
-  color: var(--color-success, #22c55e);
-}
-.sp__promo-message--error {
-  color: var(--color-danger, #ef4444);
 }
 .sp__profile-desc {
   font-size: var(--text-xs);

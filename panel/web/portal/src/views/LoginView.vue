@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 
-const router = useRouter()
 const auth = usePortalAuthStore()
 
 const form = ref({
@@ -33,7 +31,8 @@ async function handleLogin() {
   })
 
   if (success) {
-    await router.replace({ name: 'portal-home' })
+    // Force full page navigation to guarantee clean state and bypass guard race
+    window.location.href = '/portal/'
   } else if (!auth.totpRequired) {
     formError.value = auth.error || 'Invalid credentials'
   }
