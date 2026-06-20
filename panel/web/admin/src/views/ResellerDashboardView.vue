@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
@@ -16,6 +16,7 @@ interface DashboardStats {
   total_users: number
   active_users: number
   total_usage_bytes: number
+  daily_usage?: number[]
 }
 
 const stats = ref<DashboardStats | null>(null)
@@ -31,13 +32,22 @@ function formatBytes(bytes: number): string {
   return `${mb.toFixed(1)} MB`
 }
 
+/** Simple bar chart heights based on daily usage */
+const chartBars = computed(() => {
+  const data = stats.value?.daily_usage ?? []
+  if (data.length === 0) return Array(7).fill(0)
+  const max = Math.max(...data, 1)
+  return data.map(v => Math.round((v / max) * 100))
+})
+
+const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
 async function loadStats() {
   loading.value = true
   try {
     const data = await api.get<DashboardStats>('/api/reseller/dashboard')
     if (data?.ok) {
       stats.value = data
-      // Update auth store credit
       if (auth.user) {
         auth.user.credit = data.credit
       }
@@ -88,6 +98,17 @@ onMounted(loadStats)
         <div class="stat-content">
           <span class="stat-value">{{ formatBytes(stats.total_usage_bytes) }}</span>
           <span class="stat-label">{{ t('reseller_dashboard.total_usage') }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usage Chart -->
+    <div v-if="stats" class="usage-chart-card">
+      <h3 class="chart-title">{{ t('reseller_dashboard.weekly_usage') }}</h3>
+      <div class="chart-bars">
+        <div v-for="(height, idx) in chartBars" :key="idx" class="chart-bar-wrap">
+          <div class="chart-bar" :style="{ height: `${Math.max(height, 4)}%` }" />
+          <span class="chart-bar-label">{{ weekDays[idx] }}</span>
         </div>
       </div>
     </div>
@@ -176,5 +197,55 @@ onMounted(loadStats)
 .stat-label {
   font-size: var(--text-sm, 12px);
   color: var(--color-muted, #8b98a5);
+}
+
+/* Usage Chart */
+.usage-chart-card {
+  margin-top: var(--space-5, 20px);
+  background: var(--color-surface-2, #1e2630);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-5, 20px);
+}
+
+.chart-title {
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--color-muted, #8b98a5);
+  margin: 0 0 var(--space-4, 16px);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2, 8px);
+  height: 120px;
+}
+
+.chart-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 40px;
+  background: linear-gradient(180deg, var(--color-primary, #2563eb), rgba(37, 99, 235, 0.4));
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-bar-label {
+  font-size: 10px;
+  color: var(--color-muted, #8b98a5);
+  text-transform: uppercase;
 }
 </style>

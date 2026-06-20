@@ -8,6 +8,7 @@ import type { VNode } from 'vue'
 // --- KButton ---
 
 export interface KButtonProps {
+  type?: 'button' | 'submit' | 'reset'
   variant?: 'primary' | 'ghost' | 'danger' | 'text'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
