@@ -2,6 +2,18 @@
 
 All notable changes to the clean Go + Vue rewrite are tracked here.
 
+## 0.38.0 - 2025-06-18
+
+### Added
+- **Billing mode for resellers** — resellers can set default billing mode (manual/self-service) for their users
+  - Manual mode hides billing tab, wallet, and payment options from the user portal
+  - Self-service mode enables users to top-up wallet and buy plans themselves
+  - Per-user override available in customer detail (inherit, manual, or self-service)
+  - New reseller settings page with billing mode configuration
+  - `GET/PATCH /api/reseller/settings` endpoint
+  - Portal `/api/portal/me` now returns `billing_enabled` field
+  - Migration 051: `admins.billing_mode` + `customers.billing_mode` columns
+
 ## 0.37.0 - 2026-06-18
 
 ### Fixed

@@ -142,6 +142,7 @@ const form = ref({
   days: '',
   notes: '',
   avatar: '',
+  billing_mode: '',
 })
 
 const customer = computed(() => store.detail)
@@ -193,6 +194,7 @@ function populateForm() {
       days: '',
       notes: customer.value.notes || '',
       avatar: customer.value.avatar || '',
+      billing_mode: (customer.value as any).billing_mode || '',
     }
   }
 }
@@ -202,12 +204,16 @@ watch(customer, populateForm)
 async function saveProfile() {
   if (!customer.value) return
   saving.value = true
-  await store.updateCustomer(customer.value.id, {
+  const payload: Record<string, any> = {
     display_name: form.value.display_name,
     status: form.value.status,
     notes: form.value.notes,
     avatar: form.value.avatar,
-  })
+  }
+  if (isResellerCreated.value || isReseller.value) {
+    payload.billing_mode = form.value.billing_mode
+  }
+  await store.updateCustomer(customer.value.id, payload)
   saving.value = false
 }
 
@@ -485,6 +491,20 @@ onMounted(() => {
                     :title="`Used by reseller: ${em.reseller}`"
                   >{{ em.emoji }}</button>
                 </div>
+              </template>
+            </KFormField>
+
+            <KFormField v-if="isResellerCreated || isReseller" name="billing_mode" :label="t('customer.billing_mode')">
+              <template #default="{ fieldId }">
+                <KSelect
+                  :id="fieldId"
+                  v-model="form.billing_mode"
+                  :options="[
+                    { label: t('customer.billing_inherit'), value: '' },
+                    { label: t('customer.billing_manual'), value: 'manual' },
+                    { label: t('customer.billing_self_service'), value: 'self_service' },
+                  ]"
+                />
               </template>
             </KFormField>
 

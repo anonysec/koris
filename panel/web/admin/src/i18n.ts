@@ -718,6 +718,17 @@ const messages: Record<Locale, Record<string, string>> = {
     // Reseller Settings
     'reseller_settings.title': 'Settings',
     'reseller_settings.coming_soon': 'More options coming soon.',
+    'reseller_settings.billing_mode': 'Billing Mode',
+    'reseller_settings.billing_mode_desc': 'Choose how your users handle payments',
+    'reseller_settings.billing_manual': 'Manual',
+    'reseller_settings.billing_manual_desc': 'You manage all renewals and payments',
+    'reseller_settings.billing_self_service': 'Self-service',
+    'reseller_settings.billing_self_service_desc': 'Users can top-up and buy plans from portal',
+    'reseller_settings.save_success': 'Settings saved',
+    'customer.billing_mode': 'Billing Mode',
+    'customer.billing_inherit': 'Inherit from reseller',
+    'customer.billing_manual': 'Manual',
+    'customer.billing_self_service': 'Self-service',
   },
   fa: {
     // Navigation
@@ -1384,6 +1395,17 @@ const messages: Record<Locale, Record<string, string>> = {
     'reseller_tickets.empty': 'هنوز تیکتی نیست. اگر کمک نیاز دارید یکی بسازید.',
     'reseller_settings.title': 'تنظیمات',
     'reseller_settings.coming_soon': 'گزینه‌های بیشتر به‌زودی.',
+    'reseller_settings.billing_mode': 'حالت صورتحساب',
+    'reseller_settings.billing_mode_desc': 'انتخاب نحوه پرداخت کاربران شما',
+    'reseller_settings.billing_manual': 'دستی',
+    'reseller_settings.billing_manual_desc': 'شما همه تمدیدها و پرداخت‌ها را مدیریت می‌کنید',
+    'reseller_settings.billing_self_service': 'سلف‌سرویس',
+    'reseller_settings.billing_self_service_desc': 'کاربران می‌توانند از پورتال شارژ و خرید کنند',
+    'reseller_settings.save_success': 'تنظیمات ذخیره شد',
+    'customer.billing_mode': 'حالت صورتحساب',
+    'customer.billing_inherit': 'ارث‌بری از نمایندگی',
+    'customer.billing_manual': 'دستی',
+    'customer.billing_self_service': 'سلف‌سرویس',
   },
   zh: {
     // Navigation
@@ -2051,6 +2073,17 @@ const messages: Record<Locale, Record<string, string>> = {
     'reseller_tickets.empty': '暂无工单。如需帮助，请创建一个。',
     'reseller_settings.title': '设置',
     'reseller_settings.coming_soon': '更多选项即将推出。',
+    'reseller_settings.billing_mode': '计费模式',
+    'reseller_settings.billing_mode_desc': '选择用户的付款方式',
+    'reseller_settings.billing_manual': '手动',
+    'reseller_settings.billing_manual_desc': '由您管理所有续费和付款',
+    'reseller_settings.billing_self_service': '自助服务',
+    'reseller_settings.billing_self_service_desc': '用户可以从门户充值和购买套餐',
+    'reseller_settings.save_success': '设置已保存',
+    'customer.billing_mode': '计费模式',
+    'customer.billing_inherit': '继承代理商设置',
+    'customer.billing_manual': '手动',
+    'customer.billing_self_service': '自助服务',
   },
   ru: {
     // Navigation
@@ -2715,6 +2748,17 @@ const messages: Record<Locale, Record<string, string>> = {
     'reseller_tickets.empty': 'Тикетов пока нет. Создайте один, если нужна помощь.',
     'reseller_settings.title': 'Настройки',
     'reseller_settings.coming_soon': 'Больше опций скоро.',
+    'reseller_settings.billing_mode': 'Режим оплаты',
+    'reseller_settings.billing_mode_desc': 'Выберите способ оплаты для ваших пользователей',
+    'reseller_settings.billing_manual': 'Ручной',
+    'reseller_settings.billing_manual_desc': 'Вы управляете всеми продлениями и платежами',
+    'reseller_settings.billing_self_service': 'Самообслуживание',
+    'reseller_settings.billing_self_service_desc': 'Пользователи могут пополнять и покупать тарифы из портала',
+    'reseller_settings.save_success': 'Настройки сохранены',
+    'customer.billing_mode': 'Режим оплаты',
+    'customer.billing_inherit': 'Наследовать от реселлера',
+    'customer.billing_manual': 'Ручной',
+    'customer.billing_self_service': 'Самообслуживание',
   }
 }
 

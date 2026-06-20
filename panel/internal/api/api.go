@@ -489,6 +489,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/resellers/", s.requireAdmin(s.resellerByID))
 	mux.HandleFunc("/api/resellers/checkout", s.requireAdmin(s.resellerCheckout))
 	mux.HandleFunc("/api/resellers/payments", s.requireAdmin(s.resellerPayments))
+	mux.HandleFunc("/api/reseller/settings", s.requireAdmin(s.resellerSettings))
 	mux.HandleFunc("/api/reseller/dashboard", s.requireAdmin(s.resellerDashboard))
 	mux.HandleFunc("/api/reseller/plan-prices", s.requireAdmin(s.resellerPlanPrices))
 	mux.HandleFunc("/api/reserved-emojis", s.requireAdmin(s.reservedEmojisEndpoint))
@@ -1347,7 +1348,17 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 		}
 	}
 
-	writeJSON(w, map[string]any{"ok": true, "customer": c})
+	// Include billing_mode for reseller-created users
+	var billingMode sql.NullString
+	_ = s.DB.QueryRow(`SELECT billing_mode FROM customers WHERE id=?`, id).Scan(&billingMode)
+
+	resp := map[string]any{"ok": true, "customer": c}
+	if billingMode.Valid {
+		resp["billing_mode"] = billingMode.String
+	} else {
+		resp["billing_mode"] = ""
+	}
+	writeJSON(w, resp)
 }
 
 func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64) {
@@ -1361,6 +1372,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		Days        *int     `json:"days"`
 		IPLimit     *int     `json:"ip_limit"`
 		Avatar      *string  `json:"avatar"`
+		BillingMode *string  `json:"billing_mode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -1376,7 +1388,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		return
 	}
 
-	// Reseller restrictions: only allow status, display_name, notes edits
+	// Reseller restrictions: only allow status, display_name, notes, billing_mode edits
 	_, editRole, _ := s.currentAdmin(r)
 	if editRole == "reseller" {
 		if in.DataGB != nil || in.SpeedMbps != nil || in.Days != nil || in.PlanID != nil || in.IPLimit != nil || in.Avatar != nil {
@@ -1419,6 +1431,19 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			args = append(args, nil)
 		} else {
 			args = append(args, *in.Avatar)
+		}
+	}
+	if in.BillingMode != nil {
+		bm := strings.TrimSpace(*in.BillingMode)
+		if bm != "" && bm != "manual" && bm != "self_service" {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_mode"})
+			return
+		}
+		sets = append(sets, "billing_mode=?")
+		if bm == "" {
+			args = append(args, nil) // inherit from reseller
+		} else {
+			args = append(args, bm)
 		}
 	}
 	if len(sets) > 0 {
@@ -5025,6 +5050,25 @@ func (s *Server) portalMe(w http.ResponseWriter, r *http.Request) {
 	if err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData); err == nil {
 		customer["max_data_bytes"] = maxData
 	}
+
+	// Resolve billing mode
+	billingEnabled := true // default for admin-created users
+	var customerBillingMode sql.NullString
+	_ = s.DB.QueryRow(`SELECT billing_mode FROM customers WHERE username=?`, username).Scan(&customerBillingMode)
+
+	if customerBillingMode.Valid && customerBillingMode.String != "" {
+		billingEnabled = customerBillingMode.String == "self_service"
+	} else {
+		// Check reseller default
+		var resellerBillingMode string
+		err := s.DB.QueryRow(`SELECT COALESCE(a.billing_mode, 'manual') FROM customers c INNER JOIN admins a ON a.username = c.created_by AND a.role='reseller' WHERE c.username=?`, username).Scan(&resellerBillingMode)
+		if err == nil {
+			billingEnabled = resellerBillingMode == "self_service"
+		}
+		// If no reseller (admin-created), billing is always enabled
+	}
+	customer["billing_enabled"] = billingEnabled
+
 	writeJSON(w, map[string]any{"ok": true, "customer": customer})
 }
 

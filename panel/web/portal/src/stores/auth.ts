@@ -15,6 +15,7 @@ export interface PortalUser {
   credit?: number
   max_data_bytes?: number
   sub_token?: string
+  billing_enabled?: boolean
   subscription?: {
     plan?: string
     status?: string
@@ -76,6 +77,7 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
   const planName = computed(() => user.value?.subscription?.plan || user.value?.plan || 'None')
   const status = computed(() => user.value?.subscription?.status || user.value?.status || 'inactive')
   const credit = computed(() => user.value?.credit ?? 0)
+  const billingEnabled = computed(() => user.value?.billing_enabled !== false)
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
@@ -173,6 +175,7 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
     planName,
     status,
     credit,
+    billingEnabled,
 
     // API state
     loading,
