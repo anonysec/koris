@@ -1,5 +1,6 @@
 <template>
   <button
+    :type="type || 'button'"
     :class="[
       'k-btn',
       `k-btn--${variant}`,
