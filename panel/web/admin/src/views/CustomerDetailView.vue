@@ -199,7 +199,7 @@ async function loadPlans() {
 }
 
 async function handleApplyPlan() {
-  if (!customer.value || !selectedPlanId.value) return
+  if (!customer.value || !selectedPlanId.value || selectedPlanId.value === 0) return
   applyingPlan.value = true
   try {
     const { post: postApi } = useApi()
@@ -210,9 +210,11 @@ async function handleApplyPlan() {
       toast.success('Plan applied successfully')
       await store.loadDetail(customer.value.id)
     } else {
+      console.error('[plan] Apply plan failed:', res.error)
       toast.error(res.error || 'Failed to apply plan')
     }
   } catch (err: any) {
+    console.error('[plan] Apply plan error:', err)
     toast.error(err?.message || 'Failed to apply plan')
   } finally {
     applyingPlan.value = false
@@ -220,7 +222,7 @@ async function handleApplyPlan() {
 }
 
 async function handleSwitchPlan() {
-  if (!customer.value || !selectedPlanId.value) return
+  if (!customer.value || !selectedPlanId.value || selectedPlanId.value === 0) return
   switchingPlan.value = true
   try {
     const { post: postApi } = useApi()
@@ -231,9 +233,11 @@ async function handleSwitchPlan() {
       toast.success(`Plan switched! Refunded $${res.refund_amount?.toFixed(2) || '0.00'} to wallet`)
       await store.loadDetail(customer.value.id)
     } else {
+      console.error('[plan] Switch plan failed:', res.error)
       toast.error(res.error || 'Failed to switch plan')
     }
   } catch (err: any) {
+    console.error('[plan] Switch plan error:', err)
     toast.error(err?.message || 'Failed to switch plan')
   } finally {
     switchingPlan.value = false
@@ -329,6 +333,7 @@ onMounted(() => {
             <div class="detail-header__meta">
               <KStatusPill :status="customer.status" />
               <span class="detail-header__balance">${{ customer.credit.toFixed(2) }}</span>
+              <span class="detail-header__plan">{{ customer.plan || 'No plan' }}</span>
             </div>
           </div>
         </div>
@@ -387,20 +392,36 @@ onMounted(() => {
           </form>
 
           <!-- Change Plan Section -->
-          <div v-if="!isNew && customer" class="plan-change-section">
-            <h4 class="section-title">Change Plan</h4>
-            <div class="plan-change-row">
-              <select v-model="selectedPlanId" class="plan-change-select">
-                <option value="0" disabled>Select a plan...</option>
-                <option v-for="plan in plans" :key="plan.id" :value="plan.id">
-                  {{ plan.name }} — {{ plan.data_gb }}GB · {{ plan.duration_days }}d · ${{ plan.price }}
-                </option>
-              </select>
+          <div v-if="!isNew && customer" class="plan-cards-section">
+            <h4 class="section-title">Plan</h4>
+            <div class="plan-cards">
+              <div
+                v-for="plan in plans"
+                :key="plan.id"
+                class="plan-card"
+                :class="{
+                  'plan-card--active': customer.plan_id === plan.id,
+                  'plan-card--selected': selectedPlanId === plan.id && customer.plan_id !== plan.id,
+                }"
+                @click="selectedPlanId = plan.id"
+              >
+                <div class="plan-card__name">{{ plan.name }}</div>
+                <div class="plan-card__price">${{ plan.price }}</div>
+                <div class="plan-card__details">
+                  <span v-if="plan.data_gb > 0">{{ plan.data_gb }} GB</span>
+                  <span v-else>Unlimited</span>
+                  <span>·</span>
+                  <span v-if="plan.duration_days > 0">{{ plan.duration_days }} days</span>
+                  <span v-else>Pay as you go</span>
+                </div>
+                <div v-if="customer.plan_id === plan.id" class="plan-card__badge">Current</div>
+              </div>
+            </div>
+            <div v-if="selectedPlanId && selectedPlanId !== customer.plan_id" class="plan-actions">
               <KButton
                 variant="primary"
                 size="sm"
                 :loading="applyingPlan"
-                :disabled="!selectedPlanId"
                 @click="handleApplyPlan"
               >
                 Apply Plan
@@ -409,14 +430,11 @@ onMounted(() => {
                 variant="ghost"
                 size="sm"
                 :loading="switchingPlan"
-                :disabled="!selectedPlanId"
                 @click="handleSwitchPlan"
               >
-                Switch Plan (Refund)
+                Switch (Refund to Wallet)
               </KButton>
             </div>
-            <p class="plan-change-note">This will activate the selected plan, create a subscription, and deduct from wallet.</p>
-            <p class="plan-change-note">"Switch Plan" cancels the current subscription and credits a pro-rated refund to the wallet.</p>
           </div>
         </template>
 
@@ -618,30 +636,88 @@ onMounted(() => {
   .traffic-management__row { flex-direction: column; align-items: flex-start; }
 }
 
-.plan-change-section {
+.detail-header__plan {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  padding: 2px 8px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+}
+
+.plan-cards-section {
   margin-top: var(--space-6);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
 }
-.plan-change-row {
-  display: flex;
+.plan-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-3);
-  align-items: center;
   margin-top: var(--space-3);
 }
-.plan-change-select {
-  flex: 1;
-  max-width: 400px;
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  font-size: var(--text-sm);
+.plan-card {
+  position: relative;
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
 }
-.plan-change-note {
-  margin-top: var(--space-2);
+.plan-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+.plan-card--active {
+  border-color: var(--color-success, #22c55e);
+  background: rgba(34, 197, 94, 0.06);
+  transform: scale(1.03);
+}
+.plan-card--selected {
+  border-color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.06);
+}
+.plan-card__name {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+.plan-card__price {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--color-primary);
+  margin-bottom: var(--space-2);
+}
+.plan-card--active .plan-card__price {
+  color: var(--color-success, #22c55e);
+}
+.plan-card__details {
   font-size: var(--text-xs);
   color: var(--color-muted);
+  display: flex;
+  gap: var(--space-1);
+  justify-content: center;
+}
+.plan-card__badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  padding: 2px 8px;
+  background: var(--color-success, #22c55e);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.plan-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 </style>
