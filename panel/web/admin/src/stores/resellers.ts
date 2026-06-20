@@ -159,6 +159,26 @@ export const useResellersStore = defineStore('resellers', () => {
     }
   }
 
+  /**
+   * Update a reseller account (password, default plan, etc.)
+   * PATCH /api/resellers/:id with partial fields
+   *
+   * On success, reloads the resellers list.
+   * On error, preserves existing data.
+   */
+  async function updateReseller(id: number, payload: { password?: string; default_plan_id?: number }): Promise<boolean> {
+    loading.value = true
+    try {
+      await post<ResellerMutationResponse>(`/api/resellers/${id}/update`, payload)
+      await loadResellers()
+      return true
+    } catch {
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   return {
     // State
@@ -174,5 +194,6 @@ export const useResellersStore = defineStore('resellers', () => {
     createReseller,
     adjustCredit,
     deleteReseller,
+    updateReseller,
   }
 })

@@ -10,6 +10,8 @@ import { openCommandPalette } from '@/composables/useCommandPalette'
 import TheSidebar from '@/components/TheSidebar.vue'
 import TheTopbar from '@/components/TheTopbar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
+import ToastProvider from '@/components/ToastProvider.vue'
+import KConfirmDialog from '@koris/ui/KConfirmDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -161,6 +163,8 @@ function handleNotifications() {
     </main>
 
     <CommandPalette />
+    <ToastProvider />
+    <KConfirmDialog />
   </div>
 </template>
 
