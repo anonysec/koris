@@ -9,6 +9,49 @@ import (
 	"time"
 )
 
+// ─── Reseller Settings ──────────────────────────────────────────────────────
+
+func (s *Server) resellerSettings(w http.ResponseWriter, r *http.Request) {
+	actor, role, ok := s.currentAdmin(r)
+	if !ok || role != "reseller" {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "reseller_only"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		var billingMode string
+		err := s.DB.QueryRow(`SELECT COALESCE(billing_mode, 'manual') FROM admins WHERE username=?`, actor).Scan(&billingMode)
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "billing_mode": billingMode})
+
+	case http.MethodPatch:
+		limitBody(w, r, maxJSONBody)
+		var in struct {
+			BillingMode string `json:"billing_mode"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+			return
+		}
+		if in.BillingMode != "manual" && in.BillingMode != "self_service" {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_mode"})
+			return
+		}
+		if _, err := s.DB.Exec(`UPDATE admins SET billing_mode=? WHERE username=?`, in.BillingMode, actor); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
+}
+
 // ─── Reseller Dashboard Stats ───────────────────────────────────────────────
 
 func (s *Server) resellerDashboard(w http.ResponseWriter, r *http.Request) {

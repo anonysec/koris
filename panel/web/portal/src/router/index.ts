@@ -9,7 +9,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', name: 'portal-home', component: () => import('@/views/SinglePageView.vue') },
-        { path: 'billing', name: 'portal-billing', component: () => import('@/views/BillingView.vue') },
+        { path: 'billing', name: 'portal-billing', component: () => import('@/views/BillingView.vue'), meta: { requiresBilling: true } },
         { path: 'profile', name: 'portal-profile', component: () => import('@/views/ProfileView.vue') },
         { path: 'wireguard', redirect: '/' },
       ]
@@ -32,6 +32,10 @@ router.beforeEach(async (to) => {
     if (to.name === 'portal-login') {
       return { name: 'portal-home' }
     }
+    // Block billing route when billing is disabled
+    if (to.meta.requiresBilling && !auth.billingEnabled) {
+      return { name: 'portal-home' }
+    }
     return // allow navigation
   }
 
@@ -45,6 +49,11 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'portal-login' && auth.isAuthenticated) {
+    return { name: 'portal-home' }
+  }
+
+  // Block billing route when billing is disabled (after auth check)
+  if (to.meta.requiresBilling && !auth.billingEnabled) {
     return { name: 'portal-home' }
   }
 })

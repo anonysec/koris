@@ -66,6 +66,7 @@ export interface UpdateCustomerPayload {
   days?: number
   allowed_protocols?: string[]
   avatar?: string
+  billing_mode?: string
 }
 
 /**
@@ -117,6 +118,7 @@ interface CustomersListResponse {
 interface CustomerDetailResponse {
   ok: boolean
   customer: CustomerDetail
+  billing_mode?: string
 }
 
 interface CustomerUsageResponse {
@@ -279,7 +281,9 @@ export const useCustomersStore = defineStore('customers', () => {
         get<CustomerDetailResponse>(`/api/customers/${id}`),
         get<CustomerUsageResponse>(`/api/customers/${id}/usage`),
       ])
-      detail.value = detailRes.customer
+      const customer = detailRes.customer as any
+      customer.billing_mode = detailRes.billing_mode || ''
+      detail.value = customer
       usage.value = usageRes.usage
     } catch {
       // Preserve existing data on error (Requirement 3.4)
