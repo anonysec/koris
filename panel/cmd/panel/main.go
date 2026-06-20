@@ -199,6 +199,18 @@ func workerTick(db *sql.DB, notifier *notify.Notifier) {
 	// Keep last 7 days of node_usage_snapshots, last 24h of user_bandwidth_snapshots
 	_, _ = db.Exec(`DELETE FROM node_usage_snapshots WHERE created_at < NOW() - INTERVAL 7 DAY`)
 	_, _ = db.Exec(`DELETE FROM user_bandwidth_snapshots WHERE created_at < NOW() - INTERVAL 24 HOUR`)
+
+	// History retention: prune old radacct and wallet_transactions
+	// Default 45 days, configurable via panel_settings 'history_retention_days'
+	retentionDays := 45
+	var retVal string
+	if db.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key='history_retention_days'`).Scan(&retVal) == nil {
+		if d, err := strconv.Atoi(retVal); err == nil && d > 0 {
+			retentionDays = d
+		}
+	}
+	_, _ = db.Exec(`DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < NOW() - INTERVAL ? DAY`, retentionDays)
+	_, _ = db.Exec(`DELETE FROM wallet_transactions WHERE created_at < NOW() - INTERVAL ? DAY`, retentionDays)
 }
 
 // processPaygBilling deducts wallet credit for customers on pay-as-you-go plans
