@@ -175,6 +175,139 @@ fi
 mkdir -p /var/log/openvpn/
 chmod 0750 /var/log/openvpn/
 chown root:root /var/log/openvpn/
+
+# ═══════════════════════════════════════════════════════════════════════
+# OpenVPN Server Setup (UDP + TCP dual-stack)
+# ═══════════════════════════════════════════════════════════════════════
+info "Setting up OpenVPN server instances..."
+
+# Install radclient (used by koris-radius-auth.sh)
+case "$OS" in
+    ubuntu|debian)
+        apt-get install -y -qq freeradius-utils >/dev/null 2>&1 || true
+        ;;
+    centos|almalinux|rocky|rhel|fedora)
+        dnf install -y -q freeradius-utils >/dev/null 2>&1 || true
+        ;;
+esac
+
+# Initialize Easy-RSA PKI (only if not already done)
+if [[ ! -f /etc/openvpn/server/ca.crt ]]; then
+    info "Initializing PKI certificates..."
+    EASYRSA_DIR="/etc/openvpn/easy-rsa"
+    mkdir -p "$EASYRSA_DIR"
+    cp -r /usr/share/easy-rsa/* "$EASYRSA_DIR/" 2>/dev/null || true
+    cd "$EASYRSA_DIR"
+    ./easyrsa --batch init-pki
+    EASYRSA_REQ_CN="KorisVPN-CA" ./easyrsa --batch build-ca nopass
+    ./easyrsa --batch build-server-full server nopass
+    ./easyrsa --batch gen-dh
+    openvpn --genkey secret /etc/openvpn/server/tc.key
+    cp pki/ca.crt pki/issued/server.crt pki/private/server.key pki/dh.pem /etc/openvpn/server/
+    cd "$INSTALL_DIR"
+    info "PKI certificates generated."
+else
+    info "PKI certificates already exist, skipping."
+fi
+
+# UDP OpenVPN server config (port 1194, subnet 10.8.0.0/24)
+cat > /etc/openvpn/server/server-udp.conf <<'OVPN_UDP'
+port 1194
+proto udp
+dev tun0
+ca /etc/openvpn/server/ca.crt
+cert /etc/openvpn/server/server.crt
+key /etc/openvpn/server/server.key
+dh /etc/openvpn/server/dh.pem
+tls-crypt /etc/openvpn/server/tc.key
+topology subnet
+server 10.8.0.0 255.255.255.0
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 1.1.1.1"
+push "dhcp-option DNS 8.8.8.8"
+keepalive 10 120
+cipher AES-256-GCM
+auth SHA256
+max-clients 4093
+user nobody
+group nogroup
+persist-key
+persist-tun
+verb 3
+status /var/log/openvpn/status-udp.log
+log-append /var/log/openvpn/openvpn-udp.log
+script-security 3
+auth-user-pass-verify /etc/openvpn/server/koris-radius-auth.sh via-file
+client-connect /etc/openvpn/server/koris-client-connect.sh
+client-disconnect /etc/openvpn/server/koris-client-disconnect.sh
+username-as-common-name
+verify-client-cert none
+OVPN_UDP
+
+# TCP OpenVPN server config (port 443, subnet 10.8.1.0/24)
+cat > /etc/openvpn/server/server-tcp.conf <<'OVPN_TCP'
+port 443
+proto tcp
+dev tun1
+ca /etc/openvpn/server/ca.crt
+cert /etc/openvpn/server/server.crt
+key /etc/openvpn/server/server.key
+dh /etc/openvpn/server/dh.pem
+tls-crypt /etc/openvpn/server/tc.key
+topology subnet
+server 10.8.1.0 255.255.255.0
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 1.1.1.1"
+push "dhcp-option DNS 8.8.8.8"
+keepalive 10 120
+cipher AES-256-GCM
+auth SHA256
+max-clients 4093
+user nobody
+group nogroup
+persist-key
+persist-tun
+verb 3
+status /var/log/openvpn/status-tcp.log
+log-append /var/log/openvpn/openvpn-tcp.log
+script-security 3
+auth-user-pass-verify /etc/openvpn/server/koris-radius-auth.sh via-file
+client-connect /etc/openvpn/server/koris-client-connect.sh
+client-disconnect /etc/openvpn/server/koris-client-disconnect.sh
+username-as-common-name
+verify-client-cert none
+OVPN_TCP
+
+# Enable IP forwarding
+if ! grep -qs "net.ipv4.ip_forward=1" /etc/sysctl.d/99-koris-vpn.conf 2>/dev/null; then
+    echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-koris-vpn.conf
+    sysctl -p /etc/sysctl.d/99-koris-vpn.conf >/dev/null 2>&1
+fi
+
+# NAT rules for both VPN subnets
+DEFAULT_IFACE=$(ip route show default | awk '/default/ {print $5}' | head -1)
+if [[ -n "$DEFAULT_IFACE" ]]; then
+    iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o "$DEFAULT_IFACE" -j MASQUERADE 2>/dev/null || \
+    iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o "$DEFAULT_IFACE" -j MASQUERADE
+
+    iptables -t nat -C POSTROUTING -s 10.8.1.0/24 -o "$DEFAULT_IFACE" -j MASQUERADE 2>/dev/null || \
+    iptables -t nat -A POSTROUTING -s 10.8.1.0/24 -o "$DEFAULT_IFACE" -j MASQUERADE
+
+    # Persist iptables rules
+    apt-get install -y -qq iptables-persistent >/dev/null 2>&1 || true
+    netfilter-persistent save >/dev/null 2>&1 || true
+else
+    warn "Could not detect default network interface — NAT rules not applied."
+    warn "You may need to manually add iptables MASQUERADE rules."
+fi
+
+# Enable and start both OpenVPN instances
+systemctl enable openvpn-server@server-udp >/dev/null 2>&1 || true
+systemctl enable openvpn-server@server-tcp >/dev/null 2>&1 || true
+systemctl restart openvpn-server@server-udp || warn "Failed to start OpenVPN UDP. Check: journalctl -u openvpn-server@server-udp"
+systemctl restart openvpn-server@server-tcp || warn "Failed to start OpenVPN TCP. Check: journalctl -u openvpn-server@server-tcp"
+
+info "OpenVPN dual-stack setup complete (UDP:1194, TCP:443)."
 mkdir -p /var/log/panel-node/
 chmod 0750 /var/log/panel-node/
 chown root:root /var/log/panel-node/
@@ -221,11 +354,14 @@ echo -e "${bold}${green}══════════════════�
 echo -e "  ${cyan}Node:${plain}    ${NODE_NAME}"
 echo -e "  ${cyan}IP:${plain}      ${NODE_IP}"
 echo -e "  ${cyan}Panel:${plain}   ${PANEL_URL}"
-echo -e "  ${cyan}Status:${plain}  $(systemctl is-active node-agent 2>/dev/null || echo unknown)"
+echo -e "  ${cyan}Agent:${plain}   $(systemctl is-active node-agent 2>/dev/null || echo unknown)"
+echo -e "  ${cyan}OpenVPN:${plain} UDP=$(systemctl is-active openvpn-server@server-udp 2>/dev/null || echo unknown) TCP=$(systemctl is-active openvpn-server@server-tcp 2>/dev/null || echo unknown)"
 echo -e "  ${cyan}Version:${plain} ${VERSION}"
 echo -e "${bold}${green}───────────────────────────────────────────────${plain}"
 echo -e "  ${cyan}Manage:${plain}  koris node-status | koris node-restart"
 echo -e "  ${cyan}Logs:${plain}    journalctl -u node-agent -f"
+echo -e "  ${cyan}VPN:${plain}     journalctl -u openvpn-server@server-udp -f"
+echo -e "           journalctl -u openvpn-server@server-tcp -f"
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
 echo ""
 echo -e "${yellow}The node should now appear in your panel under Services.${plain}"
