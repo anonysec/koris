@@ -208,7 +208,9 @@ async function saveProfile() {
     display_name: form.value.display_name,
     status: form.value.status,
     notes: form.value.notes,
-    avatar: form.value.avatar,
+  }
+  if (!isReseller.value) {
+    payload.avatar = form.value.avatar
   }
   if (isResellerCreated.value || isReseller.value) {
     payload.billing_mode = form.value.billing_mode
