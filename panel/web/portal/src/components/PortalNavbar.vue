@@ -10,7 +10,7 @@ const { isDark, toggle: toggleTheme } = useTheme()
 
 async function handleLogout() {
   await auth.logout()
-  router.push({ name: 'portal-login' })
+  window.location.href = '/portal/login'
 }
 </script>
 <template>

@@ -45,7 +45,7 @@ function goToProfile() {
 async function logout() {
   closeUserMenu()
   await auth.logout()
-  router.push({ name: 'portal-login' })
+  window.location.href = '/portal/login'
 }
 
 const langLabels: Record<Locale, string> = {
