@@ -4326,8 +4326,14 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 	caBlock := inlineOpenVPNBlock("ca", getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt"))
 	tlsCryptBlock := inlineOpenVPNBlock("tls-crypt", getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key"))
 
+	// Get TCP port from node config or default to 8443
+	tcpPort := 8443
+	if nodeID > 0 {
+		_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=? AND protocol='openvpn-tcp' AND enabled=1 LIMIT 1`, nodeID).Scan(&tcpPort)
+	}
+
 	// Build remote lines for TCP: preferred node first, then backups
-	remoteLines := fmt.Sprintf("remote %s 443 tcp", host)
+	remoteLines := fmt.Sprintf("remote %s %d tcp", host, tcpPort)
 
 	// Get user's preferred node — put it first if different from default
 	var preferredNodeID int64
@@ -4341,7 +4347,7 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 			}
 			if prefHost != "" && prefHost != host {
 				// Preferred node goes first
-				remoteLines = fmt.Sprintf("remote %s 443 tcp\nremote %s 443 tcp", prefHost, host)
+				remoteLines = fmt.Sprintf("remote %s %d tcp\nremote %s %d tcp", prefHost, tcpPort, host, tcpPort)
 			}
 		}
 	}
@@ -4363,7 +4369,7 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 					backupHost = strings.TrimSpace(ip)
 				}
 				if backupHost != "" && backupHost != host {
-					remoteLines += fmt.Sprintf("\nremote %s 443 tcp", backupHost)
+					remoteLines += fmt.Sprintf("\nremote %s %d tcp", backupHost, tcpPort)
 				}
 			}
 		}
