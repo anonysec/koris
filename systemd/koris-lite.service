@@ -1,0 +1,15 @@
+[Unit]
+Description=KorisPanel Lite
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/koris-lite/.env
+ExecStart=/usr/local/bin/koris-lite
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

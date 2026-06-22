@@ -1,0 +1,6 @@
+koris-lite
+*.exe
+*.pem
+.env
+web/admin/node_modules/
+web/portal/node_modules/
