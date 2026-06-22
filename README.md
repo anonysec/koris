@@ -87,6 +87,43 @@ systemctl daemon-reload
 systemctl enable --now koris-lite
 ```
 
+## Docker
+
+```bash
+# Start with Docker Compose (port 9080 — no conflict with main panel on 8080)
+docker compose up -d
+
+# Access: http://localhost:9080/api/health
+# Setup: curl -X POST http://localhost:9080/api/auth/setup -H "Content-Type: application/json" -d '{"username":"admin","password":"yourpass"}'
+```
+
+**Port allocation:**
+- Lite panel: **9080** (configurable via `PANEL_ADDR`)
+- Full panel: **8080** (default)
+- Both can run on the same server simultaneously
+
+**Node agents can talk to both** — just set two `PANEL_URL` values in the node config or run two agent instances.
+
+## Upgrade to Full Panel
+
+When you're ready to switch to the full KorisPanel:
+
+```bash
+# On the server running Lite:
+export FULL_BINARY_URL="https://your-release-url/panel"
+bash upgrade.sh
+```
+
+What the upgrade does:
+1. Backs up your database
+2. Stops the Lite panel
+3. Downloads/configures the full panel binary
+4. Points it at the **same database** (your users + nodes are preserved)
+5. The full panel runs its migrations to add the extra tables (billing, themes, statistics, etc.)
+6. Starts on port 8080
+
+Your existing users, nodes, and RADIUS data carry over automatically — the schema is designed to be forward-compatible.
+
 ## Branch Strategy
 
 This is the `lite` branch of the KorisPanel repository. The `main` branch contains the full-featured version with all protocols, billing, reseller system, etc.

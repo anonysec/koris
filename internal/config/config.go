@@ -15,7 +15,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Addr:          env("PANEL_ADDR", ":8080"),
+		Addr:          env("PANEL_ADDR", ":9080"),
 		DBDSN:         env("PANEL_DB_DSN", "radius:radius@tcp(127.0.0.1:3306)/radius?parseTime=true&multiStatements=true"),
 		SessionSecret: env("PANEL_SESSION_SECRET", "change-me-in-production-32chars!"),
 		Version:       env("PANEL_VERSION", "0.1.0-lite"),

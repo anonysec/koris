@@ -1,0 +1,37 @@
+version: '3.8'
+
+# KorisPanel Lite — runs on port 9080 (main uses 8080)
+# Both can run on same server without conflict
+services:
+  panel-lite:
+    build: .
+    ports:
+      - "9080:9080"
+    environment:
+      - PANEL_ADDR=:9080
+      - PANEL_DB_DSN=radius:${DB_PASS:-radius}@tcp(db-lite:3306)/radius_lite?parseTime=true&multiStatements=true
+      - PANEL_SESSION_SECRET=${SESSION_SECRET:-change-me-32-chars-minimum-here!}
+      - PANEL_MIGRATIONS=/app/migrations
+    depends_on:
+      db-lite:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db-lite:
+    image: mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-rootpass}
+      MYSQL_DATABASE: radius_lite
+      MYSQL_USER: radius
+      MYSQL_PASSWORD: ${DB_PASS:-radius}
+    volumes:
+      - db-lite-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  db-lite-data:
