@@ -1,16 +1,37 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
-import type { Ticket } from '@koris/types'
+
+/**
+ * Ticket entity matching the v2 support system backend
+ */
+export interface Ticket {
+  id: number
+  customer_id: number
+  username: string
+  subject: string
+  category: 'billing' | 'technical' | 'general'
+  priority: 'low' | 'medium' | 'high'
+  status: 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed'
+  assigned_to: string
+  satisfaction_rating?: number
+  created_at: string
+  updated_at: string
+  resolved_at?: string
+}
 
 /**
  * A single message within a ticket conversation thread
  */
 export interface TicketMessage {
   id: number
+  ticket_id: number
   sender_type: 'admin' | 'customer'
+  sender_id: string
   sender_name: string
-  message: string
+  body: string
+  message?: string // legacy field alias
+  is_internal: boolean
   created_at: string
 }
 
@@ -22,11 +43,35 @@ export interface TicketDetail extends Ticket {
 }
 
 /**
- * API response types matching backend endpoints
+ * Canned response for quick replies
+ */
+export interface CannedResponse {
+  id: number
+  title: string
+  body: string
+  category: string
+  created_at: string
+}
+
+/**
+ * Filters for ticket listing
+ */
+export interface TicketFilters {
+  status?: string
+  category?: string
+  priority?: string
+  assigned_to?: string
+  page?: number
+  limit?: number
+}
+
+/**
+ * API response types
  */
 interface TicketsListResponse {
   ok: boolean
   tickets: Ticket[]
+  total?: number
 }
 
 interface TicketDetailResponse {
@@ -34,12 +79,9 @@ interface TicketDetailResponse {
   ticket: TicketDetail
 }
 
-interface TicketReplyResponse {
+interface CannedResponsesResponse {
   ok: boolean
-}
-
-interface TicketStatusResponse {
-  ok: boolean
+  canned_responses: CannedResponse[]
 }
 
 interface TicketCreateResponse {
@@ -47,169 +89,184 @@ interface TicketCreateResponse {
   id: number
 }
 
+interface GenericResponse {
+  ok: boolean
+}
+
 /**
  * Admin tickets store (Pinia Composition API style)
  *
- * Manages support ticket state including listing, detail view,
- * replies, and status changes. Uses useApi composable for all API interactions.
- *
- * Requirements: 3.1, 3.3, 22.6
+ * Manages support ticket state including listing, filtering, detail view,
+ * replies, internal notes, status changes, and canned responses.
  */
 export const useTicketsStore = defineStore('tickets', () => {
   // ─── State ────────────────────────────────────────────────────────────────
   const list = ref<Ticket[]>([])
   const detail = ref<TicketDetail | null>(null)
+  const cannedResponses = ref<CannedResponse[]>([])
   const loading = ref(false)
+  const total = ref(0)
+  const filters = ref<TicketFilters>({})
 
   // ─── API composable ───────────────────────────────────────────────────────
-  // No onUnauthorized handler — the router guard handles auth redirects.
-  // This prevents race conditions where a 401 during initial data load
-  // would clear auth state and cause a redirect loop after login.
-  const { get, post, error } = useApi()
+  const { get, post, put, error } = useApi()
 
   // ─── Computed ─────────────────────────────────────────────────────────────
 
-  /** All tickets with status 'open' or 'pending' */
+  /** Tickets grouped by status for kanban view */
+  const ticketsByStatus = computed(() => {
+    const groups: Record<string, Ticket[]> = {
+      open: [],
+      in_progress: [],
+      waiting: [],
+      resolved: [],
+      closed: [],
+    }
+    for (const ticket of list.value) {
+      if (groups[ticket.status]) {
+        groups[ticket.status].push(ticket)
+      }
+    }
+    return groups
+  })
+
+  /** All tickets with open-like statuses (legacy compat) */
   const openTickets = computed(() =>
-    list.value.filter((t) => t.status === 'open' || t.status === 'pending')
+    list.value.filter((t) => t.status === 'open' || t.status === 'in_progress' || t.status === 'waiting')
   )
 
-  /** All tickets with status 'closed' */
+  /** All closed/resolved tickets (legacy compat) */
   const closedTickets = computed(() =>
-    list.value.filter((t) => t.status === 'closed')
+    list.value.filter((t) => t.status === 'closed' || t.status === 'resolved')
   )
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   /**
-   * Load all tickets from the backend.
-   * GET /api/tickets → { ok, tickets: Ticket[] }
-   *
-   * Sets loading = true before request, false after (Requirement 3.3).
-   * On error, preserves existing data (Requirement 3.4).
+   * Load tickets with optional filters from admin endpoint.
+   * GET /api/admin/tickets?status=&category=&priority=&assigned_to=&page=&limit=
    */
-  async function loadTickets(): Promise<void> {
+  async function loadTickets(params?: TicketFilters): Promise<void> {
     loading.value = true
     try {
-      const res = await get<TicketsListResponse>('/api/tickets')
+      const query = new URLSearchParams()
+      const f = params || filters.value
+      if (f.status) query.set('status', f.status)
+      if (f.category) query.set('category', f.category)
+      if (f.priority) query.set('priority', f.priority)
+      if (f.assigned_to) query.set('assigned_to', f.assigned_to)
+      if (f.page) query.set('page', String(f.page))
+      if (f.limit) query.set('limit', String(f.limit))
+
+      const qs = query.toString()
+      const url = `/api/admin/tickets${qs ? '?' + qs : ''}`
+      const res = await get<TicketsListResponse>(url)
       list.value = res.tickets || []
+      total.value = res.total ?? list.value.length
     } catch {
-      // Preserve existing data on error (Requirement 3.4)
+      // Preserve existing data on error
     } finally {
       loading.value = false
     }
   }
 
   /**
-   * Load a single ticket's detail including its messages.
-   * GET /api/tickets/:id → { ok, ticket: TicketDetail }
-   *
-   * On error, preserves existing detail state.
+   * Load a single ticket's detail including messages.
+   * GET /api/admin/tickets/:id
    */
   async function loadTicketDetail(id: number): Promise<void> {
     loading.value = true
     try {
-      const res = await get<TicketDetailResponse>(`/api/tickets/${id}`)
+      const res = await get<TicketDetailResponse>(`/api/admin/tickets/${id}`)
       detail.value = res.ticket
     } catch {
-      // Preserve existing detail on error (Requirement 3.4)
+      // Preserve existing detail on error
     } finally {
       loading.value = false
     }
   }
 
   /**
-   * Reply to a ticket.
-   * POST /api/tickets/:id/reply → { ok }
-   *
-   * After successful reply, reloads the ticket detail to include the new message.
-   * On error, preserves existing data.
+   * Reply to a ticket (public or internal note).
+   * POST /api/admin/tickets/:id/reply { body, is_internal }
    */
-  async function replyToTicket(id: number, message: string): Promise<boolean> {
-    loading.value = true
+  async function replyToTicket(id: number, body: string, isInternal: boolean = false): Promise<boolean> {
     try {
-      await post<TicketReplyResponse>(`/api/tickets/${id}/reply`, { message })
-      // Reload detail to include the new message
+      await post<GenericResponse>(`/api/admin/tickets/${id}/reply`, {
+        body,
+        is_internal: isInternal,
+      })
       await loadTicketDetail(id)
       return true
     } catch {
-      // Preserve existing data on error (Requirement 3.4)
       return false
-    } finally {
-      loading.value = false
     }
   }
 
   /**
-   * Close a ticket.
-   * POST /api/tickets/:id/close → { ok }
-   *
-   * After successful close, reloads the ticket detail and ticket list.
-   * On error, preserves existing data.
+   * Update ticket fields (status, priority, category, assigned_to).
+   * PUT /api/admin/tickets/:id
+   */
+  async function updateTicket(id: number, updates: Partial<Pick<Ticket, 'status' | 'priority' | 'category' | 'assigned_to'>>): Promise<boolean> {
+    try {
+      await put<GenericResponse>(`/api/admin/tickets/${id}`, updates)
+      // Refresh detail if we're viewing this ticket
+      if (detail.value?.id === id) {
+        await loadTicketDetail(id)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Close a ticket by setting status to 'closed'.
    */
   async function closeTicket(id: number): Promise<boolean> {
-    loading.value = true
-    try {
-      await post<TicketStatusResponse>(`/api/tickets/${id}/close`)
-      // Reload detail and list to reflect updated status
-      await loadTicketDetail(id).catch(() => null)
-      await loadTickets().catch(() => null)
-      return true
-    } catch {
-      // Preserve existing data on error (Requirement 3.4)
-      return false
-    } finally {
-      loading.value = false
-    }
+    return updateTicket(id, { status: 'closed' })
   }
 
   /**
-   * Reopen a closed ticket.
-   * POST /api/tickets/:id/open → { ok }
-   *
-   * After successful reopen, reloads the ticket detail and ticket list.
-   * On error, preserves existing data.
+   * Reopen a closed ticket by setting status to 'open'.
    */
   async function openTicket(id: number): Promise<boolean> {
-    loading.value = true
-    try {
-      await post<TicketStatusResponse>(`/api/tickets/${id}/open`)
-      // Reload detail and list to reflect updated status
-      await loadTicketDetail(id).catch(() => null)
-      await loadTickets().catch(() => null)
-      return true
-    } catch {
-      // Preserve existing data on error (Requirement 3.4)
-      return false
-    } finally {
-      loading.value = false
-    }
+    return updateTicket(id, { status: 'open' })
   }
 
   /**
    * Create an admin-initiated ticket.
-   * POST /api/tickets → { ok, id }
-   *
-   * Returns the new ticket ID on success, or null on failure.
-   * Reloads the ticket list after creation.
+   * POST /api/admin/tickets
    */
   async function createTicket(params: {
     username: string
     subject: string
     priority: string
     message: string
+    category?: string
   }): Promise<number | null> {
     loading.value = true
     try {
-      const res = await post<TicketCreateResponse>('/api/tickets', params)
-      // Reload list to include the new ticket
-      await loadTickets().catch(() => null)
+      const res = await post<TicketCreateResponse>('/api/admin/tickets', params)
+      await loadTickets()
       return res.id
     } catch {
-      // Preserve existing data on error (Requirement 3.4)
       return null
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * Load canned responses.
+   * GET /api/admin/canned-responses
+   */
+  async function loadCannedResponses(): Promise<void> {
+    try {
+      const res = await get<CannedResponsesResponse>('/api/admin/canned-responses')
+      cannedResponses.value = res.canned_responses || []
+    } catch {
+      // Non-critical, ignore
     }
   }
 
@@ -218,12 +275,16 @@ export const useTicketsStore = defineStore('tickets', () => {
     // State
     list,
     detail,
+    cannedResponses,
     loading,
+    total,
+    filters,
 
-    // API state (from useApi)
+    // API state
     error,
 
     // Computed
+    ticketsByStatus,
     openTickets,
     closedTickets,
 
@@ -231,8 +292,10 @@ export const useTicketsStore = defineStore('tickets', () => {
     loadTickets,
     loadTicketDetail,
     replyToTicket,
+    updateTicket,
     closeTicket,
     openTicket,
     createTicket,
+    loadCannedResponses,
   }
 })

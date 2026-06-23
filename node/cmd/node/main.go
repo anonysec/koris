@@ -16,12 +16,15 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"KorisPanel/node/internal/config"
 	"KorisPanel/node/internal/logger"
 	"KorisPanel/node/internal/updater"
+
+	"github.com/coreos/go-systemd/v22/daemon"
 )
 
 const agentVersion = "0.36.0"
@@ -43,6 +46,13 @@ type WireGuardPeerStat struct {
 	RxBytes         int64  `json:"rx_bytes"`
 	TxBytes         int64  `json:"tx_bytes"`
 	Active          bool   `json:"active"`
+}
+
+// XrayUserStat holds per-user traffic statistics from Xray's stats API.
+type XrayUserStat struct {
+	Email    string `json:"email"`
+	Uplink   int64  `json:"uplink"`
+	Downlink int64  `json:"downlink"`
 }
 
 type Push struct {
@@ -70,6 +80,14 @@ type Push struct {
 	PerUserBandwidth     []UserBandwidth     `json:"per_user_bandwidth,omitempty"`
 	WireGuardPeers       []WireGuardPeerStat `json:"wireguard_peers,omitempty"`
 	WireGuardActivePeers int                 `json:"wireguard_active_peers"`
+	XrayStats            []XrayUserStat      `json:"xray_stats,omitempty"`
+	MTProtoMetrics       *MTProtoMetrics     `json:"mtproto_metrics,omitempty"`
+	AnyConnectMetrics    *AnyConnectMetrics  `json:"anyconnect_metrics,omitempty"`
+	CoreStatus           []CoreMetrics       `json:"core_status,omitempty"`
+	AgentUptime          int64               `json:"agent_uptime"`
+	PushLatencyMs        int64               `json:"push_latency_ms"`
+	QueueDepth           int                 `json:"queue_depth"`
+	RetryCount           int                 `json:"retry_count"`
 }
 
 type Task struct {
@@ -210,6 +228,20 @@ func main() {
 	// Consecutive failure tracking state for push endpoint.
 	tracker := NewFailureTracker(3, log)
 
+	// Track latency of the last push request for health metadata.
+	var lastPushLatencyMs int64
+
+	// Track last successful push time for watchdog health check.
+	var lastPushSuccess time.Time
+	var lastPushMu sync.Mutex
+	lastPushSuccess = time.Now() // assume healthy at startup
+
+	// Start systemd watchdog heartbeat if WATCHDOG_USEC is configured.
+	startNodeWatchdog(&lastPushSuccess, &lastPushMu, log)
+
+	// Notify systemd that the agent is ready.
+	daemon.SdNotify(false, daemon.SdNotifyReady)
+
 	collector := NewBandwidthCollector()
 	lastRx, lastTx := netBytes()
 	lastAt := time.Now()
@@ -230,11 +262,12 @@ func main() {
 		}
 		host, _ := os.Hostname()
 		services := map[string]string{
-			"openvpn":   serviceStatus("openvpn"),
-			"l2tp":      serviceStatus("xl2tpd"),
-			"ikev2":     serviceStatus("strongswan"),
-			"ssh":       serviceStatus("ssh"),
-			"wireguard": serviceStatus("wg-quick@wg0"),
+			"openvpn":     serviceStatus("openvpn"),
+			"l2tp":        serviceStatus("xl2tpd"),
+			"ikev2":       serviceStatus("strongswan"),
+			"ssh":         serviceStatus("ssh"),
+			"wireguard":   serviceStatus("wg-quick@wg0"),
+			"cisco_ipsec": serviceStatus("strongswan"),
 		}
 		push := Push{
 			Token:           token,
@@ -269,9 +302,45 @@ func main() {
 		push.WireGuardPeers = wgPeers
 		push.WireGuardActivePeers = wgActive
 
+		// Collect Xray per-user traffic statistics (only if xray is installed and running)
+		if isXrayRunning() {
+			xrayStats := collectXrayStats()
+			if len(xrayStats) > 0 {
+				push.XrayStats = xrayStats
+				resetXrayStats()
+			}
+		}
+
+		// Collect MTProto proxy metrics (status, connections, auto-restart)
+		if mtMetrics := collectMTProtoMetrics(log); mtMetrics != nil {
+			push.MTProtoMetrics = mtMetrics
+		}
+
+		// Collect AnyConnect (ocserv) metrics (status, sessions, auto-restart)
+		if acMetrics := collectAnyConnectMetrics(log); acMetrics != nil {
+			push.AnyConnectMetrics = acMetrics
+		}
+
+		// Collect core plugin status (xray, sing-box)
+		if coreMetrics := collectCoreMetrics(); len(coreMetrics) > 0 {
+			push.CoreStatus = coreMetrics
+		}
+
+		// Populate health metadata fields for NodeConnectionManager
+		push.AgentUptime = int64(time.Since(startTime).Seconds())
+		push.PushLatencyMs = lastPushLatencyMs
+		push.QueueDepth = 0
+		push.RetryCount = tracker.ConsecutiveFailures()
+
+		pushStart := time.Now()
 		ok, errMsg := postJSON(client, panel+"/api/node/push", token, push, log)
+		lastPushLatencyMs = time.Since(pushStart).Milliseconds()
+
 		if ok {
 			tracker.RecordSuccess()
+			lastPushMu.Lock()
+			lastPushSuccess = time.Now()
+			lastPushMu.Unlock()
 		} else {
 			tracker.RecordFailure(errMsg)
 		}
@@ -287,6 +356,41 @@ func main() {
 		case <-time.After(intervalDuration):
 		}
 	}
+}
+
+// startNodeWatchdog parses the WATCHDOG_USEC environment variable set by systemd
+// and, if present, starts a goroutine that sends WATCHDOG=1 notifications at
+// half the configured interval as long as the last successful push was within 60s.
+func startNodeWatchdog(lastPushSuccess *time.Time, mu *sync.Mutex, log *logger.Logger) {
+	usecStr := os.Getenv("WATCHDOG_USEC")
+	if usecStr == "" {
+		return
+	}
+	usec, err := strconv.ParseInt(usecStr, 10, 64)
+	if err != nil || usec <= 0 {
+		return
+	}
+
+	interval := time.Duration(usec/2) * time.Microsecond
+	log.Info("starting systemd watchdog", map[string]any{"interval": interval.String()})
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			mu.Lock()
+			since := time.Since(*lastPushSuccess)
+			mu.Unlock()
+
+			if since < 60*time.Second {
+				daemon.SdNotify(false, "WATCHDOG=1")
+			} else {
+				log.Warn("watchdog health check failed, withholding notification", map[string]any{
+					"last_push_ago": since.String(),
+				})
+			}
+		}
+	}()
 }
 
 // loadConfigFromEnv creates a Config from environment variables directly
@@ -742,6 +846,55 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 		return executeBackupCollectConfigs(log)
 	case "backup.restore_configs":
 		return executeBackupRestoreConfigs(payload, log)
+	case "update_agent":
+		if err := handleUpdateAgent(task.Payload); err != nil {
+			return "failed", map[string]any{"error": err.Error()}, err.Error()
+		}
+		return "succeeded", map[string]any{"message": "agent updated", "version": fmt.Sprint(payload["version"])}, ""
+	case "telegram_proxy_deploy":
+		return executeTelegramProxyDeploy(payload, log)
+	case "telegram_proxy_start":
+		return executeTelegramProxyStart(payload, log)
+	case "telegram_proxy_stop":
+		return executeTelegramProxyStop(payload, log)
+	case "telegram_proxy_remove":
+		return executeTelegramProxyRemove(payload, log)
+	case "mtproto_enable":
+		return handleMTProtoEnable(payload, log)
+	case "mtproto_disable":
+		return handleMTProtoDisable(payload, log)
+	case "mtproto_rotate_secret":
+		return handleMTProtoRotateSecret(payload, log)
+	case "anyconnect_enable":
+		return handleAnyConnectEnable(payload, log)
+	case "anyconnect_disable":
+		return handleAnyConnectDisable(payload, log)
+	case "anyconnect_cert_update":
+		return handleAnyConnectCertUpdate(payload, log)
+	case "cisco_ipsec_deploy":
+		return executeCiscoIPSecDeploy(payload, log)
+	case "cisco_ipsec_remove":
+		return executeCiscoIPSecRemove(payload, log)
+	case "xray_deploy":
+		return executeXrayDeploy(payload, log)
+	case "xray_sync_users":
+		return executeXraySyncUsers(payload, log)
+	case "xray_add":
+		return handleXrayAdd(payload, log)
+	case "xray_remove":
+		return handleXrayRemove(payload, log)
+	case "xray_update":
+		return handleXrayUpdate(payload, log)
+	case "anti_dpi_deploy":
+		return executeAntiDPIDeploy(payload, log)
+	case "anti_dpi_remove":
+		return executeAntiDPIRemove(payload, log)
+	case "core_install":
+		return handleCoreInstall(payload, log)
+	case "core_update":
+		return handleCoreUpdate(payload, log)
+	case "core_remove":
+		return handleCoreRemove(payload, log)
 	default:
 		return "failed", map[string]any{}, "unsupported action"
 	}
@@ -1365,7 +1518,7 @@ func normalizeService(input string) string {
 		return "openvpn"
 	case "l2tp", "xl2tpd":
 		return "xl2tpd"
-	case "ikev2", "ipsec", "strongswan", "strongswan-starter":
+	case "ikev2", "ipsec", "strongswan", "strongswan-starter", "cisco_ipsec":
 		return "strongswan"
 	case "ssh", "sshd", "ssh-tunnel", "dropbear":
 		return "ssh"

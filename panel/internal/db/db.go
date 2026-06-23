@@ -3,9 +3,11 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,17 +31,54 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// Connection pool tuned for performance.
-	// Scale connections with available memory: 2GB+ gets more connections.
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
+	// Auto-tune pool based on system RAM, then apply env var overrides.
+	// Priority: env vars > AutoTunePool > defaults.
+	cfg := AutoTunePool(db)
+	ApplyEnvOverrides(db, &cfg)
 
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 	return db, nil
+}
+
+// ApplyEnvOverrides checks for environment variable overrides and applies
+// them to the database connection pool, taking priority over auto-tuned values.
+//
+// Supported env vars:
+//   - PANEL_DB_MAX_OPEN: integer, overrides MaxOpenConns
+//   - PANEL_DB_MAX_IDLE: integer, overrides MaxIdleConns
+//   - PANEL_DB_MAX_LIFETIME: duration string (e.g. "5m", "300s"), overrides ConnMaxLifetime
+func ApplyEnvOverrides(db *sql.DB, cfg *PoolConfig) {
+	if v := os.Getenv("PANEL_DB_MAX_OPEN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			db.SetMaxOpenConns(n)
+			cfg.MaxOpen = n
+			log.Printf("[db] env override: MaxOpenConns=%d", n)
+		} else if err != nil {
+			log.Printf("[db] invalid PANEL_DB_MAX_OPEN=%q: %v", v, err)
+		}
+	}
+
+	if v := os.Getenv("PANEL_DB_MAX_IDLE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			db.SetMaxIdleConns(n)
+			cfg.MaxIdle = n
+			log.Printf("[db] env override: MaxIdleConns=%d", n)
+		} else if err != nil {
+			log.Printf("[db] invalid PANEL_DB_MAX_IDLE=%q: %v", v, err)
+		}
+	}
+
+	if v := os.Getenv("PANEL_DB_MAX_LIFETIME"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			db.SetConnMaxLifetime(d)
+			cfg.MaxLifetime = d
+			log.Printf("[db] env override: ConnMaxLifetime=%s", d)
+		} else if err != nil {
+			log.Printf("[db] invalid PANEL_DB_MAX_LIFETIME=%q: %v", v, err)
+		}
+	}
 }
 
 func Migrate(db *sql.DB, dir string) error {

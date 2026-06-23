@@ -126,6 +126,16 @@ const navGroups = computed<NavGroup[]>(() => {
       label: t('nav.tickets'),
       icon: 'tickets',
     })
+    manageItems.push({
+      route: 'telegram-proxies',
+      label: t('nav.telegram_proxies'),
+      icon: 'telegram',
+    })
+    manageItems.push({
+      route: 'xray',
+      label: t('nav.xray'),
+      icon: 'xray',
+    })
   }
 
   groups.push({
@@ -266,6 +276,15 @@ function handleChangeLang(event: Event) {
         <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" />
+        </svg>
+        <!-- Telegram icon -->
+        <svg v-else-if="item.icon === 'telegram'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 2L11 13" />
+          <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+        </svg>
+        <!-- Xray icon (lightning/bolt) -->
+        <svg v-else-if="item.icon === 'xray'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
 
         <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>

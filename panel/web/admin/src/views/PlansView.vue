@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { usePlansStore } from '@/stores/plans'
+import { ref, onMounted, computed, toRef } from 'vue'
+import { usePlansStore, type CreatePlanPayload } from '@/stores/plans'
+import { storeToRefs } from 'pinia'
 import { useI18n } from '@koris/composables/useI18n'
+import { useSortable } from '@koris/composables/useSortable'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -10,6 +12,7 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 
 const { t } = useI18n()
 const store = usePlansStore()
+const { list: plansList } = storeToRefs(store)
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
 const saving = ref(false)
@@ -95,6 +98,15 @@ async function deactivatePlan(id: number) {
 
 onMounted(() => {
   store.loadPlans()
+})
+
+// ─── Drag & Drop Reorder ─────────────────────────────────────────────────────
+const { containerRef: plansContainerRef, isDragging: plansDragging } = useSortable(plansList, {
+  handle: '.drag-handle',
+  animation: 150,
+  persistEndpoint: '/api/admin/reorder',
+  entity: 'plans',
+  idField: 'id',
 })
 </script>
 
@@ -199,10 +211,15 @@ onMounted(() => {
     />
 
     <!-- Plans Grid -->
-    <div v-else class="plans-grid">
+    <div v-else ref="plansContainerRef" class="plans-grid" :class="{ 'plans-grid--dragging': plansDragging }">
       <div v-for="plan in store.list" :key="plan.id" class="plan-card" :class="{ 'plan-card--inactive': !plan.is_active }">
         <div class="plan-card__header">
-          <h4 class="plan-card__name">{{ plan.name }}</h4>
+          <div class="plan-card__header-left">
+            <button class="drag-handle" type="button" aria-label="Drag to reorder">
+              <span aria-hidden="true">⋮⋮</span>
+            </button>
+            <h4 class="plan-card__name">{{ plan.name }}</h4>
+          </div>
           <div class="plan-card__badges">
             <span class="plan-card__type-badge" :class="plan.billing_type === 'payg' ? 'badge--payg' : 'badge--quota'">
               {{ plan.billing_type === 'payg' ? 'PAYG' : t('plans.type_quota') }}
@@ -293,6 +310,7 @@ onMounted(() => {
 .plan-card--inactive { opacity: 0.6; }
 
 .plan-card__header { display: flex; justify-content: space-between; align-items: center; }
+.plan-card__header-left { display: flex; align-items: center; gap: var(--space-2); }
 .plan-card__name { margin: 0; font-size: var(--text-base); font-weight: var(--font-semibold); }
 .plan-card__badges { display: flex; gap: var(--space-1); align-items: center; }
 .plan-card__badge { font-size: var(--text-xs); color: var(--color-warning); background: rgba(245, 158, 11, 0.1); padding: 2px 8px; border-radius: var(--radius-full); }
@@ -310,4 +328,30 @@ onMounted(() => {
 .plan-spec__value { font-weight: var(--font-medium); }
 
 .plan-card__actions { display: flex; gap: var(--space-2); border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
+
+/* Drag handle */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: grab;
+  color: var(--color-muted);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  letter-spacing: -1px;
+  transition: color var(--duration-fast), background var(--duration-fast);
+  user-select: none;
+}
+.drag-handle:hover { color: var(--color-text); background: rgba(0, 0, 0, 0.05); }
+.drag-handle:active { cursor: grabbing; }
+
+/* Sortable states */
+.plans-grid--dragging { cursor: grabbing; }
+.plans-grid :deep(.sortable-ghost) { opacity: 0.4; background: rgba(59, 130, 246, 0.08); }
+.plans-grid :deep(.sortable-chosen) { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
 </style>

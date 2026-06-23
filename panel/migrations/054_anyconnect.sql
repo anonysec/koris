@@ -1,0 +1,23 @@
+-- 064_anyconnect.sql
+CREATE TABLE IF NOT EXISTS anyconnect_nodes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    node_id BIGINT NOT NULL,
+    port INT NOT NULL DEFAULT 443,
+    cert_path VARCHAR(512) DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_anyconnect_node (node_id),
+    CONSTRAINT fk_anyconnect_node FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS anyconnect_sessions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    node_id BIGINT NOT NULL,
+    username VARCHAR(64) NOT NULL,
+    connected_at DATETIME NOT NULL,
+    disconnected_at DATETIME DEFAULT NULL,
+    rx_bytes BIGINT NOT NULL DEFAULT 0,
+    tx_bytes BIGINT NOT NULL DEFAULT 0,
+    CONSTRAINT fk_ac_session_node FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

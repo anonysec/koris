@@ -324,3 +324,119 @@ func TestLoad_SessionSecret_ShortSecret_DevModeAllowed(t *testing.T) {
 		t.Errorf("expected SessionSecret to be 'short' in dev mode, got %q", cfg.SessionSecret)
 	}
 }
+
+func TestLoad_TLS_Enabled(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Setenv("PANEL_TLS_ENABLED", "true")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+		os.Unsetenv("PANEL_TLS_ENABLED")
+	}()
+
+	cfg := Load()
+
+	if !cfg.TLSEnabled {
+		t.Error("expected TLSEnabled to be true when PANEL_TLS_ENABLED=true")
+	}
+}
+
+func TestLoad_TLS_Disabled_ByDefault(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Unsetenv("PANEL_TLS_ENABLED")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSEnabled {
+		t.Error("expected TLSEnabled to be false by default")
+	}
+}
+
+func TestLoad_TLS_Domain(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Setenv("PANEL_TLS_DOMAIN", "panel.example.com")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+		os.Unsetenv("PANEL_TLS_DOMAIN")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSDomain != "panel.example.com" {
+		t.Errorf("expected TLSDomain to be 'panel.example.com', got %q", cfg.TLSDomain)
+	}
+}
+
+func TestLoad_TLS_Email(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Setenv("PANEL_TLS_EMAIL", "admin@example.com")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+		os.Unsetenv("PANEL_TLS_EMAIL")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSEmail != "admin@example.com" {
+		t.Errorf("expected TLSEmail to be 'admin@example.com', got %q", cfg.TLSEmail)
+	}
+}
+
+func TestLoad_TLS_CertDir_Default(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Unsetenv("PANEL_TLS_CERT_DIR")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSCertDir != "/etc/panel/certs" {
+		t.Errorf("expected TLSCertDir default to be '/etc/panel/certs', got %q", cfg.TLSCertDir)
+	}
+}
+
+func TestLoad_TLS_CertDir_Custom(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Setenv("PANEL_TLS_CERT_DIR", "/custom/certs")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+		os.Unsetenv("PANEL_TLS_CERT_DIR")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSCertDir != "/custom/certs" {
+		t.Errorf("expected TLSCertDir to be '/custom/certs', got %q", cfg.TLSCertDir)
+	}
+}
+
+func TestLoad_TLS_Domain_EmptyByDefault(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Unsetenv("PANEL_TLS_DOMAIN")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSDomain != "" {
+		t.Errorf("expected TLSDomain to be empty by default, got %q", cfg.TLSDomain)
+	}
+}
+
+func TestLoad_TLS_Email_EmptyByDefault(t *testing.T) {
+	os.Setenv("PANEL_DEV_MODE", "true")
+	os.Unsetenv("PANEL_TLS_EMAIL")
+	defer func() {
+		os.Unsetenv("PANEL_DEV_MODE")
+	}()
+
+	cfg := Load()
+
+	if cfg.TLSEmail != "" {
+		t.Errorf("expected TLSEmail to be empty by default, got %q", cfg.TLSEmail)
+	}
+}

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useNodesStore } from '@/stores/nodes'
+import { storeToRefs } from 'pinia'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
+import { useSortable } from '@koris/composables/useSortable'
 import KTabs from '@koris/ui/KTabs.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
@@ -15,7 +18,9 @@ import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const store = useNodesStore()
+const { list: nodesList } = storeToRefs(store)
 const toast = useToast()
 const { confirm } = useConfirm()
 const activeTab = ref('nodes')
@@ -89,13 +94,14 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
   },
 }
 
-const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh', 'wireguard'] as const
+const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh', 'wireguard', 'cisco_ipsec'] as const
 const protocolIcons: Record<string, string> = {
   openvpn: '🔐',
   l2tp: '🔒',
   ikev2: '🛡️',
   ssh: '🖥️',
   wireguard: '⚡',
+  cisco_ipsec: '🏢',
 }
 const protocolLabels: Record<string, string> = {
   openvpn: 'OpenVPN',
@@ -103,6 +109,7 @@ const protocolLabels: Record<string, string> = {
   ikev2: 'IKEv2',
   ssh: 'SSH',
   wireguard: 'WireGuard',
+  cisco_ipsec: 'Cisco IPSec',
 }
 
 const editingConfig = ref<{ nodeId: number; protocol: string } | null>(null)
@@ -478,6 +485,15 @@ watch(activeTab, (tab) => {
 onMounted(() => {
   store.loadNodes()
 })
+
+// ─── Drag & Drop Reorder ─────────────────────────────────────────────────────
+const { containerRef: nodesContainerRef, isDragging: nodesDragging } = useSortable(nodesList, {
+  handle: '.drag-handle',
+  animation: 150,
+  persistEndpoint: '/api/admin/reorder',
+  entity: 'nodes',
+  idField: 'id',
+})
 </script>
 
 
@@ -485,6 +501,7 @@ onMounted(() => {
   <div class="page nodes-view">
     <header class="page-header">
       <KButton variant="primary" icon="+" @click="showAddForm = true">{{ t('nodes.add_node') }}</KButton>
+      <KButton variant="ghost" @click="router.push({ name: 'node-compare' })">{{ t('node_compare.compare_nodes') }}</KButton>
     </header>
 
     <!-- New Token Display -->
@@ -536,10 +553,13 @@ onMounted(() => {
             :title="t('nodes.no_nodes')"
             :description="t('nodes.no_nodes_desc')"
           />
-          <div v-else class="nodes-grid">
+          <div v-else ref="nodesContainerRef" class="nodes-grid" :class="{ 'nodes-grid--dragging': nodesDragging }">
             <div v-for="node in store.list" :key="node.id" class="node-card">
               <div class="node-card__header">
                 <div class="node-card__title">
+                  <button class="drag-handle" type="button" aria-label="Drag to reorder">
+                    <span aria-hidden="true">⋮⋮</span>
+                  </button>
                   <h4 class="node-card__name">{{ node.name }}</h4>
                   <KStatusPill :status="node.status" size="sm" />
                 </div>
@@ -573,6 +593,9 @@ onMounted(() => {
                 </div>
               </div>
               <div class="node-card__actions">
+                <KButton variant="ghost" size="sm" @click="router.push({ name: 'node-detail', params: { id: node.id } })">
+                  {{ t('node_detail.view_details') }}
+                </KButton>
                 <KButton variant="ghost" size="sm" @click="startEditNode(node)">
                   {{ t('btn.edit') }}
                 </KButton>
@@ -1382,5 +1405,32 @@ onMounted(() => {
 .chip-input-row :deep(input) {
   flex: 1;
 }
+
+/* Drag handle */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: grab;
+  color: var(--color-muted);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  letter-spacing: -1px;
+  transition: color var(--duration-fast), background var(--duration-fast);
+  user-select: none;
+  flex-shrink: 0;
+}
+.drag-handle:hover { color: var(--color-text); background: rgba(0, 0, 0, 0.05); }
+.drag-handle:active { cursor: grabbing; }
+
+/* Sortable states */
+.nodes-grid--dragging { cursor: grabbing; }
+.nodes-grid :deep(.sortable-ghost) { opacity: 0.4; background: rgba(59, 130, 246, 0.08); border-radius: var(--radius-lg); }
+.nodes-grid :deep(.sortable-chosen) { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); border-radius: var(--radius-lg); }
 
 </style>

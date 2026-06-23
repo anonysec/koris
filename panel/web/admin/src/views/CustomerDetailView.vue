@@ -17,6 +17,7 @@ import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KAvatar from '@koris/ui/KAvatar.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
+import KEmptyState from '@koris/ui/KEmptyState.vue'
 
 const props = defineProps<{ id: string }>()
 
@@ -128,7 +129,98 @@ const tabs = computed(() => [
   { key: 'profile', label: t('customer.tab_profile') },
   { key: 'usage', label: t('customer.tab_usage') },
   { key: 'history', label: t('customer.tab_history') },
+  { key: 'custom_fields', label: t('customer.tab_custom_fields') },
+  { key: 'notes', label: t('customer.tab_notes') },
+  { key: 'activity', label: t('customer.tab_activity') },
 ])
+
+// ─── Custom Fields State ────────────────────────────────────────────────────
+interface CustomField {
+  key: string
+  value: string
+  label: string
+}
+const customFields = ref<CustomField[]>([])
+const customFieldsLoading = ref(false)
+const customFieldsSaving = ref(false)
+
+async function loadCustomFields() {
+  if (!props.id || props.id === 'new') return
+  customFieldsLoading.value = true
+  try {
+    const res = await get<{ ok: boolean; fields: CustomField[] }>(`/api/admin/customers/${props.id}/custom-fields`)
+    if (res?.ok && res.fields) {
+      customFields.value = res.fields
+    }
+  } catch { /* ignore */ }
+  finally { customFieldsLoading.value = false }
+}
+
+async function saveCustomFields() {
+  if (!props.id) return
+  customFieldsSaving.value = true
+  try {
+    const { post } = useApi()
+    const res = await post<{ ok: boolean }>(`/api/admin/customers/${props.id}/custom-fields`, {
+      fields: customFields.value,
+    })
+    if (res?.ok) {
+      toast.success(t('customer.custom_field_saved'))
+    } else {
+      toast.error(t('customer.custom_field_error'))
+    }
+  } catch {
+    toast.error(t('customer.custom_field_error'))
+  } finally {
+    customFieldsSaving.value = false
+  }
+}
+
+// ─── Notes State ────────────────────────────────────────────────────────────
+interface AdminNote {
+  id: number
+  content: string
+  created_by: string
+  created_at: string
+}
+const notes = ref<AdminNote[]>([])
+const notesLoading = ref(false)
+const newNoteContent = ref('')
+const addingNote = ref(false)
+
+async function loadNotes() {
+  if (!props.id || props.id === 'new') return
+  notesLoading.value = true
+  try {
+    const res = await get<{ ok: boolean; notes: AdminNote[] }>(`/api/admin/customers/${props.id}/notes`)
+    if (res?.ok && res.notes) {
+      notes.value = res.notes
+    }
+  } catch { /* ignore */ }
+  finally { notesLoading.value = false }
+}
+
+async function addNote() {
+  if (!props.id || !newNoteContent.value.trim()) return
+  addingNote.value = true
+  try {
+    const { post } = useApi()
+    const res = await post<{ ok: boolean; note?: AdminNote }>(`/api/admin/customers/${props.id}/notes`, {
+      content: newNoteContent.value.trim(),
+    })
+    if (res?.ok) {
+      toast.success(t('customer.note_saved'))
+      newNoteContent.value = ''
+      await loadNotes()
+    } else {
+      toast.error(t('customer.note_error'))
+    }
+  } catch {
+    toast.error(t('customer.note_error'))
+  } finally {
+    addingNote.value = false
+  }
+}
 
 // Edit form state
 const form = ref({
@@ -333,6 +425,8 @@ onMounted(() => {
   if (props.id && props.id !== 'new') {
     store.loadDetail(Number(props.id))
     loadPlans()
+    loadCustomFields()
+    loadNotes()
   }
   loadReservedEmojis()
   if (!isReseller.value) {
@@ -721,6 +815,88 @@ onMounted(() => {
           </div>
         </template>
 
+        <!-- Custom Fields Tab -->
+        <template #custom_fields>
+          <div class="custom-fields-tab">
+            <div v-if="customFieldsLoading" class="loading-state">
+              <KSkeleton variant="rect" :width="'100%'" :height="200" />
+            </div>
+            <div v-else-if="customFields.length === 0" class="text-muted text-sm" style="padding: var(--space-4) 0;">
+              {{ t('customer.custom_fields_empty') }}
+            </div>
+            <template v-else>
+              <form class="profile-form" @submit.prevent="saveCustomFields">
+                <div class="form-grid">
+                  <KFormField
+                    v-for="field in customFields"
+                    :key="field.key"
+                    :name="`cf-${field.key}`"
+                    :label="field.label || field.key"
+                  >
+                    <template #default="{ fieldId }">
+                      <KInput :id="fieldId" v-model="field.value" />
+                    </template>
+                  </KFormField>
+                </div>
+                <div class="form-actions">
+                  <KButton type="submit" variant="primary" :loading="customFieldsSaving">{{ t('btn.save') }}</KButton>
+                </div>
+              </form>
+            </template>
+          </div>
+        </template>
+
+        <!-- Notes Tab -->
+        <template #notes>
+          <div class="notes-tab">
+            <!-- Add Note Form -->
+            <form class="note-form" @submit.prevent="addNote">
+              <KFormField name="new-note" :label="t('customer.add_note')">
+                <template #default="{ fieldId }">
+                  <textarea
+                    :id="fieldId"
+                    v-model="newNoteContent"
+                    class="note-textarea"
+                    rows="3"
+                    :placeholder="t('customer.note_placeholder')"
+                  />
+                </template>
+              </KFormField>
+              <div class="form-actions">
+                <KButton type="submit" variant="primary" size="sm" :loading="addingNote" :disabled="!newNoteContent.trim()">{{ t('customer.add_note') }}</KButton>
+              </div>
+            </form>
+
+            <!-- Notes List -->
+            <div v-if="notesLoading" class="loading-state">
+              <KSkeleton variant="rect" :width="'100%'" :height="100" />
+            </div>
+            <div v-else-if="notes.length === 0" class="text-muted text-sm" style="padding: var(--space-4) 0;">
+              {{ t('customer.notes_empty') }}
+            </div>
+            <div v-else class="notes-list">
+              <div v-for="note in notes" :key="note.id" class="note-card">
+                <div class="note-card__header">
+                  <span class="note-card__author">{{ note.created_by }}</span>
+                  <span class="note-card__date text-muted">{{ formatDate(note.created_at) }}</span>
+                </div>
+                <p class="note-card__content">{{ note.content }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Activity Tab (Placeholder) -->
+        <template #activity>
+          <div class="activity-tab">
+            <KEmptyState
+              icon="📋"
+              :title="t('customer.tab_activity')"
+              description="Activity and audit log coming soon."
+            />
+          </div>
+        </template>
+
       </KTabs>
     </template>
 
@@ -908,4 +1084,70 @@ onMounted(() => {
   border-color: var(--color-border, #28333f);
   background: var(--color-surface, #0b1120);
 }
+
+/* Custom Fields Tab */
+.custom-fields-tab { padding: var(--space-4) 0; }
+
+/* Notes Tab */
+.notes-tab { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4) 0; }
+
+.note-form { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
+
+.note-textarea {
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.note-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.notes-list { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.note-card {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.note-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.note-card__author {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-primary);
+}
+
+.note-card__date {
+  font-size: var(--text-xs);
+}
+
+.note-card__content {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+/* Activity Tab */
+.activity-tab { padding: var(--space-8) 0; }
+
+.text-sm { font-size: var(--text-sm); }
 </style>

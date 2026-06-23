@@ -36,6 +36,7 @@ interface VpnProfile {
   protocol: string
   node: string
   download: string
+  description?: string
 }
 
 interface ProfilesResponse {
@@ -59,11 +60,50 @@ const appLinks = ref<AppLink[]>([])
 
 const displayAppLinks = computed(() => appLinks.value)
 
+// Check if Cisco IPSec is available from profiles data
+const ciscoAvailable = computed(() => profiles.value.some(p => p.type === 'cisco-ipsec' && p.available))
+
+// ---- Telegram Proxies ----
+interface TelegramProxy {
+  id: number
+  port: number
+  status: string
+  share_link: string
+  tg_link: string
+}
+const telegramProxies = ref<TelegramProxy[]>([])
+const teleProxiesLoading = ref(false)
+const copiedProxyId = ref<number | null>(null)
+
+async function fetchTelegramProxies() {
+  teleProxiesLoading.value = true
+  try {
+    const res = await get<{ ok: boolean; proxies: TelegramProxy[] }>('/api/customer/telegram-proxies')
+    telegramProxies.value = res.proxies || []
+  } catch {
+    // keep empty state
+  } finally {
+    teleProxiesLoading.value = false
+  }
+}
+
+function copyProxyLink(proxy: TelegramProxy) {
+  copy(proxy.tg_link)
+  copiedProxyId.value = proxy.id
+  setTimeout(() => {
+    if (copiedProxyId.value === proxy.id) {
+      copiedProxyId.value = null
+    }
+  }, 2000)
+}
+
 // ---- Support ----
 const showCreateForm = ref(false)
-const ticketForm = ref({ subject: '', message: '' })
+const ticketForm = ref({ subject: '', category: 'general', body: '' })
 const notice = ref('')
 const supportTab = ref<'open' | 'closed'>('open')
+const ratingValue = ref(0)
+const ratingSubmitted = ref(false)
 
 // ---- Computed ----
 const displayName = computed(() => auth.displayName)
@@ -116,6 +156,7 @@ onMounted(async () => {
   usageStore.loadUsage()
   ticketsStore.loadTickets()
   fetchMyPeers()
+  fetchTelegramProxies()
 
   try {
     const res = await get<ProfilesResponse>('/api/portal/profiles')
@@ -160,6 +201,7 @@ function getProfileIcon(type: string): string {
     case 'openvpn': return '🔐'
     case 'l2tp': return '🔒'
     case 'ikev2': return '🛡️'
+    case 'cisco-ipsec': return '🔑'
     default: return '📄'
   }
 }
@@ -179,21 +221,24 @@ async function handleNodeChange(event: Event) {
 }
 
 async function handleCreateTicket() {
-  if (!ticketForm.value.subject || !ticketForm.value.message) return
+  if (!ticketForm.value.subject || !ticketForm.value.body) return
   notice.value = ''
   const id = await ticketsStore.createTicket({
     subject: ticketForm.value.subject,
-    priority: 'normal',
-    message: ticketForm.value.message,
+    category: ticketForm.value.category,
+    priority: 'medium',
+    body: ticketForm.value.body,
   })
   if (id) {
     notice.value = t('portal.support.ticketCreated')
-    ticketForm.value = { subject: '', message: '' }
+    ticketForm.value = { subject: '', category: 'general', body: '' }
     showCreateForm.value = false
   }
 }
 
 async function handleViewTicket(id: number) {
+  ratingValue.value = 0
+  ratingSubmitted.value = false
   await ticketsStore.loadTicketDetail(id)
 }
 
@@ -208,6 +253,8 @@ const replyMessage = ref('')
 
 function handleBackToList() {
   ticketsStore.clearDetail()
+  ratingValue.value = 0
+  ratingSubmitted.value = false
 }
 
 async function handleReply() {
@@ -216,6 +263,15 @@ async function handleReply() {
   if (success) {
     replyMessage.value = ''
     notice.value = t('portal.support.replySent')
+  }
+}
+
+async function handleRate() {
+  if (!ticketsStore.detail || ratingValue.value < 1 || ratingValue.value > 5) return
+  const success = await ticketsStore.rateTicket(ticketsStore.detail.id, ratingValue.value)
+  if (success) {
+    ratingSubmitted.value = true
+    notice.value = t('portal.support.ratingSubmitted')
   }
 }
 </script>
@@ -358,7 +414,57 @@ async function handleReply() {
             </KButton>
           </div>
         </div>
+
+        <!-- Cisco IPSec Setup Instructions -->
+        <div v-if="ciscoAvailable" class="sp__cisco-instructions">
+          <h3 class="sp__cisco-instructions-title">{{ t('portal.cisco.setupTitle') }}</h3>
+          <ul class="sp__cisco-instructions-list">
+            <li>{{ t('portal.cisco.setupIOS') }}</li>
+            <li>{{ t('portal.cisco.setupAndroid') }}</li>
+            <li><strong>{{ t('portal.cisco.server') }}:</strong> {{ t('portal.cisco.serverNote') }}</li>
+            <li><strong>{{ t('portal.cisco.username') }}:</strong> {{ auth.username }}</li>
+            <li><strong>{{ t('portal.cisco.psk') }}:</strong> {{ t('portal.cisco.pskNote') }}</li>
+          </ul>
+        </div>
       </template>
+    </section>
+
+    <!-- ===== Section: Telegram Proxies ===== -->
+    <section v-if="telegramProxies.length || teleProxiesLoading" class="sp__section">
+      <h2 class="sp__section-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M17.05 2.65a1 1 0 00-1.42-.08L2.46 14.23a1 1 0 00-.15 1.3l1.73 2.6a1 1 0 001.5.23l13.2-11.42a1 1 0 00.1-1.42l-1.79-2.87zM4.5 17.5l-.87-1.3L15.5 5.5l.87 1.3L4.5 17.5z"/></svg>
+        {{ t('portal.teleproxy.title') }}
+      </h2>
+
+      <KSkeleton v-if="teleProxiesLoading && !telegramProxies.length" type="card" :count="1" />
+
+      <KEmptyState
+        v-else-if="!telegramProxies.length"
+        :title="t('portal.teleproxy.noProxies')"
+        :description="t('portal.teleproxy.noProxiesDesc')"
+        icon="📡"
+      />
+
+      <div v-else class="sp__teleproxy-list">
+        <div v-for="proxy in telegramProxies" :key="proxy.id" class="sp__teleproxy-card">
+          <div class="sp__teleproxy-status">
+            <span class="sp__teleproxy-dot" :class="{ 'sp__teleproxy-dot--active': proxy.status === 'active' }"></span>
+          </div>
+          <div class="sp__teleproxy-info">
+            <div class="sp__teleproxy-name">
+              {{ t('portal.teleproxy.port') }}: {{ proxy.port }}
+            </div>
+            <div class="sp__teleproxy-meta">
+              <KStatusPill :status="proxy.status === 'active' ? 'active' : 'disabled'" size="sm">
+                {{ t(`portal.teleproxy.status_${proxy.status === 'active' ? 'active' : 'stopped'}`) }}
+              </KStatusPill>
+            </div>
+          </div>
+          <KButton variant="primary" size="sm" @click="copyProxyLink(proxy)">
+            {{ copiedProxyId === proxy.id ? t('portal.teleproxy.copied') : t('portal.teleproxy.copyLink') }}
+          </KButton>
+        </div>
+      </div>
     </section>
 
     <!-- ===== Section: Download Apps ===== -->
@@ -395,7 +501,82 @@ async function handleReply() {
       <KSkeleton v-if="ticketsStore.loading && !ticketsStore.list.length" type="card" :count="1" />
 
       <template v-else>
-        <div class="sp__support-simple">
+        <!-- Ticket Detail (shown when a ticket is selected) -->
+        <div v-if="ticketsStore.detail" class="sp__ticket-detail">
+          <button class="sp__back-btn" @click="handleBackToList">← {{ t('portal.support.backToList') }}</button>
+          <div class="sp__ticket-header">
+            <span class="sp__ticket-subject">#{{ ticketsStore.detail.id }}: {{ ticketsStore.detail.subject }}</span>
+            <KStatusPill :status="ticketsStore.detail.status === 'open' || ticketsStore.detail.status === 'in_progress' ? 'active' : 'disabled'" size="sm">
+              {{ ticketsStore.detail.status }}
+            </KStatusPill>
+          </div>
+
+          <!-- Messages thread -->
+          <div class="sp__messages">
+            <div
+              v-for="msg in (ticketsStore.detail.messages || []).filter((m: any) => !m.is_internal)"
+              :key="msg.id"
+              class="sp__message"
+              :class="{ 'sp__message--admin': msg.sender_type === 'admin' }"
+            >
+              <div class="sp__message-header">
+                <span class="sp__message-sender">{{ msg.sender_name }}</span>
+                <span class="sp__message-time">{{ msg.created_at }}</span>
+              </div>
+              <p class="sp__message-body">{{ msg.body }}</p>
+            </div>
+          </div>
+
+          <!-- Reply form (only for open/in_progress/waiting tickets) -->
+          <form
+            v-if="ticketsStore.detail.status === 'open' || ticketsStore.detail.status === 'in_progress' || ticketsStore.detail.status === 'waiting'"
+            class="sp__reply-form"
+            @submit.prevent="handleReply"
+          >
+            <KFormField :label="t('portal.support.yourReply')">
+              <KTextarea v-model="replyMessage" :placeholder="t('portal.support.replyPlaceholder')" :rows="3" />
+            </KFormField>
+            <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!replyMessage.trim()">
+              {{ t('portal.support.send') }}
+            </KButton>
+          </form>
+
+          <!-- Satisfaction Survey (for resolved/closed tickets without rating) -->
+          <div
+            v-if="(ticketsStore.detail.status === 'resolved' || ticketsStore.detail.status === 'closed') && !ticketsStore.detail.satisfaction_rating && !ratingSubmitted"
+            class="sp__rating"
+          >
+            <p class="sp__rating-title">{{ t('portal.support.ratingTitle') }}</p>
+            <p class="sp__rating-desc">{{ t('portal.support.ratingDesc') }}</p>
+            <div class="sp__stars">
+              <button
+                v-for="star in 5"
+                :key="star"
+                type="button"
+                class="sp__star"
+                :class="{ 'sp__star--active': star <= ratingValue }"
+                :aria-label="`${star} star${star > 1 ? 's' : ''}`"
+                @click="ratingValue = star"
+              >
+                ★
+              </button>
+            </div>
+            <KButton variant="primary" size="sm" :disabled="ratingValue < 1" :loading="ticketsStore.loading" @click="handleRate">
+              {{ t('portal.support.submitRating') }}
+            </KButton>
+          </div>
+
+          <!-- Already rated -->
+          <div v-if="ticketsStore.detail.satisfaction_rating" class="sp__rated">
+            <span class="sp__rated-label">{{ t('portal.support.yourRating') }}:</span>
+            <span class="sp__rated-stars">
+              <span v-for="star in 5" :key="star" :class="{ 'sp__star--active': star <= (ticketsStore.detail.satisfaction_rating || 0) }">★</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Ticket List (when no ticket is selected) -->
+        <div v-else class="sp__support-simple">
           <p class="sp__support-desc">{{ t('portal.support.noTicketsDesc') }}</p>
           <div class="sp__support-actions">
             <KButton variant="primary" size="sm" @click="showCreateForm = true">
@@ -421,7 +602,7 @@ async function handleReply() {
             <div v-for="ticket in (supportTab === 'open' ? ticketsStore.openTickets : ticketsStore.closedTickets)" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
               <div class="sp__ticket-row-info">
                 <span class="sp__ticket-row-subject">{{ ticket.subject }}</span>
-                <KStatusPill :status="ticket.status === 'open' || ticket.status === 'pending' ? 'active' : 'disabled'" size="sm">
+                <KStatusPill :status="ticket.status === 'open' || ticket.status === 'in_progress' ? 'active' : 'disabled'" size="sm">
                   {{ ticket.status }}
                 </KStatusPill>
                 <span v-if="hasUnreadReply(ticket)" class="sp__ticket-unread">●</span>
@@ -431,16 +612,23 @@ async function handleReply() {
         </div>
 
         <!-- Create form (hidden by default) -->
-        <form v-if="showCreateForm" class="sp__ticket-form" @submit.prevent="handleCreateTicket">
+        <form v-if="showCreateForm && !ticketsStore.detail" class="sp__ticket-form" @submit.prevent="handleCreateTicket">
           <KFormField :label="t('portal.support.subject')" :required="true">
             <KInput v-model="ticketForm.subject" :placeholder="t('portal.support.subjectPlaceholder')" />
           </KFormField>
+          <div class="sp__ticket-form-row">
+            <select v-model="ticketForm.category" class="sp__category-select">
+              <option value="general">{{ t('portal.support.categoryGeneral') }}</option>
+              <option value="technical">{{ t('portal.support.categoryTechnical') }}</option>
+              <option value="billing">{{ t('portal.support.categoryBilling') }}</option>
+            </select>
+          </div>
           <KFormField :label="t('portal.support.message')" :required="true">
-            <KTextarea v-model="ticketForm.message" :placeholder="t('portal.support.messagePlaceholder')" :rows="4" />
+            <KTextarea v-model="ticketForm.body" :placeholder="t('portal.support.messagePlaceholder')" :rows="4" />
           </KFormField>
           <div class="sp__form-actions">
             <KButton variant="ghost" size="sm" @click="showCreateForm = false">{{ t('portal.support.cancel') }}</KButton>
-            <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!ticketForm.subject || !ticketForm.message">
+            <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!ticketForm.subject || !ticketForm.body">
               {{ t('portal.support.create') }}
             </KButton>
           </div>
@@ -659,6 +847,84 @@ async function handleReply() {
   flex-shrink: 0;
 }
 
+/* Cisco IPSec Instructions */
+.sp__cisco-instructions {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.sp__cisco-instructions-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.sp__cisco-instructions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.sp__cisco-instructions-list li {
+  padding-inline-start: var(--space-3);
+  position: relative;
+}
+.sp__cisco-instructions-list li::before {
+  content: '•';
+  position: absolute;
+  inset-inline-start: 0;
+  color: var(--color-primary);
+}
+
+/* Telegram Proxies */
+.sp__teleproxy-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sp__teleproxy-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 56px;
+}
+.sp__teleproxy-status {
+  flex-shrink: 0;
+}
+.sp__teleproxy-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-muted);
+}
+.sp__teleproxy-dot--active {
+  background: var(--color-success, #22c55e);
+}
+.sp__teleproxy-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.sp__teleproxy-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.sp__teleproxy-meta {
+  font-size: var(--text-xs);
+}
+
 /* App Downloads */
 .sp__apps-desc {
   font-size: var(--text-sm);
@@ -842,6 +1108,82 @@ async function handleReply() {
 .sp__ticket-tab { padding: 6px 14px; font-size: var(--text-xs); font-weight: 500; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: transparent; color: var(--color-muted); cursor: pointer; min-height: 36px; }
 .sp__ticket-tab--active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 .sp__ticket-unread { color: var(--color-primary); font-size: 10px; margin-left: auto; }
+
+/* Category select */
+.sp__ticket-form-row {
+  display: flex;
+  gap: var(--space-3);
+}
+.sp__category-select {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+/* Satisfaction Rating */
+.sp__rating {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.sp__rating-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 0;
+}
+.sp__rating-desc {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  margin: 0;
+}
+.sp__stars {
+  display: flex;
+  gap: var(--space-1);
+}
+.sp__star {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  cursor: pointer;
+  color: var(--color-border);
+  transition: color 0.15s, transform 0.1s;
+  padding: 0;
+  line-height: 1;
+}
+.sp__star:hover,
+.sp__star--active {
+  color: #f59e0b;
+  transform: scale(1.1);
+}
+.sp__rated {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sp__rated-label {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.sp__rated-stars {
+  display: flex;
+  gap: 2px;
+  font-size: 1.2rem;
+  color: var(--color-border);
+}
+.sp__rated-stars .sp__star--active {
+  color: #f59e0b;
+}
 
 /* ===== Mobile responsive ===== */
 @media (max-width: 768px) {

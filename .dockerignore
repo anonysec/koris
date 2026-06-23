@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Node modules (rebuilt in Docker)
+**/node_modules
+
+# Certificates and secrets
+*.pem
+.env
+docker/panel.env
+
+# Build artifacts
+panel/web/admin/www
+panel/web/portal/www
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Kiro specs
+.kiro
+
+# OS files
+.DS_Store
+Thumbs.db

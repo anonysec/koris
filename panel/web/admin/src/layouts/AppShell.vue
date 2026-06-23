@@ -9,6 +9,7 @@ import type { Locale } from '@koris/composables/useI18n'
 import { openCommandPalette } from '@/composables/useCommandPalette'
 import TheSidebar from '@/components/TheSidebar.vue'
 import TheTopbar from '@/components/TheTopbar.vue'
+import UpdateBanner from '@/components/UpdateBanner.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import ToastProvider from '@/components/ToastProvider.vue'
 import KConfirmDialog from '@koris/ui/KConfirmDialog.vue'
@@ -144,6 +145,8 @@ function handleNotifications() {
         @open-notifications="handleNotifications"
         @open-command-palette="openCommandPalette"
       />
+
+      <UpdateBanner />
 
       <router-view v-slot="{ Component, route: viewRoute }">
         <Transition name="fade" mode="out-in">

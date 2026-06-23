@@ -2,10 +2,12 @@
 import { onMounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useTheme, availableThemes } from '@koris/composables/useTheme'
+import { useDirection } from '@koris/composables/useDirection'
 import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 
 const { get } = useApi({ showErrorToast: false })
 const { setMode, setTheme } = useTheme()
+useDirection()
 
 onMounted(async () => {
   try {

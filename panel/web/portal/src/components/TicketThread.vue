@@ -6,12 +6,17 @@ interface Props {
   messages: TicketMessage[]
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+
+/** Filter out internal admin notes — customer should never see them */
+function visibleMessages(): TicketMessage[] {
+  return props.messages.filter((m) => !m.is_internal)
+}
 </script>
 <template>
   <div class="ticket-thread">
     <div
-      v-for="msg in messages"
+      v-for="msg in visibleMessages()"
       :key="msg.id"
       class="ticket-thread__message"
       :class="{ 'ticket-thread__message--admin': msg.sender_type === 'admin' }"
@@ -21,10 +26,10 @@ defineProps<Props>()
         <span class="ticket-thread__badge" v-if="msg.sender_type === 'admin'">Staff</span>
         <span class="ticket-thread__time">{{ formatDateTime(msg.created_at) }}</span>
       </div>
-      <p class="ticket-thread__body">{{ msg.message }}</p>
+      <p class="ticket-thread__body">{{ msg.body }}</p>
     </div>
 
-    <div v-if="!messages.length" class="ticket-thread__empty">
+    <div v-if="!visibleMessages().length" class="ticket-thread__empty">
       No messages in this ticket yet.
     </div>
   </div>
