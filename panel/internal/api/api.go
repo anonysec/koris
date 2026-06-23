@@ -6970,7 +6970,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	checks = append(checks, map[string]any{
 		"name":   "Panel service",
 		"ok":     isActive("panel"),
-		"detail": "systemctl is-active panel",
+		"detail": "systemctl is-active koris",
 	})
 	checks = append(checks, map[string]any{
 		"name":   "OpenVPN service",
@@ -6979,8 +6979,8 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	})
 	checks = append(checks, map[string]any{
 		"name":   "Node agent",
-		"ok":     isActive("node-agent"),
-		"detail": "systemctl is-active node-agent",
+		"ok":     isActive("knode"),
+		"detail": "systemctl is-active knode",
 	})
 	checks = append(checks, map[string]any{
 		"name":   "L2TP service",

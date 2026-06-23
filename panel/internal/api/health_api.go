@@ -385,7 +385,7 @@ var allowedUnits = map[string]bool{
 	"strongswan": true,
 	"mariadb":    true,
 	"mysql":      true,
-	"node-agent": true,
+	"knode": true,
 }
 
 // serverLogs returns recent journalctl output for a whitelisted systemd unit.
@@ -416,7 +416,7 @@ func (s *Server) serverLogs(w http.ResponseWriter, r *http.Request) {
 		unit = "panel"
 	}
 	if !allowedUnits[unit] {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("unit '%s' not allowed; allowed: panel, nginx, openvpn, xl2tpd, strongswan, mariadb, mysql, node-agent", unit)})
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("unit '%s' not allowed; allowed: koris, nginx, openvpn, xl2tpd, strongswan, mariadb, mysql, knode", unit)})
 		return
 	}
 

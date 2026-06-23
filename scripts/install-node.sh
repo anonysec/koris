@@ -17,17 +17,17 @@ apt-get update -qq >/dev/null
 apt-get install -y -qq golang-go curl openssl iproute2 >/dev/null
 cd "$ROOT"
 go mod tidy
-go build -o /usr/local/bin/panel-node ./node/cmd/node
-chmod +x /usr/local/bin/panel-node
-mkdir -p /etc/panel-node /opt/KorisPanel
-cat > /etc/panel-node/node.env <<ENV
+go build -o /usr/local/bin/knode ./node/cmd/node
+chmod +x /usr/local/bin/knode
+mkdir -p /etc/knode /opt/KorisPanel
+cat > /etc/knode/node.env <<ENV
 PANEL_URL='${PANEL_URL}'
 NODE_TOKEN='${NODE_TOKEN}'
 NODE_NAME='${NODE_NAME}'
 ENV
-chmod 600 /etc/panel-node/node.env
-cp "$ROOT/node/systemd/node-agent.service" /etc/systemd/system/node-agent.service
+chmod 600 /etc/knode/node.env
+cp "$ROOT/node/systemd/knode.service" /etc/systemd/system/knode.service
 systemctl daemon-reload
-systemctl enable --now node-agent.service
+systemctl enable --now knode.service
 sleep 2
-systemctl status node-agent --no-pager || true
+systemctl status knode --no-pager || true

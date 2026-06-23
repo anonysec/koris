@@ -162,8 +162,8 @@ All admin operations are available via REST API at `/api/`. Key endpoints:
 
 ## Configuration
 
-Panel config: `/etc/panel/panel.env`
-Node config: `/etc/panel-node/node.env`
+Panel config: `/etc/koris/panel.env`
+Node config: `/etc/knode/node.env`
 
 | Variable | Description | Default |
 |----------|-------------|---------|

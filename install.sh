@@ -24,7 +24,7 @@ OS=$ID
 REPO="anonysec/panel"
 BRANCH="main"
 INSTALL_DIR="/opt/KorisPanel"
-CONFIG_DIR="/etc/panel"
+CONFIG_DIR="/etc/koris"
 
 # Banner
 clear 2>/dev/null || true
@@ -141,12 +141,12 @@ info "Source ready (v${VERSION})."
 # Build binary
 info "Building panel binary..."
 go mod tidy >/dev/null 2>&1
-go build -ldflags="-s -w" -o /usr/local/bin/panel ./panel/cmd/panel
-chmod +x /usr/local/bin/panel
+go build -ldflags="-s -w" -o /usr/local/bin/koris ./panel/cmd/panel
+chmod +x /usr/local/bin/koris
 
 info "Building node agent..."
-go build -ldflags="-s -w" -o /usr/local/bin/panel-node ./node/cmd/node
-chmod +x /usr/local/bin/panel-node
+go build -ldflags="-s -w" -o /usr/local/bin/knode ./node/cmd/node
+chmod +x /usr/local/bin/knode
 
 # Frontend: www/ directories are pre-built and committed to git.
 # No npm needed on the server — the cloned repo already has the built assets.
@@ -188,7 +188,7 @@ chmod 600 "${CONFIG_DIR}/panel.env"
 
 # Systemd — Panel
 info "Installing panel service..."
-cp "$INSTALL_DIR/panel/systemd/panel.service" /etc/systemd/system/panel.service 2>/dev/null || cat > /etc/systemd/system/panel.service <<SVC
+cp "$INSTALL_DIR/panel/systemd/koris.service" /etc/systemd/system/koris.service 2>/dev/null || cat > /etc/systemd/system/koris.service <<SVC
 [Unit]
 Description=Koris Next Panel
 After=network-online.target mariadb.service
@@ -197,7 +197,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=${CONFIG_DIR}/panel.env
-ExecStart=/usr/local/bin/panel
+ExecStart=/usr/local/bin/koris
 Restart=always
 RestartSec=3
 User=root
@@ -209,15 +209,15 @@ SVC
 # Systemd — Node Agent
 info "Installing node agent service..."
 NODE_TOKEN="kn_$(gen_secret 24)"
-mkdir -p /etc/panel-node
-cat > /etc/panel-node/node.env <<NENV
+mkdir -p /etc/knode
+cat > /etc/knode/node.env <<NENV
 PANEL_URL='http://${PANEL_ADDR}'
 NODE_TOKEN='${NODE_TOKEN}'
 NODE_NAME='$(hostname -s)'
 NENV
-chmod 600 /etc/panel-node/node.env
+chmod 600 /etc/knode/node.env
 
-cat > /etc/systemd/system/node-agent.service <<SVC
+cat > /etc/systemd/system/knode.service <<SVC
 [Unit]
 Description=Koris Next Node Agent
 After=network-online.target
@@ -225,8 +225,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/panel-node/node.env
-ExecStart=/usr/local/bin/panel-node
+EnvironmentFile=/etc/knode/node.env
+ExecStart=/usr/local/bin/knode
 Restart=always
 RestartSec=3
 User=root
@@ -238,8 +238,8 @@ SVC
 
 systemctl daemon-reload
 systemctl enable --now panel >/dev/null 2>&1
-systemctl enable --now node-agent >/dev/null 2>&1
-systemctl restart panel
+systemctl enable --now knode >/dev/null 2>&1
+systemctl restart koris
 sleep 2
 
 # Health
@@ -247,7 +247,7 @@ if curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null 2>&1; then
     info "Health check ${green}PASSED${plain}"
 else
     warn "Health check failed — checking logs:"
-    journalctl -u panel -n 20 --no-pager
+    journalctl -u koris -n 20 --no-pager
 fi
 
 # Nginx

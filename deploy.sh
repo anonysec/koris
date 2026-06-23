@@ -47,8 +47,8 @@ fi
 
 echo "[deploy] Building panel binary..."
 go mod tidy
-go build -o /usr/local/bin/panel ./panel/cmd/panel
-chmod +x /usr/local/bin/panel
+go build -o /usr/local/bin/koris ./panel/cmd/panel
+chmod +x /usr/local/bin/koris
 
 copy_dir() {
   local src="$1"
@@ -71,20 +71,20 @@ copy_dir "$PROJECT_DIR/panel/migrations" "$INSTALL_DIR/migrations"
 
 echo "[deploy] Restarting panel service..."
 # Update version in panel.env so the running binary picks it up
-if [ -f /etc/panel/panel.env ]; then
-  if grep -q '^PANEL_VERSION=' /etc/panel/panel.env; then
-    sed -i "s|^PANEL_VERSION=.*|PANEL_VERSION='${VERSION}'|" /etc/panel/panel.env
+if [ -f /etc/koris/panel.env ]; then
+  if grep -q '^PANEL_VERSION=' /etc/koris/panel.env; then
+    sed -i "s|^PANEL_VERSION=.*|PANEL_VERSION='${VERSION}'|" /etc/koris/panel.env
   else
-    echo "PANEL_VERSION='${VERSION}'" >> /etc/panel/panel.env
+    echo "PANEL_VERSION='${VERSION}'" >> /etc/koris/panel.env
   fi
   echo "[deploy] Updated PANEL_VERSION to ${VERSION} in panel.env"
 fi
 sudo systemctl daemon-reload
-sudo systemctl restart panel.service
+sudo systemctl restart koris.service
 
 sleep 2
 
-PANEL_ADDR="$(grep -E '^PANEL_ADDR=' /etc/panel/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)"
+PANEL_ADDR="$(grep -E '^PANEL_ADDR=' /etc/koris/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)"
 PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8080}"
 
 echo "[deploy] Running health check on http://${PANEL_ADDR}/api/health ..."
@@ -92,7 +92,7 @@ if curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null 2>&1; then
   echo "[deploy] Health check passed."
 else
   echo "[deploy] Health check failed. Showing recent logs:"
-  journalctl -u panel -n 50 --no-pager
+  journalctl -u koris -n 50 --no-pager
   exit 1
 fi
 
@@ -102,11 +102,11 @@ echo "[deploy] Done."
 echo ""
 echo "=== [deploy] Post-Deploy Log Output ==="
 echo "[deploy] Last 20 panel logs:"
-journalctl -u panel -n 20 --no-pager -o short-iso 2>/dev/null || echo "  (journalctl not available)"
+journalctl -u koris -n 20 --no-pager -o short-iso 2>/dev/null || echo "  (journalctl not available)"
 
 echo ""
 echo "[deploy] Service status:"
-systemctl is-active panel 2>/dev/null || echo "  panel service status unknown"
+systemctl is-active koris 2>/dev/null || echo "  panel service status unknown"
 
 echo ""
 echo "[deploy] Diagnostics endpoint:"
@@ -118,4 +118,4 @@ echo "=== [deploy] End of diagnostics ==="
 # Optional: deploy-report.sh posts deploy logs to GitHub Issues for remote debugging.
 # Its failure should not affect deploy success.
 # Wrapped in a subshell to prevent panel.env side effects from polluting the parent shell.
-( source /etc/panel/panel.env 2>/dev/null; exec bash ./deploy-report.sh ) &
+( source /etc/koris/panel.env 2>/dev/null; exec bash ./deploy-report.sh ) &

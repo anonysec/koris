@@ -108,6 +108,6 @@ func (s *Server) agentDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="node-agent"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="knode"`)
 	http.ServeFile(w, r, cleanPath)
 }

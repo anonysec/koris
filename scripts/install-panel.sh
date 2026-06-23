@@ -82,16 +82,16 @@ build_frontend_if_needed "$ROOT/panel/web/portal"
 echo "[info] Building panel binary..."
 cd "$ROOT"
 go mod tidy
-go build -o /usr/local/bin/panel ./panel/cmd/panel
-chmod +x /usr/local/bin/panel
+go build -o /usr/local/bin/koris ./panel/cmd/panel
+chmod +x /usr/local/bin/koris
 
 mkdir -p /opt/KorisPanel/panel/web
 copy_dir "$ROOT/panel/migrations" /opt/KorisPanel/panel/migrations
 copy_dir "$ROOT/panel/web/admin/www" /opt/KorisPanel/panel/web/admin/www
 copy_dir "$ROOT/panel/web/portal/www" /opt/KorisPanel/panel/web/portal/www
 
-mkdir -p /etc/panel
-cat > /etc/panel/panel.env <<ENV
+mkdir -p /etc/koris
+cat > /etc/koris/panel.env <<ENV
 PANEL_ADDR='${PANEL_ADDR}'
 PANEL_DB_DSN='${DB_USER}:${DB_PASS}@tcp(127.0.0.1:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8'
 PANEL_MIGRATIONS='/opt/KorisPanel/panel/migrations'
@@ -102,14 +102,14 @@ PANEL_ADMIN_WEB_DIR='/opt/KorisPanel/panel/web/admin/www'
 PANEL_PORTAL_WEB_DIR='/opt/KorisPanel/panel/web/portal/www'
 PANEL_VERSION='${VERSION}'
 ENV
-chmod 600 /etc/panel/panel.env
+chmod 600 /etc/koris/panel.env
 
-cp "$ROOT/panel/systemd/panel.service" /etc/systemd/system/panel.service
+cp "$ROOT/panel/systemd/koris.service" /etc/systemd/system/koris.service
 systemctl daemon-reload
-systemctl enable --now panel.service
-systemctl restart panel.service
+systemctl enable --now koris.service
+systemctl restart koris.service
 sleep 2
-curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null || { journalctl -u panel -n 100 --no-pager; exit 1; }
+curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null || { journalctl -u koris -n 100 --no-pager; exit 1; }
 
 echo "[info] Configuring nginx..."
 cat > /etc/nginx/sites-available/panel-next.conf <<NGINX

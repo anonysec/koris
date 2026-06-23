@@ -58,7 +58,7 @@ The installer will:
 
 ```bash
 # Build backend
-go build -o /usr/local/bin/panel ./panel/cmd/panel
+go build -o /usr/local/bin/koris ./panel/cmd/panel
 
 # Build admin frontend
 cd panel/web/admin && npm install && npm run build
@@ -84,7 +84,7 @@ sudo systemctl status koris-panel
 sudo systemctl restart koris-panel
 
 # Node agent (on VPN nodes)
-sudo systemctl status koris-node-agent
+sudo systemctl status knode
 ```
 
 ## Updating

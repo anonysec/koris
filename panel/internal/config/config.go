@@ -105,10 +105,10 @@ func Load() Config {
 	return Config{
 		Addr:           getenv("PANEL_ADDR", ":8080"),
 		TLSAddr:        getenv("PANEL_TLS_ADDR", ":443"),
-		TLSCert:        getenv("PANEL_TLS_CERT", "/etc/panel/cert.pem"),
-		TLSKey:         getenv("PANEL_TLS_KEY", "/etc/panel/key.pem"),
+		TLSCert:        getenv("PANEL_TLS_CERT", "/etc/koris/cert.pem"),
+		TLSKey:         getenv("PANEL_TLS_KEY", "/etc/koris/key.pem"),
 		TLSEnabled:     tlsEnabled,
-		TLSCertDir:     getenv("PANEL_TLS_CERT_DIR", "/etc/panel/certs"),
+		TLSCertDir:     getenv("PANEL_TLS_CERT_DIR", "/etc/koris/certs"),
 		TLSDomain:      getenv("PANEL_TLS_DOMAIN", ""),
 		TLSEmail:       getenv("PANEL_TLS_EMAIL", ""),
 		DBDSN:          dbDSN,

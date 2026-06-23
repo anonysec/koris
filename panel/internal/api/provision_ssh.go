@@ -177,7 +177,7 @@ func (s *Server) runProvisionSSH(provisionID, host string, port int, user, passw
 	log.Printf("[provision] configuring node agent on %s", host)
 
 	configCmd := fmt.Sprintf(
-		`mkdir -p /etc/panel-node && cat > /etc/panel-node/node.env <<'EOF'
+		`mkdir -p /etc/knode && cat > /etc/knode/node.env <<'EOF'
 PANEL_URL='%s'
 NODE_TOKEN='%s'
 NODE_NAME='node-%s'
@@ -185,7 +185,7 @@ NODE_INTERVAL=10
 LOG_LEVEL=info
 NODE_AUTO_UPDATE=true
 EOF
-chmod 600 /etc/panel-node/node.env && systemctl restart node-agent`,
+chmod 600 /etc/knode/node.env && systemctl restart knode`,
 		panelURL, nodeToken, host,
 	)
 
@@ -272,7 +272,7 @@ chmod 600 /etc/panel-node/node.env && systemctl restart node-agent`,
 
 // cleanupProvisionedNode attempts to remove the node agent from a server on failed provisioning.
 func (s *Server) cleanupProvisionedNode(client *ssh.Client) {
-	cleanupCmd := `systemctl stop node-agent 2>/dev/null; systemctl disable node-agent 2>/dev/null; rm -f /etc/panel-node/node.env /usr/local/bin/panel-node /etc/systemd/system/node-agent.service; systemctl daemon-reload 2>/dev/null`
+	cleanupCmd := `systemctl stop knode 2>/dev/null; systemctl disable knode 2>/dev/null; rm -f /etc/knode/node.env /usr/local/bin/knode /etc/systemd/system/knode.service; systemctl daemon-reload 2>/dev/null`
 	output, err := sshExec(client, cleanupCmd)
 	if err != nil {
 		log.Printf("[provision] cleanup failed: %v\nOutput: %s", err, output)

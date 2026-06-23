@@ -144,8 +144,8 @@ VERSION="$(cat VERSION 2>/dev/null || echo dev)"
 
 info "Building node agent..."
 go mod tidy >/dev/null 2>&1
-go build -ldflags="-s -w" -o /usr/local/bin/panel-node ./node/cmd/node
-chmod +x /usr/local/bin/panel-node
+go build -ldflags="-s -w" -o /usr/local/bin/knode ./node/cmd/node
+chmod +x /usr/local/bin/knode
 
 # Detect node public IP
 NODE_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
@@ -156,15 +156,15 @@ NODE_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname 
 RADIUS_SECRET="$(openssl rand -hex 16)"
 
 # Config
-mkdir -p /etc/panel-node
-cat > /etc/panel-node/node.env <<ENV
+mkdir -p /etc/knode
+cat > /etc/knode/node.env <<ENV
 PANEL_URL='${PANEL_URL}'
 NODE_TOKEN='${NODE_TOKEN}'
 NODE_NAME='${NODE_NAME}'
 KORIS_RADIUS_SECRET='${RADIUS_SECRET}'
 KORIS_NAS_IP='${NODE_IP}'
 ENV
-chmod 600 /etc/panel-node/node.env
+chmod 600 /etc/knode/node.env
 
 # VPN scripts
 if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then
@@ -314,24 +314,24 @@ mkdir -p /var/log/panel-node/
 chmod 0750 /var/log/panel-node/
 chown root:root /var/log/panel-node/
 cp -f "$INSTALL_DIR/scripts/logrotate/koris-openvpn" /etc/logrotate.d/koris-openvpn
-cp -f "$INSTALL_DIR/scripts/logrotate/koris-node-agent" /etc/logrotate.d/koris-node-agent
+cp -f "$INSTALL_DIR/scripts/logrotate/knode" /etc/logrotate.d/knode
 chmod 644 /etc/logrotate.d/koris-openvpn
-chmod 644 /etc/logrotate.d/koris-node-agent
+chmod 644 /etc/logrotate.d/knode
 
 # Service
-cp "$INSTALL_DIR/node/systemd/node-agent.service" /etc/systemd/system/node-agent.service
+cp "$INSTALL_DIR/node/systemd/knode.service" /etc/systemd/system/knode.service
 systemctl daemon-reload
-systemctl enable --now node-agent >/dev/null 2>&1
-systemctl restart node-agent
+systemctl enable --now knode >/dev/null 2>&1
+systemctl restart knode
 sleep 2
 
 # Post-install health check
 info "Verifying node agent status..."
-AGENT_STATUS=$(systemctl is-active node-agent 2>/dev/null || echo "inactive")
+AGENT_STATUS=$(systemctl is-active knode 2>/dev/null || echo "inactive")
 if [[ "$AGENT_STATUS" != "active" ]]; then
-    warn "node-agent service is not active (status: $AGENT_STATUS)."
-    warn "Troubleshooting: check logs with 'journalctl -u node-agent -n 50'"
-    warn "Try restarting: systemctl restart node-agent"
+    warn "knode service is not active (status: $AGENT_STATUS)."
+    warn "Troubleshooting: check logs with 'journalctl -u knode -n 50'"
+    warn "Try restarting: systemctl restart knode"
 fi
 
 # Verify panel registration
@@ -340,7 +340,7 @@ REG_RESPONSE=$(curl -fsSL --max-time 5 -H "X-Node-Token: $NODE_TOKEN" "$PANEL_UR
 if [[ -z "$REG_RESPONSE" ]]; then
     warn "Could not verify panel registration. The node may need a moment to register."
     warn "Check panel dashboard under Nodes to see if this node appears."
-    warn "If it does not appear, verify NODE_TOKEN is correct and restart: systemctl restart node-agent"
+    warn "If it does not appear, verify NODE_TOKEN is correct and restart: systemctl restart knode"
 else
     info "Panel registration verified successfully."
 fi
@@ -356,12 +356,12 @@ echo -e "${bold}${green}══════════════════�
 echo -e "  ${cyan}Node:${plain}    ${NODE_NAME}"
 echo -e "  ${cyan}IP:${plain}      ${NODE_IP}"
 echo -e "  ${cyan}Panel:${plain}   ${PANEL_URL}"
-echo -e "  ${cyan}Agent:${plain}   $(systemctl is-active node-agent 2>/dev/null || echo unknown)"
+echo -e "  ${cyan}Agent:${plain}   $(systemctl is-active knode 2>/dev/null || echo unknown)"
 echo -e "  ${cyan}OpenVPN:${plain} UDP=$(systemctl is-active openvpn-server@server-udp 2>/dev/null || echo unknown) TCP=$(systemctl is-active openvpn-server@server-tcp 2>/dev/null || echo unknown)"
 echo -e "  ${cyan}Version:${plain} ${VERSION}"
 echo -e "${bold}${green}───────────────────────────────────────────────${plain}"
 echo -e "  ${cyan}Manage:${plain}  koris node-status | koris node-restart"
-echo -e "  ${cyan}Logs:${plain}    journalctl -u node-agent -f"
+echo -e "  ${cyan}Logs:${plain}    journalctl -u knode -f"
 echo -e "  ${cyan}VPN:${plain}     journalctl -u openvpn-server@server-udp -f"
 echo -e "           journalctl -u openvpn-server@server-tcp -f"
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"

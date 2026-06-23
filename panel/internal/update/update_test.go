@@ -58,16 +58,16 @@ func TestNewPanelUpdater(t *testing.T) {
 	notified := false
 	notifier := func(msg string) { notified = true; _ = msg }
 
-	u := NewPanelUpdater("http://example.com/release.json", "/usr/local/bin/panel", "/usr/local/bin/panel.bak", notifier)
+	u := NewPanelUpdater("http://example.com/release.json", "/usr/local/bin/koris", "/usr/local/bin/koris.bak", notifier)
 
 	if u.ReleaseURL != "http://example.com/release.json" {
 		t.Errorf("ReleaseURL = %q, want %q", u.ReleaseURL, "http://example.com/release.json")
 	}
-	if u.BinaryPath != "/usr/local/bin/panel" {
-		t.Errorf("BinaryPath = %q, want %q", u.BinaryPath, "/usr/local/bin/panel")
+	if u.BinaryPath != "/usr/local/bin/koris" {
+		t.Errorf("BinaryPath = %q, want %q", u.BinaryPath, "/usr/local/bin/koris")
 	}
-	if u.RollbackPath != "/usr/local/bin/panel.bak" {
-		t.Errorf("RollbackPath = %q, want %q", u.RollbackPath, "/usr/local/bin/panel.bak")
+	if u.RollbackPath != "/usr/local/bin/koris.bak" {
+		t.Errorf("RollbackPath = %q, want %q", u.RollbackPath, "/usr/local/bin/koris.bak")
 	}
 	if u.Notifier == nil {
 		t.Error("Notifier should not be nil")
