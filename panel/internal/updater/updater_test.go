@@ -86,7 +86,7 @@ func TestCheck(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u := New("v0.92.0", server.URL, "/usr/local/bin/panel")
+	u := New("v0.92.0", server.URL, "/usr/local/bin/koris")
 
 	info, err := u.Check()
 	if err != nil {
@@ -124,7 +124,7 @@ func TestCheckNoUpdate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u := New("v0.92.0", server.URL, "/usr/local/bin/panel")
+	u := New("v0.92.0", server.URL, "/usr/local/bin/koris")
 
 	info, err := u.Check()
 	if err != nil {
@@ -143,7 +143,7 @@ func TestCheckServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u := New("v0.92.0", server.URL, "/usr/local/bin/panel")
+	u := New("v0.92.0", server.URL, "/usr/local/bin/koris")
 
 	_, err := u.Check()
 	if err == nil {

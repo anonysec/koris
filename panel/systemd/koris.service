@@ -7,8 +7,8 @@ StartLimitBurst=5
 
 [Service]
 Type=notify
-EnvironmentFile=/etc/panel/panel.env
-ExecStart=/usr/local/bin/panel
+EnvironmentFile=/etc/koris/panel.env
+ExecStart=/usr/local/bin/koris
 ExecReload=/bin/kill -HUP $MAINPID
 WatchdogSec=30
 Restart=on-failure

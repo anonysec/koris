@@ -393,8 +393,8 @@ func TestLoad_TLS_CertDir_Default(t *testing.T) {
 
 	cfg := Load()
 
-	if cfg.TLSCertDir != "/etc/panel/certs" {
-		t.Errorf("expected TLSCertDir default to be '/etc/panel/certs', got %q", cfg.TLSCertDir)
+	if cfg.TLSCertDir != "/etc/koris/certs" {
+		t.Errorf("expected TLSCertDir default to be '/etc/koris/certs', got %q", cfg.TLSCertDir)
 	}
 }
 

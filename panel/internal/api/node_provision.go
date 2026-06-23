@@ -242,7 +242,7 @@ esac
 # Download the node agent binary from the panel
 info "Downloading node agent binary..."
 DOWNLOAD_URL="$PANEL_URL/api/node/agent/download"
-BINARY_PATH="/usr/local/bin/panel-node"
+BINARY_PATH="/usr/local/bin/knode"
 
 HTTP_CODE=$(curl -sSL -o "$BINARY_PATH" -w "%{http_code}" \
     -H "X-Node-Token: $NODE_TOKEN" \
@@ -263,8 +263,8 @@ fi
 
 # Write configuration
 info "Writing configuration..."
-mkdir -p /etc/panel-node
-cat > /etc/panel-node/node.env <<ENV
+mkdir -p /etc/knode
+cat > /etc/knode/node.env <<ENV
 PANEL_URL='${PANEL_URL}'
 NODE_TOKEN='${NODE_TOKEN}'
 NODE_NAME='${NODE_NAME}'
@@ -272,12 +272,12 @@ NODE_INTERVAL=10
 LOG_LEVEL=info
 NODE_AUTO_UPDATE=true
 ENV
-chmod 600 /etc/panel-node/node.env
-info "Configuration written to /etc/panel-node/node.env"
+chmod 600 /etc/knode/node.env
+info "Configuration written to /etc/knode/node.env"
 
 # Create systemd service
 info "Creating systemd service..."
-cat > /etc/systemd/system/node-agent.service <<'SERVICE'
+cat > /etc/systemd/system/knode.service <<'SERVICE'
 [Unit]
 Description=KorisPanel Node Agent
 After=network-online.target
@@ -285,8 +285,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/panel-node
-EnvironmentFile=/etc/panel-node/node.env
+ExecStart=/usr/local/bin/knode
+EnvironmentFile=/etc/knode/node.env
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
@@ -299,17 +299,17 @@ SERVICE
 
 # Enable and start the service
 systemctl daemon-reload
-systemctl enable node-agent >/dev/null 2>&1
-systemctl restart node-agent
+systemctl enable knode >/dev/null 2>&1
+systemctl restart knode
 sleep 2
 
 # Verify service status
-AGENT_STATUS=$(systemctl is-active node-agent 2>/dev/null || echo "inactive")
+AGENT_STATUS=$(systemctl is-active knode 2>/dev/null || echo "inactive")
 if [[ "$AGENT_STATUS" == "active" ]]; then
     info "Node agent service is running."
 else
     warn "Node agent service is not active (status: $AGENT_STATUS)."
-    warn "Check logs: journalctl -u node-agent -n 50"
+    warn "Check logs: journalctl -u knode -n 50"
 fi
 
 # Verify panel registration
@@ -329,9 +329,9 @@ echo -e "  ${cyan}Node:${plain}    ${NODE_NAME}"
 echo -e "  ${cyan}Panel:${plain}   ${PANEL_URL}"
 echo -e "  ${cyan}Agent:${plain}   ${AGENT_STATUS}"
 echo -e "${bold}${green}───────────────────────────────────────────────${plain}"
-echo -e "  ${cyan}Logs:${plain}    journalctl -u node-agent -f"
-echo -e "  ${cyan}Status:${plain}  systemctl status node-agent"
-echo -e "  ${cyan}Restart:${plain} systemctl restart node-agent"
+echo -e "  ${cyan}Logs:${plain}    journalctl -u knode -f"
+echo -e "  ${cyan}Status:${plain}  systemctl status knode"
+echo -e "  ${cyan}Restart:${plain} systemctl restart knode"
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
 echo ""
 `

@@ -10,19 +10,19 @@ warn()  { echo -e "${yellow}[!]${plain} $*"; }
 error() { echo -e "${red}[-]${plain} $*"; }
 
 INSTALL_DIR="/opt/KorisPanel"
-PANEL_ENV="/etc/panel/panel.env"
-NODE_ENV="/etc/panel-node/node.env"
+PANEL_ENV="/etc/koris/panel.env"
+NODE_ENV="/etc/knode/node.env"
 
-is_panel() { [[ -f /usr/local/bin/panel && -f "$PANEL_ENV" ]]; }
-is_node()  { [[ -f /usr/local/bin/panel-node && -f "$NODE_ENV" ]]; }
+is_panel() { [[ -f /usr/local/bin/koris && -f "$PANEL_ENV" ]]; }
+is_node()  { [[ -f /usr/local/bin/knode && -f "$NODE_ENV" ]]; }
 get_version() { cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "?"; }
 
-panel_status() { systemctl is-active panel 2>/dev/null || echo "not installed"; }
-node_status()  { systemctl is-active node-agent 2>/dev/null || echo "not installed"; }
+panel_status() { systemctl is-active koris 2>/dev/null || echo "not installed"; }
+node_status()  { systemctl is-active knode 2>/dev/null || echo "not installed"; }
 
-cmd_start()   { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl start panel && info "Panel started"; is_node && systemctl start node-agent && info "Node started"; }
-cmd_stop()    { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl stop panel && info "Panel stopped"; is_node && systemctl stop node-agent && info "Node stopped"; }
-cmd_restart() { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl restart panel && info "Panel restarted"; is_node && systemctl restart node-agent && info "Node restarted"; }
+cmd_start()   { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl start koris && info "Panel started"; is_node && systemctl start knode && info "Node started"; }
+cmd_stop()    { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl stop koris && info "Panel stopped"; is_node && systemctl stop knode && info "Node stopped"; }
+cmd_restart() { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl restart koris && info "Panel restarted"; is_node && systemctl restart knode && info "Node restarted"; }
 
 cmd_status() {
     echo -e "${bold}${blue}KorisPanel${plain} v$(get_version)"
@@ -41,13 +41,13 @@ cmd_status() {
 }
 
 cmd_logs() {
-    is_panel && { echo -e "${cyan}=== Panel ===${plain}"; journalctl -u panel -n 50 --no-pager; }
-    is_node  && { echo -e "${cyan}=== Node ===${plain}"; journalctl -u node-agent -n 50 --no-pager; }
+    is_panel && { echo -e "${cyan}=== Panel ===${plain}"; journalctl -u koris -n 50 --no-pager; }
+    is_node  && { echo -e "${cyan}=== Node ===${plain}"; journalctl -u knode -n 50 --no-pager; }
 }
 
 cmd_follow() {
-    is_panel && exec journalctl -u panel -f
-    is_node  && exec journalctl -u node-agent -f
+    is_panel && exec journalctl -u koris -f
+    is_node  && exec journalctl -u knode -f
 }
 
 cmd_update() {
@@ -70,11 +70,11 @@ cmd_uninstall() {
     [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }
     echo -e "${red}This will remove KorisPanel completely.${plain}"
     read -rp "Type 'yes' to confirm: " c; [[ "$c" != "yes" ]] && exit 0
-    systemctl stop panel node-agent 2>/dev/null; systemctl disable panel node-agent 2>/dev/null
-    rm -f /etc/systemd/system/panel.service /etc/systemd/system/node-agent.service
+    systemctl stop koris knode 2>/dev/null; systemctl disable koris knode 2>/dev/null
+    rm -f /etc/systemd/system/koris.service /etc/systemd/system/knode.service
     systemctl daemon-reload
-    rm -f /usr/local/bin/panel /usr/local/bin/panel-node /usr/local/bin/koris
-    rm -rf /etc/panel /etc/panel-node "$INSTALL_DIR"
+    rm -f /usr/local/bin/koris /usr/local/bin/knode
+    rm -rf /etc/koris /etc/knode "$INSTALL_DIR"
     rm -f /etc/nginx/sites-enabled/koris-panel.conf /etc/nginx/sites-available/koris-panel.conf
     systemctl reload nginx 2>/dev/null || true
     info "Uninstalled. Database not removed (manual cleanup needed)."
@@ -151,7 +151,7 @@ cmd_ssl() {
                 else
                     echo "PANEL_SECURE_COOKIES='true'" >> "$PANEL_ENV"
                 fi
-                systemctl restart panel
+                systemctl restart koris
                 echo ""
                 echo -e "  ${green}✓${plain} https://${SSL_DOMAIN}/dashboard/"
                 echo -e "  ${dim}Auto-renewal is enabled via certbot timer.${plain}"
@@ -190,7 +190,7 @@ NGINX
             nginx -t >/dev/null 2>&1 && systemctl reload nginx
             # Disable secure cookies
             sed -i "s|^PANEL_SECURE_COOKIES=.*|PANEL_SECURE_COOKIES='false'|" "$PANEL_ENV" 2>/dev/null
-            systemctl restart panel
+            systemctl restart koris
             info "SSL removed. Panel is now HTTP-only."
             ;;
         0) return ;;
@@ -212,8 +212,8 @@ show_menu() {
     case "$ch" in
         1) cmd_start;; 2) cmd_stop;; 3) cmd_restart;; 4) cmd_status;;
         5) cmd_logs;; 6) cmd_follow;; 7) cmd_update;; 8) cmd_config;;
-        9) systemctl enable panel node-agent 2>/dev/null; info "Enabled.";;
-        10) systemctl disable panel node-agent 2>/dev/null; info "Disabled.";;
+        9) systemctl enable koris knode 2>/dev/null; info "Enabled.";;
+        10) systemctl disable koris knode 2>/dev/null; info "Disabled.";;
         11) cmd_uninstall;; 12) cmd_ssl;; 0) exit 0;; *) warn "Invalid.";;
     esac
     echo ""; read -rp "Enter to continue..." _; show_menu
@@ -224,11 +224,11 @@ case "${1:-}" in
     status)    cmd_status;; logs) cmd_logs;; follow|logs-live) cmd_follow;;
     update)    cmd_update;; config) cmd_config;; uninstall) cmd_uninstall;;
     ssl)       cmd_ssl;;
-    enable)    systemctl enable panel node-agent 2>/dev/null; info "Enabled.";;
-    disable)   systemctl disable panel node-agent 2>/dev/null; info "Disabled.";;
+    enable)    systemctl enable koris knode 2>/dev/null; info "Enabled.";;
+    disable)   systemctl disable koris knode 2>/dev/null; info "Disabled.";;
     node-status)  echo "Node Agent: $(node_status)";;
-    node-restart) systemctl restart node-agent 2>/dev/null; info "Node restarted.";;
-    node-logs)    journalctl -u node-agent -n 50 --no-pager;;
+    node-restart) systemctl restart knode 2>/dev/null; info "Node restarted.";;
+    node-logs)    journalctl -u knode -n 50 --no-pager;;
     help|-h|--help) echo "Usage: koris [start|stop|restart|status|logs|follow|update|config|ssl|uninstall|enable|disable|node-status|node-restart|node-logs]"; echo "Run without args for interactive menu.";;
     "") show_menu;;
     *) error "Unknown: $1. Run 'koris help'."; exit 1;;
