@@ -11,13 +11,19 @@ const router = createRouter({
         { path: '', name: 'portal-home', component: () => import('@/views/SinglePageView.vue') },
         { path: 'billing', name: 'portal-billing', component: () => import('@/views/BillingView.vue'), meta: { requiresBilling: true } },
         { path: 'profile', name: 'portal-profile', component: () => import('@/views/ProfileView.vue') },
+        { path: 'support', name: 'portal-support', component: () => import('@/views/SupportView.vue') },
+        { path: 'xray', name: 'portal-xray', component: () => import('@/views/XrayConfigsView.vue') },
+        { path: 'xray/subscription', name: 'portal-xray-subscription', component: () => import('@/views/XraySubscriptionView.vue') },
+        { path: 'anyconnect', name: 'portal-anyconnect', component: () => import('@/views/AnyConnectView.vue') },
+        { path: 'invoices', name: 'portal-invoices', component: () => import('@/views/InvoicesView.vue'), meta: { requiresBilling: true } },
+        { path: 'kb', name: 'portal-kb', component: () => import('@/views/KnowledgeBaseView.vue') },
+        { path: 'payment', name: 'portal-payment', component: () => import('@/views/PaymentView.vue'), meta: { requiresBilling: true } },
         { path: 'wireguard', redirect: '/' },
       ]
     },
     { path: '/login', name: 'portal-login', component: () => import('@/views/LoginView.vue') },
     // Redirect old routes to home
     { path: '/usage', redirect: '/' },
-    { path: '/support', redirect: '/' },
     { path: '/vpn-profiles', redirect: '/' },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ]

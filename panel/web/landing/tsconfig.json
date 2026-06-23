@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@koris/ui/*": ["../shared/components/*"],
+      "@koris/ui": ["../shared/components"],
+      "@koris/composables/*": ["../shared/composables/*"],
+      "@koris/composables": ["../shared/composables"],
+      "@koris/types/*": ["../shared/types/*"],
+      "@koris/types": ["../shared/types"],
+      "@koris/styles/*": ["../shared/styles/*"],
+      "@koris/styles": ["../shared/styles"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../shared/**/*.ts", "../shared/**/*.vue"],
+  "references": []
+}

@@ -11,13 +11,19 @@ type Config struct {
 	TLSAddr        string
 	TLSCert        string
 	TLSKey         string
+	TLSEnabled     bool
+	TLSCertDir     string
+	TLSDomain      string
+	TLSEmail       string
 	DBDSN          string
 	SetupKey       string
 	SessionSecret  string
 	Version        string
+	ReleaseURL     string
 	PublicBase     string
 	AdminWebDir    string
 	PortalWebDir   string
+	LandingWebDir  string
 	TemplateDir    string
 	SecureCookies  bool
 	TrustedProxies []string
@@ -94,18 +100,26 @@ func Load() Config {
 		secureCookies = false
 	}
 
+	tlsEnabled := strings.ToLower(os.Getenv("PANEL_TLS_ENABLED")) == "true"
+
 	return Config{
 		Addr:           getenv("PANEL_ADDR", ":8080"),
 		TLSAddr:        getenv("PANEL_TLS_ADDR", ":443"),
 		TLSCert:        getenv("PANEL_TLS_CERT", "/etc/panel/cert.pem"),
 		TLSKey:         getenv("PANEL_TLS_KEY", "/etc/panel/key.pem"),
+		TLSEnabled:     tlsEnabled,
+		TLSCertDir:     getenv("PANEL_TLS_CERT_DIR", "/etc/panel/certs"),
+		TLSDomain:      getenv("PANEL_TLS_DOMAIN", ""),
+		TLSEmail:       getenv("PANEL_TLS_EMAIL", ""),
 		DBDSN:          dbDSN,
 		SetupKey:       setupKey,
 		SessionSecret:  sessionSecret,
 		Version:        getenv("PANEL_VERSION", "next-dev"),
+		ReleaseURL:     getenv("PANEL_RELEASE_URL", ""),
 		PublicBase:     getenv("PANEL_PUBLIC_BASE", "/dashboard"),
 		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/KorisPanel/panel/web/admin/www"),
 		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/KorisPanel/panel/web/portal/www"),
+		LandingWebDir:  getenv("PANEL_LANDING_WEB_DIR", "/opt/KorisPanel/panel/web/landing/www"),
 		TemplateDir:    getenv("PANEL_TEMPLATE_DIR", "/etc/koris/templates/"),
 		SecureCookies:  secureCookies,
 		TrustedProxies: trustedProxies,

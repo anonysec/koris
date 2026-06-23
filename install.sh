@@ -67,11 +67,6 @@ case "$OS" in
         apt-get install -y -qq git curl openssl ca-certificates mariadb-server \
             freeradius freeradius-mysql freeradius-utils nginx golang-go iproute2 \
             wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx haproxy >/dev/null 2>&1
-        # Node.js for frontend build
-        if ! command -v npm >/dev/null 2>&1; then
-            curl -fsSL https://deb.nodesource.com/setup_20.x 2>/dev/null | bash - >/dev/null 2>&1 || true
-            apt-get install -y -qq nodejs >/dev/null 2>&1 || true
-        fi
         ;;
     centos|almalinux|rocky|rhel|fedora)
         dnf install -y -q git curl openssl ca-certificates mariadb-server \
@@ -153,23 +148,18 @@ info "Building node agent..."
 go build -ldflags="-s -w" -o /usr/local/bin/panel-node ./node/cmd/node
 chmod +x /usr/local/bin/panel-node
 
-# Build frontend
-if command -v npm >/dev/null 2>&1; then
-    info "Building shared components..."
-    (cd panel/web/shared && npm install --no-audit --no-fund --silent 2>/dev/null) || true
-    info "Building admin frontend..."
-    (cd panel/web/admin && npm install --no-audit --no-fund --silent 2>/dev/null && npm run build >/dev/null 2>&1) || true
-    info "Building portal frontend..."
-    (cd panel/web/portal && npm install --no-audit --no-fund --silent 2>/dev/null && npm run build >/dev/null 2>&1) || true
-else
-    info "Using prebuilt frontend assets."
+# Frontend: www/ directories are pre-built and committed to git.
+# No npm needed on the server — the cloned repo already has the built assets.
+if [ ! -f "$INSTALL_DIR/panel/web/admin/www/index.html" ]; then
+    warn "panel/web/admin/www/index.html not found in repo — dashboard may not work."
+fi
+if [ ! -f "$INSTALL_DIR/panel/web/portal/www/index.html" ]; then
+    warn "panel/web/portal/www/index.html not found in repo — portal may not work."
 fi
 
 # Install files
-mkdir -p /opt/KorisPanel/panel/web/admin /opt/KorisPanel/panel/web/portal
+mkdir -p /opt/KorisPanel/panel
 cp -a "$INSTALL_DIR/panel/migrations" /opt/KorisPanel/panel/migrations 2>/dev/null || true
-cp -a "$INSTALL_DIR/panel/web/admin/www" /opt/KorisPanel/panel/web/admin/www 2>/dev/null || true
-cp -a "$INSTALL_DIR/panel/web/portal/www" /opt/KorisPanel/panel/web/portal/www 2>/dev/null || true
 
 # VPN hook scripts
 if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then

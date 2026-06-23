@@ -1,0 +1,49 @@
+version: '3.8'
+
+# Development override — use with: docker compose -f docker-compose.yml -f docker/docker-compose.dev.yml up
+services:
+  panel:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder  # Use builder stage for hot-reload
+    volumes:
+      - ..:/build:cached
+      - go-mod-cache:/go/pkg/mod
+    command: ["go", "run", "./panel/cmd/panel"]
+    environment:
+      - PANEL_TUI_ENABLED=false
+      - PANEL_PORT=8080
+    ports:
+      - "8080:8080"
+
+  # Frontend dev server — admin
+  admin-dev:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ../panel/web/admin:/app:cached
+      - admin-node-modules:/app/node_modules
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5173"]
+    ports:
+      - "5173:5173"
+
+  # Frontend dev server — portal
+  portal-dev:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - ../panel/web/portal:/app:cached
+      - portal-node-modules:/app/node_modules
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5174"]
+    ports:
+      - "5174:5174"
+
+  db:
+    ports:
+      - "3306:3306"  # Expose DB for local tools
+
+volumes:
+  go-mod-cache:
+  admin-node-modules:
+  portal-node-modules:

@@ -1,14 +1,46 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 
 export type ThemeMode = 'system' | 'dark' | 'light'
-export type UITheme = 'midnight' | 'kiro' | 'github' | 'soft-dark' | 'corporate'
+export type UITheme = 'default-light' | 'default-dark' | 'ocean' | 'forest' | 'sunset' | 'monochrome'
+
+export interface ThemeColors {
+  primary: string
+  primaryHover: string
+  secondary: string
+  background: string
+  surface: string
+  surfaceHover: string
+  text: string
+  textMuted: string
+  border: string
+  success: string
+  warning: string
+  error: string
+  info: string
+  accent: string
+}
+
+export interface ThemeShadows {
+  sm: string
+  md: string
+  lg: string
+}
+
+export interface ThemeConfig {
+  colors: ThemeColors
+  borderRadius: string
+  shadows: ThemeShadows
+}
 
 export interface ThemeInfo {
   id: UITheme
   name: string
   description: string
+  mode: 'light' | 'dark'
+  config: ThemeConfig
+  /** Shorthand accessors for backward compat */
   colors: { bg: string; surface: string; primary: string; accent: string }
-  forcedMode?: 'light' | 'dark'
+  isDefault?: boolean
 }
 
 const MODE_KEY = 'koris-mode'
@@ -18,35 +50,191 @@ const THEME_ATTRIBUTE = 'data-ui-theme'
 
 export const availableThemes: ThemeInfo[] = [
   {
-    id: 'midnight',
-    name: 'Midnight',
-    description: 'Dark command-center aesthetic',
-    colors: { bg: '#070a12', surface: '#0b1120', primary: '#2563eb', accent: '#22d3ee' },
+    id: 'default-light',
+    name: 'Default Light',
+    description: 'Clean light theme with blue accents',
+    mode: 'light',
+    config: {
+      colors: {
+        primary: '#3b82f6',
+        primaryHover: '#2563eb',
+        secondary: '#64748b',
+        background: '#ffffff',
+        surface: '#f8fafc',
+        surfaceHover: '#f1f5f9',
+        text: '#1e293b',
+        textMuted: '#64748b',
+        border: '#e2e8f0',
+        success: '#22c55e',
+        warning: '#f59e0b',
+        error: '#ef4444',
+        info: '#3b82f6',
+        accent: '#8b5cf6',
+      },
+      borderRadius: '8px',
+      shadows: {
+        sm: '0 1px 2px rgba(0,0,0,0.05)',
+        md: '0 4px 6px rgba(0,0,0,0.07)',
+        lg: '0 10px 15px rgba(0,0,0,0.1)',
+      },
+    },
+    colors: { bg: '#ffffff', surface: '#f8fafc', primary: '#3b82f6', accent: '#8b5cf6' },
+    isDefault: true,
   },
   {
-    id: 'kiro',
-    name: 'Kiro',
-    description: 'Teal-cyan with dark navy',
-    colors: { bg: '#0c1222', surface: '#1a2332', primary: '#06b6d4', accent: '#a78bfa' },
+    id: 'default-dark',
+    name: 'Default Dark',
+    description: 'Dark theme with soft blue tones',
+    mode: 'dark',
+    config: {
+      colors: {
+        primary: '#60a5fa',
+        primaryHover: '#93c5fd',
+        secondary: '#94a3b8',
+        background: '#0f172a',
+        surface: '#1e293b',
+        surfaceHover: '#334155',
+        text: '#f1f5f9',
+        textMuted: '#94a3b8',
+        border: '#334155',
+        success: '#4ade80',
+        warning: '#fbbf24',
+        error: '#f87171',
+        info: '#60a5fa',
+        accent: '#a78bfa',
+      },
+      borderRadius: '8px',
+      shadows: {
+        sm: '0 1px 2px rgba(0,0,0,0.3)',
+        md: '0 4px 6px rgba(0,0,0,0.4)',
+        lg: '0 10px 15px rgba(0,0,0,0.5)',
+      },
+    },
+    colors: { bg: '#0f172a', surface: '#1e293b', primary: '#60a5fa', accent: '#a78bfa' },
   },
   {
-    id: 'github',
-    name: 'GitHub',
-    description: 'GitHub-inspired dark palette',
-    colors: { bg: '#0d1117', surface: '#161b22', primary: '#58a6ff', accent: '#7ee787' },
+    id: 'ocean',
+    name: 'Ocean',
+    description: 'Deep blue-cyan palette for dark mode',
+    mode: 'dark',
+    config: {
+      colors: {
+        primary: '#06b6d4',
+        primaryHover: '#22d3ee',
+        secondary: '#7dd3fc',
+        background: '#0c1222',
+        surface: '#162032',
+        surfaceHover: '#1e3048',
+        text: '#e0f2fe',
+        textMuted: '#7dd3fc',
+        border: '#1e3a5f',
+        success: '#34d399',
+        warning: '#fbbf24',
+        error: '#fb7185',
+        info: '#06b6d4',
+        accent: '#a78bfa',
+      },
+      borderRadius: '10px',
+      shadows: {
+        sm: '0 1px 3px rgba(6,182,212,0.1)',
+        md: '0 4px 8px rgba(6,182,212,0.15)',
+        lg: '0 10px 20px rgba(6,182,212,0.2)',
+      },
+    },
+    colors: { bg: '#0c1222', surface: '#162032', primary: '#06b6d4', accent: '#a78bfa' },
   },
   {
-    id: 'soft-dark',
-    name: 'Soft Dark',
-    description: 'Warmer tones, softer contrast',
-    colors: { bg: '#1a1b26', surface: '#24283b', primary: '#7aa2f7', accent: '#9ece6a' },
+    id: 'forest',
+    name: 'Forest',
+    description: 'Nature-inspired dark green theme',
+    mode: 'dark',
+    config: {
+      colors: {
+        primary: '#22c55e',
+        primaryHover: '#4ade80',
+        secondary: '#86efac',
+        background: '#0a1a0f',
+        surface: '#142b1a',
+        surfaceHover: '#1e3d26',
+        text: '#ecfdf5',
+        textMuted: '#86efac',
+        border: '#1e4d2b',
+        success: '#22c55e',
+        warning: '#eab308',
+        error: '#f87171',
+        info: '#38bdf8',
+        accent: '#c084fc',
+      },
+      borderRadius: '6px',
+      shadows: {
+        sm: '0 1px 3px rgba(34,197,94,0.1)',
+        md: '0 4px 8px rgba(34,197,94,0.15)',
+        lg: '0 10px 20px rgba(34,197,94,0.2)',
+      },
+    },
+    colors: { bg: '#0a1a0f', surface: '#142b1a', primary: '#22c55e', accent: '#c084fc' },
   },
   {
-    id: 'corporate',
-    name: 'Corporate',
-    description: 'Clean professional light theme',
-    colors: { bg: '#f8fafc', surface: '#ffffff', primary: '#4f46e5', accent: '#0891b2' },
-    forcedMode: 'light',
+    id: 'sunset',
+    name: 'Sunset',
+    description: 'Warm orange light theme',
+    mode: 'light',
+    config: {
+      colors: {
+        primary: '#f97316',
+        primaryHover: '#fb923c',
+        secondary: '#f59e0b',
+        background: '#fffbeb',
+        surface: '#fef3c7',
+        surfaceHover: '#fde68a',
+        text: '#451a03',
+        textMuted: '#92400e',
+        border: '#fcd34d',
+        success: '#16a34a',
+        warning: '#f97316',
+        error: '#dc2626',
+        info: '#0891b2',
+        accent: '#7c3aed',
+      },
+      borderRadius: '12px',
+      shadows: {
+        sm: '0 1px 3px rgba(249,115,22,0.1)',
+        md: '0 4px 8px rgba(249,115,22,0.12)',
+        lg: '0 10px 20px rgba(249,115,22,0.15)',
+      },
+    },
+    colors: { bg: '#fffbeb', surface: '#fef3c7', primary: '#f97316', accent: '#7c3aed' },
+  },
+  {
+    id: 'monochrome',
+    name: 'Monochrome',
+    description: 'Minimalist grayscale light theme',
+    mode: 'light',
+    config: {
+      colors: {
+        primary: '#374151',
+        primaryHover: '#1f2937',
+        secondary: '#6b7280',
+        background: '#ffffff',
+        surface: '#f9fafb',
+        surfaceHover: '#f3f4f6',
+        text: '#111827',
+        textMuted: '#6b7280',
+        border: '#d1d5db',
+        success: '#059669',
+        warning: '#d97706',
+        error: '#dc2626',
+        info: '#374151',
+        accent: '#374151',
+      },
+      borderRadius: '4px',
+      shadows: {
+        sm: '0 1px 2px rgba(0,0,0,0.05)',
+        md: '0 2px 4px rgba(0,0,0,0.06)',
+        lg: '0 4px 8px rgba(0,0,0,0.08)',
+      },
+    },
+    colors: { bg: '#ffffff', surface: '#f9fafb', primary: '#374151', accent: '#374151' },
   },
 ]
 
@@ -71,7 +259,7 @@ function getPersistedTheme(): UITheme {
   } catch {
     // localStorage unavailable
   }
-  return 'midnight'
+  return 'default-dark'
 }
 
 function getSystemPrefersDark(): boolean {
@@ -80,10 +268,10 @@ function getSystemPrefersDark(): boolean {
 }
 
 function resolveEffectiveMode(mode: ThemeMode, theme: UITheme): 'dark' | 'light' {
-  // Corporate theme always forces light mode
   const themeInfo = availableThemes.find((t) => t.id === theme)
-  if (themeInfo?.forcedMode) {
-    return themeInfo.forcedMode
+  // Theme's declared mode takes priority (each preset has a fixed mode)
+  if (themeInfo) {
+    return themeInfo.mode
   }
   if (mode === 'system') {
     return getSystemPrefersDark() ? 'dark' : 'light'
@@ -94,6 +282,26 @@ function resolveEffectiveMode(mode: ThemeMode, theme: UITheme): 'dark' | 'light'
 function applyToDocument(effectiveMode: 'dark' | 'light', theme: UITheme): void {
   document.documentElement.setAttribute(MODE_ATTRIBUTE, effectiveMode)
   document.documentElement.setAttribute(THEME_ATTRIBUTE, theme)
+}
+
+/**
+ * Get CSS custom properties for a theme config.
+ * Returns an object of `--koris-*` variable names to values.
+ */
+export function getCSSVariables(themeConfig: ThemeConfig): Record<string, string> {
+  const vars: Record<string, string> = {}
+  // Colors
+  for (const [key, value] of Object.entries(themeConfig.colors)) {
+    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase()
+    vars[`--koris-${cssKey}`] = value
+  }
+  // Border radius
+  vars['--koris-border-radius'] = themeConfig.borderRadius
+  // Shadows
+  vars['--koris-shadow-sm'] = themeConfig.shadows.sm
+  vars['--koris-shadow-md'] = themeConfig.shadows.md
+  vars['--koris-shadow-lg'] = themeConfig.shadows.lg
+  return vars
 }
 
 // Module-level singleton state
@@ -108,12 +316,21 @@ let mediaQuery: MediaQueryList | null = null
 if (typeof window !== 'undefined') {
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   mediaQuery.addEventListener('change', () => {
-    // Only react if mode is 'system' and theme does not force a mode
     if (mode.value === 'system') {
-      const themeInfo = availableThemes.find((t) => t.id === theme.value)
-      if (!themeInfo?.forcedMode) {
-        applyToDocument(getSystemPrefersDark() ? 'dark' : 'light', theme.value)
-      }
+      applyToDocument(resolveEffectiveMode(mode.value, theme.value), theme.value)
+    }
+  })
+}
+
+// Apply CSS custom properties to :root when theme changes
+if (typeof window !== 'undefined') {
+  watchEffect(() => {
+    const themeInfo = availableThemes.find(t => t.id === theme.value)
+    if (!themeInfo) return
+    const vars = getCSSVariables(themeInfo.config)
+    const root = document.documentElement
+    for (const [key, value] of Object.entries(vars)) {
+      root.style.setProperty(key, value)
     }
   })
 }
@@ -125,12 +342,21 @@ if (typeof window !== 'undefined') {
  * - mode: controls dark/light/system preference
  * - theme: controls the full UI color palette restyle
  *
- * The admin saves these to the server via /api/panel-settings.
+ * The admin saves these to the server via /api/admin/theme.
  * Both admin and portal read from server on startup to apply the admin-chosen theme.
  */
 export function useTheme() {
   const isDark = computed(() => {
     return resolveEffectiveMode(mode.value, theme.value) === 'dark'
+  })
+
+  const currentTheme = computed(() => {
+    return availableThemes.find((t) => t.id === theme.value) || availableThemes[1]
+  })
+
+  const cssVariables = computed(() => {
+    const t = currentTheme.value
+    return getCSSVariables(t.config)
   })
 
   function setMode(newMode: ThemeMode): void {
@@ -155,11 +381,17 @@ export function useTheme() {
 
   /** Legacy toggle for backward compatibility */
   function toggle(): void {
+    // Toggle between light and dark preset equivalents
     if (isDark.value) {
-      setMode('light')
+      setTheme('default-light')
     } else {
-      setMode('dark')
+      setTheme('default-dark')
     }
+  }
+
+  /** Alias for toggle() */
+  function toggleMode(): void {
+    toggle()
   }
 
   return {
@@ -167,8 +399,12 @@ export function useTheme() {
     mode,
     /** Current UI theme */
     theme,
+    /** Current theme info object */
+    currentTheme,
     /** Whether the resolved mode is dark */
     isDark,
+    /** CSS variables for the current theme */
+    cssVariables,
     /** List of available themes with metadata */
     availableThemes,
     /** Set the dark/light/system mode */
@@ -177,5 +413,9 @@ export function useTheme() {
     setTheme,
     /** Toggle between dark and light (legacy) */
     toggle,
+    /** Toggle between dark and light mode */
+    toggleMode,
+    /** Get CSS variables for any theme config */
+    getCSSVariables,
   }
 }

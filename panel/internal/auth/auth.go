@@ -84,7 +84,13 @@ func ReadSession(r *http.Request, cookieName, secret string) (string, bool) {
 	if err != nil || cookie.Value == "" {
 		return "", false
 	}
-	parts := strings.Split(cookie.Value, ".")
+	return ValidateToken(cookie.Value, secret)
+}
+
+// ValidateToken validates a raw session token string (same format as cookie value)
+// and returns the username if valid and not expired.
+func ValidateToken(token, secret string) (string, bool) {
+	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return "", false
 	}

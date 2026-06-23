@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
@@ -9,6 +10,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"math"
 	"net"
@@ -24,12 +27,20 @@ import (
 	"sync"
 	"time"
 
+	"KorisPanel/panel/internal/antidpi"
 	"KorisPanel/panel/internal/auth"
 	"KorisPanel/panel/internal/backup"
+	"KorisPanel/panel/internal/billing"
+	"KorisPanel/panel/internal/cache"
 	"KorisPanel/panel/internal/config"
 	"KorisPanel/panel/internal/health"
+	"KorisPanel/panel/internal/nodeapi"
 	"KorisPanel/panel/internal/notify"
+	"KorisPanel/panel/internal/payment"
+	"KorisPanel/panel/internal/support"
+	"KorisPanel/panel/internal/teleproxy"
 	"KorisPanel/panel/internal/templates"
+	"KorisPanel/panel/internal/tui"
 	"KorisPanel/panel/internal/wireguard"
 
 	"github.com/gorilla/websocket"
@@ -42,11 +53,26 @@ type Server struct {
 	Notify               *notify.Notifier
 	HealthEngine         *health.DiagnosticsEngine
 	BackupService        *backup.Service
+	Billing              *billing.BillingEngine
+	Support              *support.TicketService
+	TeleProxy            *teleproxy.ProxyService
+	AntiDPI              *antidpi.AntiDPIService
+	Cache                *cache.QueryCache
+	NodeMgr              *nodeapi.NodeConnectionManager
+	PaymentRegistry      *payment.Registry
+	AdminEmbedFS         fs.FS // Embedded admin frontend (nil = use disk)
+	PortalEmbedFS        fs.FS // Embedded portal frontend (nil = use disk)
+	LandingEmbedFS       fs.FS // Embedded landing page (nil = use disk)
+	LogEntries           func(n int) []tui.LogEntry
 	failoverOrchestrator *FailoverOrchestrator
 	prevSessionBytes     map[int64]SessionBytes
 	sessionMutex         sync.RWMutex
 	wsNotifMu            sync.RWMutex
 	wsNotifChans         []chan map[string]any
+	stmts                PreparedStmts
+	landingMetaMu        sync.RWMutex
+	landingMetaRendered  string
+	landingMetaModTime   time.Time
 }
 
 type SessionBytes struct {
@@ -119,18 +145,22 @@ type NodeUsageSnapshot struct {
 }
 
 type Node struct {
-	ID            int64               `json:"id"`
-	Name          string              `json:"name"`
-	PublicIP      string              `json:"public_ip"`
-	Domain        string              `json:"domain"`
-	Status        string              `json:"status"`
-	LastSeenAt    string              `json:"last_seen_at"`
-	CreatedAt     string              `json:"created_at"`
-	ProxyConfig   json.RawMessage     `json:"proxy_config,omitempty"`
-	StatusMetrics NodeStatus          `json:"status_metrics"`
-	Services      []Service           `json:"services"`
-	History       []NodeUsageSnapshot `json:"history,omitempty"`
-	Diagnostics   *DiagnosticsReport  `json:"diagnostics,omitempty"`
+	ID                 int64               `json:"id"`
+	Name               string              `json:"name"`
+	PublicIP           string              `json:"public_ip"`
+	Domain             string              `json:"domain"`
+	Status             string              `json:"status"`
+	HealthScore        float64             `json:"health_score"`
+	LastSeenAt         string              `json:"last_seen_at"`
+	CreatedAt          string              `json:"created_at"`
+	ProxyConfig        json.RawMessage     `json:"proxy_config,omitempty"`
+	BandwidthQuotaGB   *int64              `json:"bandwidth_quota_gb"`
+	BandwidthUsedBytes int64               `json:"bandwidth_used_bytes"`
+	BandwidthResetAt   string              `json:"bandwidth_reset_at,omitempty"`
+	StatusMetrics      NodeStatus          `json:"status_metrics"`
+	Services           []Service           `json:"services"`
+	History            []NodeUsageSnapshot `json:"history,omitempty"`
+	Diagnostics        *DiagnosticsReport  `json:"diagnostics,omitempty"`
 }
 
 type NodeStatus struct {
@@ -297,6 +327,12 @@ type UsageSummary struct {
 	Sessions           []UsageSession `json:"sessions"`
 }
 
+var bufPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{3,64}$`)
 
 var resellerEmojis = []string{"🔵", "🟢", "🟡", "🔴", "🟣", "🟠", "⭐", "💎", "🌙", "🔥", "🌊", "🍀", "🎯", "🦋", "🐬", "🌸", "🎭", "🌈", "⚡", "🎪"}
@@ -384,6 +420,7 @@ func New(db *sql.DB, cfg config.Config) *Server {
 		Auth:                 auth.Service{DB: db},
 		Notify:               notifier,
 		HealthEngine:         health.NewDiagnosticsEngine(db, analyzer, notifier),
+		Cache:                cache.NewQueryCache(500, 60*time.Second),
 		failoverOrchestrator: NewFailoverOrchestrator(db, notifier, GetPropagationTimeoutFromDB(db), 10*time.Second),
 		prevSessionBytes:     make(map[int64]SessionBytes),
 		wsNotifChans:         make([]chan map[string]any, 0),
@@ -421,10 +458,36 @@ func (s *Server) broadcastNotification(notif map[string]any) {
 	}
 }
 
+// cachedQuery checks the cache for a key; on miss it calls fetchFn, stores the
+// result, and returns it. This encapsulates the cache-aside pattern used by
+// read-heavy handlers.
+func (s *Server) cachedQuery(key string, fetchFn func() (any, error)) (any, error) {
+	if s.Cache == nil {
+		return fetchFn()
+	}
+	if val, ok := s.Cache.Get(key); ok {
+		return val, nil
+	}
+	result, err := fetchFn()
+	if err != nil {
+		return nil, err
+	}
+	s.Cache.Set(key, result)
+	return result, nil
+}
+
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/health", s.health)
+	mux.HandleFunc("/internal/status", s.internalStatus)
+	mux.HandleFunc("/internal/nodes", s.internalNodes)
+	mux.HandleFunc("/internal/users", s.internalUsers)
+	mux.HandleFunc("/internal/cleanup", s.internalCleanup)
+	mux.HandleFunc("/internal/workers", s.internalWorkers)
+	mux.HandleFunc("/internal/logs", s.internalLogs)
+	mux.HandleFunc("/internal/update/check", s.internalUpdateCheck)
+	mux.HandleFunc("/internal/update/apply", s.internalUpdateApply)
 	mux.HandleFunc("/api/setup/status", s.setupStatus)
 	mux.HandleFunc("/api/setup/owner", s.setupOwner)
 	mux.HandleFunc("/api/auth/admin", s.adminLogin)
@@ -435,11 +498,23 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/dashboard/stats", s.requireAdmin(s.dashboardStats))
 	mux.HandleFunc("/api/customers", s.requireAdmin(s.customers))
 	mux.HandleFunc("/api/customers/bulk", s.requireAdmin(s.customersBulk))
+	mux.HandleFunc("/api/admin/customers/bulk", s.requireFullAdmin(s.adminCustomersBulk))
+	mux.HandleFunc("/api/customers/export", s.requireAdmin(s.handleCustomerExport))
+	mux.HandleFunc("/api/customers/import/preview", s.requireAdmin(s.handleImportPreview))
+	mux.HandleFunc("/api/customers/import", s.requireAdmin(s.handleCustomerImport))
 	mux.HandleFunc("/api/customers/", s.requireAdmin(s.customerByID))
 	mux.HandleFunc("/api/deleted/customers", s.requireAdmin(s.deletedCustomers))
 	mux.HandleFunc("/api/plans", s.requireAdmin(s.plans))
 	mux.HandleFunc("/api/plans/", s.requireAdmin(s.planByID))
 	mux.HandleFunc("/api/nodes", s.requireFullAdmin(s.nodes))
+	mux.HandleFunc("/api/admin/nodes/bulk", s.requireFullAdmin(s.nodeBulk))
+	mux.HandleFunc("/api/admin/nodes/provision", s.requireFullAdmin(s.nodeProvision))
+	mux.HandleFunc("/api/admin/nodes/provision/status", s.requireFullAdmin(s.handleProvisionStatus))
+	mux.HandleFunc("/api/admin/nodes/migrate/status", s.requireFullAdmin(s.handleMigrationStatus))
+	mux.HandleFunc("/api/admin/nodes/sla-summary", s.requireFullAdmin(s.nodesSLASummary))
+	mux.HandleFunc("/api/admin/nodes/tags", s.requireFullAdmin(s.nodeTagsAll))
+	mux.HandleFunc("/api/admin/nodes/", s.requireFullAdmin(s.nodeTagsByID))
+	mux.HandleFunc("/api/node/install.sh", s.nodeInstallScript)
 	mux.HandleFunc("/api/nodes/", s.requireFullAdmin(s.nodeByID))
 	mux.HandleFunc("/api/node/tasks", s.requireFullAdmin(s.nodeTasks))
 	mux.HandleFunc("/api/node/tasks/poll", s.nodeTaskPoll)
@@ -457,6 +532,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/wallets/", s.requireFullAdmin(s.walletByUsername))
 	mux.HandleFunc("/api/realtime", s.requireAdmin(s.realtimeWS))
 	mux.HandleFunc("/api/portal/me", s.requireCustomer(s.portalMe))
+	mux.HandleFunc("/api/portal/impersonate-login", s.portalImpersonateLogin)
 	mux.HandleFunc("/api/portal/usage", s.requireCustomer(s.portalUsage))
 	mux.HandleFunc("/api/portal/nodes", s.requireCustomer(s.portalNodes))
 	mux.HandleFunc("/api/portal/profiles", s.requireCustomer(s.portalProfiles))
@@ -467,10 +543,25 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/preferred-node", s.requireCustomer(s.portalPreferredNode))
 	mux.HandleFunc("/api/portal/payments", s.requireCustomer(s.portalPayments))
 	mux.HandleFunc("/api/portal/payment-methods", s.requireCustomer(s.portalPaymentMethods))
+	mux.HandleFunc("/api/portal/pay", s.requireCustomer(s.handlePaymentInitiate))
+	mux.HandleFunc("/api/gateway/callback/", s.handleGatewayCallback)
 	mux.HandleFunc("/api/portal/tickets", s.requireCustomer(s.portalTickets))
 	mux.HandleFunc("/api/portal/tickets/", s.requireCustomer(s.portalTicketByID))
 	mux.HandleFunc("/api/portal/wireguard/peers", s.requireCustomer(s.portalWireguardPeers))
 	mux.HandleFunc("/api/portal/wireguard/peers/", s.requireCustomer(s.portalWireguardPeerByID))
+	mux.HandleFunc("/api/portal/xray/subscription", s.requireCustomer(s.handleXraySubscription))
+	mux.HandleFunc("/api/portal/xray/links", s.requireCustomer(s.handleXrayLinks))
+	mux.HandleFunc("/api/customer/data-packs", s.requireCustomer(s.customerDataPacks))
+	mux.HandleFunc("/api/customer/data-packs/buy", s.requireCustomer(s.customerBuyDataPack))
+	mux.HandleFunc("/api/customer/tickets", s.requireCustomer(s.customerTickets))
+	mux.HandleFunc("/api/customer/tickets/", s.requireCustomer(s.customerTicketByID))
+	mux.HandleFunc("/api/admin/tickets", s.requireFullAdmin(s.adminTickets))
+	mux.HandleFunc("/api/admin/tickets/", s.requireFullAdmin(s.adminTicketByID))
+	mux.HandleFunc("/api/admin/canned-responses/", s.requireFullAdmin(s.adminCannedResponses))
+	mux.HandleFunc("/api/admin/canned-responses", s.requireFullAdmin(s.adminCannedResponses))
+	mux.HandleFunc("/api/canned-responses/", s.requireFullAdmin(s.adminCannedResponses))
+	mux.HandleFunc("/api/canned-responses", s.requireFullAdmin(s.adminCannedResponses))
+	mux.HandleFunc("/api/tickets/attachments/", s.serveAttachment)
 	mux.HandleFunc("/api/node/push", s.nodePush)
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
 	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
@@ -493,6 +584,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/reseller/dashboard", s.requireAdmin(s.resellerDashboard))
 	mux.HandleFunc("/api/reseller/plan-prices", s.requireAdmin(s.resellerPlanPrices))
 	mux.HandleFunc("/api/reserved-emojis", s.requireAdmin(s.reservedEmojisEndpoint))
+	mux.HandleFunc("/api/reseller/payouts", s.requireAdmin(s.handleResellerPayouts))
 	mux.HandleFunc("/api/reseller/tickets", s.requireAdmin(s.resellerTickets))
 	mux.HandleFunc("/api/reseller/tickets/", s.requireAdmin(s.resellerTickets))
 	mux.HandleFunc("/api/reseller/transactions", s.requireAdmin(s.resellerTransactions))
@@ -500,6 +592,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/sessions/kill", s.requireFullAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub/", s.subscriptionLink)
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
+	mux.HandleFunc("/api/sub/", s.xraySubscription)
 	mux.HandleFunc("/api/nodes/vpn-config/", s.requireFullAdmin(s.nodeVPNConfig))
 	mux.HandleFunc("/api/wireguard/peers", s.requireFullAdmin(s.wireguardPeers))
 	mux.HandleFunc("/api/wireguard/peers/", s.requireFullAdmin(s.wireguardPeerByID))
@@ -507,6 +600,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/certificates/", s.requireFullAdmin(s.certificateByID))
 	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
 	mux.HandleFunc("/api/public-settings", s.publicSettings)
+	mux.HandleFunc("/api/public-plans", s.publicPlans)
 	mux.HandleFunc("/api/export/customers.csv", s.requireFullAdmin(s.exportCustomersCSV))
 	mux.HandleFunc("/api/export/payments.csv", s.requireFullAdmin(s.exportPaymentsCSV))
 	mux.HandleFunc("/api/export/radacct.csv", s.requireFullAdmin(s.exportRadacctCSV))
@@ -535,16 +629,85 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/diagnostics/ai/healing-log", s.requireFullAdmin(s.aiHealingLog))
 	mux.HandleFunc("/api/diagnostics/logs", s.requireFullAdmin(s.serverLogs))
 	mux.HandleFunc("/api/diagnostics/status", s.requireFullAdmin(s.serverStatus))
+	mux.HandleFunc("/api/admin/cache-stats", s.requireAdmin(s.cacheStats))
 	mux.HandleFunc("/api/admin/backups/restore", s.requireFullAdmin(s.backupRestore))
 	mux.HandleFunc("/api/admin/backups/settings", s.requireFullAdmin(s.backupSettings))
 	mux.HandleFunc("/api/admin/backups/", s.requireFullAdmin(s.backupByID))
 	mux.HandleFunc("/api/admin/backups", s.requireFullAdmin(s.backupRoot))
+	mux.HandleFunc("/api/admin/theme", s.requireFullAdmin(s.handleTheme))
+	mux.HandleFunc("/api/admin/branding", s.requireFullAdmin(s.brandingPost))
+	mux.HandleFunc("/api/admin/update/check", s.requireFullAdmin(s.handleUpdateCheck))
+	mux.HandleFunc("/api/admin/update/apply", s.requireFullAdmin(s.handleUpdateApply))
+	mux.HandleFunc("/api/admin/update/rollback", s.requireFullAdmin(s.handleUpdateRollback))
+	mux.HandleFunc("/api/admin/settings", s.requireFullAdmin(s.handleUpdateSettings))
+	mux.HandleFunc("/api/admin/settings/sla", s.requireFullAdmin(s.adminSLASettings))
+	mux.HandleFunc("/api/admin/payouts/", s.requireFullAdmin(s.handleAdminPayoutByID))
+	mux.HandleFunc("/api/admin/payouts", s.requireFullAdmin(s.handleAdminPayouts))
+	mux.HandleFunc("/api/node/update", s.handleNodeUpdate)
+	mux.HandleFunc("/api/admin/node-update", s.requireFullAdmin(s.handleAdminNodeUpdate))
+	mux.HandleFunc("/api/admin/nodes/update/bulk", s.requireFullAdmin(s.handleNodeBulkAgentUpdate))
+	mux.HandleFunc("/api/admin/nodes/update", s.requireFullAdmin(s.handleNodeAgentUpdate))
+	mux.HandleFunc("/api/admin/billing/upgrade", s.requireFullAdmin(s.adminUpgradePlan))
+	mux.HandleFunc("/api/admin/billing/revenue", s.requireAdmin(s.adminBillingRevenue))
+	mux.HandleFunc("/api/customer/billing/debt", s.requireCustomer(s.customerBillingDebt))
+	mux.HandleFunc("/api/admin/custom-fields/", s.requireFullAdmin(s.adminCustomFieldByID))
+	mux.HandleFunc("/api/admin/custom-fields", s.requireFullAdmin(s.adminCustomFields))
+	mux.HandleFunc("/api/admin/customers/export", s.requireFullAdmin(s.adminCustomersExport))
+	mux.HandleFunc("/api/admin/customers/import", s.requireFullAdmin(s.adminCustomersImport))
+	mux.HandleFunc("/api/admin/customers/", s.requireFullAdmin(s.adminCustomerSubresource))
+	mux.HandleFunc("/api/admin/segments/", s.requireFullAdmin(s.adminSegmentByID))
+	mux.HandleFunc("/api/admin/segments", s.requireFullAdmin(s.adminSegments))
+	mux.HandleFunc("/api/admin/telegram-proxies/rotate", s.requireFullAdmin(s.adminTelegramProxiesRotate))
+	mux.HandleFunc("/api/admin/telegram-proxies/", s.requireFullAdmin(s.adminTelegramProxyByID))
+	mux.HandleFunc("/api/admin/telegram-proxies", s.requireFullAdmin(s.adminTelegramProxies))
+	mux.HandleFunc("/api/customer/telegram-proxies", s.requireCustomer(s.customerTelegramProxies))
+	mux.HandleFunc("/api/node-groups/load", s.requireFullAdmin(s.handleNodeGroupsLoad))
+	mux.HandleFunc("/api/mtproto/", s.requireAdmin(s.handleMTProtoByID))
+	mux.HandleFunc("/api/mtproto", s.requireAdmin(s.handleMTProto))
+	mux.HandleFunc("/api/anyconnect/", s.requireAdmin(s.handleAnyConnectByID))
+	mux.HandleFunc("/api/anyconnect", s.requireAdmin(s.handleAnyConnect))
+	mux.HandleFunc("/api/portal/anyconnect/profile", s.requireCustomer(s.handleAnyConnectProfile))
+	mux.HandleFunc("/api/xray/inbounds/", s.requireAdmin(s.handleXrayInboundByID))
+	mux.HandleFunc("/api/xray/inbounds", s.requireAdmin(s.handleXrayInbound))
+	mux.HandleFunc("/api/gateways/", s.requireAdmin(s.handleGatewayByID))
+	mux.HandleFunc("/api/gateways", s.requireAdmin(s.handleGatewayList))
+	mux.HandleFunc("/api/invoices/", s.requireAdmin(s.handleInvoiceByID))
+	mux.HandleFunc("/api/invoices", s.requireAdmin(s.handleInvoices))
+	mux.HandleFunc("/api/portal/invoices/", s.requireCustomer(s.handlePortalInvoiceByID))
+	mux.HandleFunc("/api/portal/invoices", s.requireCustomer(s.handlePortalInvoices))
+	mux.HandleFunc("/api/customer/configs/cisco-ipsec", s.requireCustomer(s.customerCiscoIPSecConfig))
+	mux.HandleFunc("/api/admin/landing-page", s.requireFullAdmin(s.adminLandingPage))
+	mux.HandleFunc("/api/admin/landing", s.requireFullAdmin(s.handleAdminLanding))
+	mux.HandleFunc("/api/admin/xray/templates/", s.requireFullAdmin(s.handleXrayTemplateByID))
+	mux.HandleFunc("/api/admin/xray/templates", s.requireFullAdmin(s.handleXrayTemplates))
+	mux.HandleFunc("/api/admin/proxy-configs", s.requireAdmin(s.handleProxyConfigs))
+	mux.HandleFunc("/api/admin/nginx/status", s.requireAdmin(s.handleNginxStatus))
+	mux.HandleFunc("/api/admin/reorder", s.requireFullAdmin(s.adminReorder))
+	mux.HandleFunc("/api/admin/reports/pdf", s.requireFullAdmin(s.handleReportPDF))
+	mux.HandleFunc("/api/admin/settings/ldap/test", s.requireFullAdmin(s.adminLDAPTest))
+	mux.HandleFunc("/api/admin/settings/ldap", s.requireFullAdmin(s.adminLDAPSettings))
+	mux.HandleFunc("/api/sla/config", s.requireFullAdmin(s.handleSLAConfig))
+	mux.HandleFunc("/api/sla/stats", s.requireFullAdmin(s.handleSLAStats))
+	mux.HandleFunc("/api/node-groups/", s.requireFullAdmin(s.handleNodeGroupByID))
+	mux.HandleFunc("/api/node-groups", s.requireFullAdmin(s.handleNodeGroups))
+	mux.HandleFunc("/api/portal/node-groups", s.requireCustomer(s.handlePortalNodeGroups))
+	mux.HandleFunc("/api/kb/articles/", s.requireAdmin(s.handleKBArticleByID))
+	mux.HandleFunc("/api/kb/articles", s.requireAdmin(s.handleKBArticles))
+	mux.HandleFunc("/api/portal/kb/search", s.requireCustomer(s.handlePortalKBSearch))
+	mux.HandleFunc("/api/portal/kb/", s.requireCustomer(s.handlePortalKBByID))
+	mux.HandleFunc("/api/portal/kb", s.requireCustomer(s.handlePortalKB))
+	mux.HandleFunc("/api/tags/", s.requireAdmin(s.handleTagByID))
+	mux.HandleFunc("/api/tags", s.requireAdmin(s.handleTags))
+	mux.HandleFunc("/api/filter-presets/", s.requireAdmin(s.handleFilterPresetByID))
+	mux.HandleFunc("/api/filter-presets", s.requireAdmin(s.handleFilterPresets))
+	mux.HandleFunc("/api/customers/filtered", s.requireAdmin(s.handleCustomersFiltered))
+	mux.HandleFunc("/api/cores", s.requireFullAdmin(s.handleCores))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
-	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/"))
+	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/", s.AdminEmbedFS))
 	mux.HandleFunc("/portal", redirectTo("/portal/"))
-	mux.Handle("/portal/", spaHandler(s.Config.PortalWebDir, "/portal/"))
-	mux.HandleFunc("/", s.notFound)
+	mux.Handle("/portal/", spaHandler(s.Config.PortalWebDir, "/portal/", s.PortalEmbedFS))
+	mux.Handle("/", s.landingMetaHandler())
 	return mux
 }
 
@@ -714,7 +877,14 @@ func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, s.dashboardStatsPayload())
+	result, err := s.cachedQuery("stats:dashboard", func() (any, error) {
+		return s.dashboardStatsPayload(), nil
+	})
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, result)
 }
 
 func (s *Server) dashboardStatsPayload() map[string]any {
@@ -763,28 +933,137 @@ func (s *Server) customers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 	actor, role, _ := s.currentAdmin(r)
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	params := r.URL.Query()
+
+	// --- Pagination ---
+	page, _ := strconv.Atoi(params.Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(params.Get("limit"))
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := (page - 1) * limit
+
+	// --- Build WHERE clause ---
 	where := "c.deleted_at IS NULL"
 	args := []any{}
+
+	// Reseller scoping
 	if role == "reseller" {
 		where += " AND c.created_by = ?"
 		args = append(args, actor)
 	}
-	if q != "" {
-		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(p.name,'') LIKE ? OR c.status LIKE ? OR CAST(c.id AS CHAR) LIKE ?)"
-		like := "%" + q + "%"
-		args = append(args, like, like, like, like, like)
+
+	// Search — ?search= or legacy ?q= (search across username, email, notes, display_name)
+	search := strings.TrimSpace(params.Get("search"))
+	if search == "" {
+		search = strings.TrimSpace(params.Get("q"))
 	}
-	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),COALESCE(c.avatar, a.avatar, ''),c.created_at
+	if search != "" {
+		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(c.email,'') LIKE ? OR COALESCE(c.notes,'') LIKE ? OR COALESCE(p.name,'') LIKE ? OR CAST(c.id AS CHAR) LIKE ?)"
+		like := "%" + search + "%"
+		args = append(args, like, like, like, like, like, like)
+	}
+
+	// Filter: status
+	if status := strings.TrimSpace(params.Get("status")); status != "" {
+		where += " AND c.status = ?"
+		args = append(args, status)
+	}
+
+	// Filter: plan_id
+	if planIDStr := params.Get("plan_id"); planIDStr != "" {
+		if pid, err := strconv.ParseInt(planIDStr, 10, 64); err == nil && pid > 0 {
+			where += " AND c.plan_id = ?"
+			args = append(args, pid)
+		}
+	}
+
+	// Filter: created_after / created_before
+	if ca := params.Get("created_after"); ca != "" {
+		if _, err := time.Parse("2006-01-02", ca); err == nil {
+			where += " AND c.created_at >= ?"
+			args = append(args, ca)
+		}
+	}
+	if cb := params.Get("created_before"); cb != "" {
+		if _, err := time.Parse("2006-01-02", cb); err == nil {
+			where += " AND c.created_at <= ?"
+			args = append(args, cb+" 23:59:59")
+		}
+	}
+
+	// Filter: expires_after / expires_before (requires subscription join)
+	needSubJoin := false
+	if ea := params.Get("expires_after"); ea != "" {
+		if _, err := time.Parse("2006-01-02", ea); err == nil {
+			needSubJoin = true
+			where += " AND sub.expires_at >= ?"
+			args = append(args, ea)
+		}
+	}
+	if eb := params.Get("expires_before"); eb != "" {
+		if _, err := time.Parse("2006-01-02", eb); err == nil {
+			needSubJoin = true
+			where += " AND sub.expires_at <= ?"
+			args = append(args, eb+" 23:59:59")
+		}
+	}
+
+	// --- Build sort clause ---
+	orderBy := s.buildCustomerSortClause(params.Get("sort"))
+
+	// --- Subscription join (for expires filter/sort) ---
+	subJoin := ""
+	if needSubJoin || strings.Contains(orderBy, "sub.") {
+		subJoin = ` LEFT JOIN (
+			SELECT customer_id, MAX(expires_at) AS expires_at
+			FROM subscriptions WHERE status = 'active'
+			GROUP BY customer_id
+		) sub ON sub.customer_id = c.id`
+	}
+
+	// --- Data usage join (for sort by data_used) ---
+	usageJoin := ""
+	if strings.Contains(orderBy, "usage_bytes") {
+		usageJoin = ` LEFT JOIN (
+			SELECT username, COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) AS usage_bytes
+			FROM radacct GROUP BY username
+		) ra ON ra.username = c.username`
+	}
+
+	// --- Count query ---
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM customers c
+		LEFT JOIN plans p ON p.id=c.plan_id%s%s
+		WHERE %s`, subJoin, usageJoin, where)
+
+	var total int
+	if err := s.DB.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		log.Printf("[customers] count query error: %v", err)
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
+		return
+	}
+
+	// --- Data query ---
+	dataQuery := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),COALESCE(c.avatar, a.avatar, ''),c.created_at
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		LEFT JOIN admins a ON a.username=c.created_by AND a.role='reseller'
+		LEFT JOIN admins a ON a.username=c.created_by AND a.role='reseller'%s%s
 		WHERE %s
-		ORDER BY c.id DESC LIMIT 5000`, where)
-	rows, err := s.DB.Query(query, args...)
+		ORDER BY %s
+		LIMIT ? OFFSET ?`, subJoin, usageJoin, where, orderBy)
+
+	dataArgs := append(args, limit, offset)
+	rows, err := s.DB.Query(dataQuery, dataArgs...)
 	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		log.Printf("[customers] list query error: %v", err)
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
 	}
 	defer rows.Close()
@@ -795,7 +1074,8 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		var planID sql.NullInt64
 		var created sql.NullTime
 		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &c.CreatedBy, &c.Avatar, &created); err != nil {
-			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			log.Printf("[customers] scan error: %v", err)
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
 		}
 		if planID.Valid {
@@ -807,10 +1087,64 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		log.Printf("[customers] rows error: %v", err)
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true, "customers": out})
+	writeJSON(w, map[string]any{
+		"ok":        true,
+		"customers": out,
+		"total":     total,
+		"page":      page,
+		"limit":     limit,
+	})
+}
+
+// allowedCustomerSortFields maps user-facing sort field names to SQL expressions.
+var allowedCustomerSortFields = map[string]string{
+	"username":   "c.username",
+	"created_at": "c.created_at",
+	"expires_at": "sub.expires_at",
+	"status":     "c.status",
+	"data_used":  "ra.usage_bytes",
+}
+
+// buildCustomerSortClause parses the sort param (e.g. "username:asc,created_at:desc")
+// and returns a safe ORDER BY expression. Falls back to "c.created_at DESC".
+func (s *Server) buildCustomerSortClause(sortParam string) string {
+	sortParam = strings.TrimSpace(sortParam)
+	if sortParam == "" {
+		return "c.created_at DESC"
+	}
+
+	parts := strings.Split(sortParam, ",")
+	clauses := []string{}
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		tokens := strings.SplitN(part, ":", 2)
+		field := strings.TrimSpace(tokens[0])
+		dir := "ASC"
+		if len(tokens) == 2 {
+			d := strings.ToUpper(strings.TrimSpace(tokens[1]))
+			if d == "DESC" {
+				dir = "DESC"
+			}
+		}
+		col, ok := allowedCustomerSortFields[field]
+		if !ok {
+			continue
+		}
+		clauses = append(clauses, col+" "+dir)
+	}
+
+	if len(clauses) == 0 {
+		return "c.created_at DESC"
+	}
+	return strings.Join(clauses, ", ")
 }
 
 func (s *Server) deletedCustomers(w http.ResponseWriter, r *http.Request) {
@@ -1087,6 +1421,9 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	if in.PlanID != nil && *in.PlanID > 0 {
 		s.autoProvisionWireGuardPeer(customerID)
 	}
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("stats:")
+	}
 	actor, _, _ = s.currentAdmin(r)
 	s.logAudit(actor, "customer.created", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{"username": in.Username}, clientIP(r))
 	s.createEvent("customer", "info", fmt.Sprintf("Customer created: %s", in.Username), fmt.Sprintf("Admin %s created customer %s", actor, in.Username), actor, in.Username)
@@ -1120,6 +1457,10 @@ func (s *Server) customerByID(w http.ResponseWriter, r *http.Request) {
 		s.getCustomerUsage(w, id)
 		return
 	}
+	if action == "tags" {
+		s.handleCustomerTags(w, r, id)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
@@ -1141,6 +1482,14 @@ func (s *Server) customerByID(w http.ResponseWriter, r *http.Request) {
 		s.setConnectionLimit(w, r, id)
 	case "switch-plan":
 		s.switchCustomerPlan(w, r, id)
+	case "impersonate":
+		// Only full admins (owner/admin) can impersonate — block resellers
+		_, role, _ := s.currentAdmin(r)
+		if role == "reseller" {
+			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "forbidden"})
+			return
+		}
+		s.adminImpersonateCustomer(w, r, id)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -1190,6 +1539,9 @@ func (s *Server) archiveCustomer(w http.ResponseWriter, r *http.Request, id int6
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("stats:")
+	}
 	s.logAudit(actor, "customer.archived", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -1237,6 +1589,9 @@ func (s *Server) restoreCustomer(w http.ResponseWriter, r *http.Request, id int6
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("stats:")
 	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "customer.restored", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username}, clientIP(r))
@@ -1506,6 +1861,9 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		}
 	}
 
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("stats:")
+	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "customer.updated", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true})
@@ -1986,22 +2344,27 @@ func (s *Server) planByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans ORDER BY is_active DESC, sort_order ASC, id DESC`)
+	result, err := s.cachedQuery("plans:list", func() (any, error) {
+		rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans ORDER BY is_active DESC, sort_order ASC, id DESC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		plans := []Plan{}
+		for rows.Next() {
+			plan, err := scanPlan(rows)
+			if err != nil {
+				return nil, err
+			}
+			plans = append(plans, plan)
+		}
+		return map[string]any{"ok": true, "plans": plans}, nil
+	})
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	defer rows.Close()
-	plans := []Plan{}
-	for rows.Next() {
-		plan, err := scanPlan(rows)
-		if err != nil {
-			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
-		}
-		plans = append(plans, plan)
-	}
-	writeJSON(w, map[string]any{"ok": true, "plans": plans})
+	writeJSON(w, result)
 }
 
 func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
@@ -2033,6 +2396,9 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("plans:")
+	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "plan.created", "plan", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name, "billing_type": in.BillingType}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true, "id": id})
@@ -2079,6 +2445,9 @@ func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request, id int64) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("plans:")
+	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "plan.updated", "plan", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name, "billing_type": in.BillingType}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true})
@@ -2088,6 +2457,9 @@ func (s *Server) archivePlan(w http.ResponseWriter, r *http.Request, id int64) {
 	if _, err := s.DB.Exec(`UPDATE plans SET is_active=0 WHERE id=?`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("plans:")
 	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "plan.deactivated", "plan", strconv.FormatInt(id, 10), nil, nil, clientIP(r))
@@ -2226,6 +2598,24 @@ func (s *Server) nodeByID(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// Cores sub-routes need special handling (support POST and DELETE)
+	if action == "cores" {
+		s.dispatchNodeCores(w, r, id)
+		return
+	}
+	// antidpi supports GET, POST, DELETE — handle before POST-only check
+	if action == "antidpi" {
+		// Extract technique from remaining path: /api/nodes/{id}/antidpi/{technique}
+		technique := ""
+		rest := strings.TrimPrefix(r.URL.Path, "/api/nodes/")
+		parts := strings.Split(strings.Trim(rest, "/"), "/")
+		if len(parts) >= 3 {
+			technique = parts[2]
+		}
+		s.handleNodeAntiDPI(w, r, id, technique)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
@@ -2237,6 +2627,10 @@ func (s *Server) nodeByID(w http.ResponseWriter, r *http.Request) {
 		s.setNodeStatus(w, id, "offline")
 	case "disable":
 		s.setNodeStatus(w, id, "disabled")
+	case "assign-group":
+		s.assignNodeToGroup(w, r, id)
+	case "migrate":
+		s.handleNodeMigrate(w, r, id)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -2244,23 +2638,78 @@ func (s *Server) nodeByID(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listNodes(w http.ResponseWriter, r *http.Request) {
 	s.markStaleNodes()
-	rows, err := s.DB.Query(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes ORDER BY id DESC LIMIT 500`)
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	defer rows.Close()
-	out := []Node{}
-	for rows.Next() {
-		node, err := s.scanNode(rows)
+
+	// Check for tag filtering
+	tagsParam := r.URL.Query().Get("tags")
+	if tagsParam != "" {
+		// Tag filtering — bypass cache, run filtered query
+		tags := strings.Split(tagsParam, ",")
+		for i := range tags {
+			tags[i] = strings.TrimSpace(tags[i])
+		}
+		// Remove empty tags
+		filtered := tags[:0]
+		for _, t := range tags {
+			if t != "" {
+				filtered = append(filtered, t)
+			}
+		}
+		if len(filtered) == 0 {
+			writeJSON(w, map[string]any{"ok": true, "nodes": []Node{}})
+			return
+		}
+
+		// Build IN clause placeholders
+		placeholders := make([]string, len(filtered))
+		args := make([]any, len(filtered))
+		for i, t := range filtered {
+			placeholders[i] = "?"
+			args[i] = t
+		}
+
+		query := `SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes WHERE id IN (SELECT node_id FROM node_tags WHERE tag IN (` + strings.Join(placeholders, ",") + `)) ORDER BY sort_order ASC, id DESC LIMIT 500`
+		rows, err := s.DB.Query(query, args...)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
-		_ = s.fillNodeRuntime(&node)
-		out = append(out, node)
+		defer rows.Close()
+		out := []Node{}
+		for rows.Next() {
+			node, err := s.scanNode(rows)
+			if err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			_ = s.fillNodeRuntime(&node)
+			out = append(out, node)
+		}
+		writeJSON(w, map[string]any{"ok": true, "nodes": out})
+		return
 	}
-	writeJSON(w, map[string]any{"ok": true, "nodes": out})
+
+	result, err := s.cachedQuery("nodes:list", func() (any, error) {
+		rows, err := s.DB.Query(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes ORDER BY sort_order ASC, id DESC LIMIT 500`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := []Node{}
+		for rows.Next() {
+			node, err := s.scanNode(rows)
+			if err != nil {
+				return nil, err
+			}
+			_ = s.fillNodeRuntime(&node)
+			out = append(out, node)
+		}
+		return map[string]any{"ok": true, "nodes": out}, nil
+	})
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, result)
 }
 
 func (s *Server) getNode(w http.ResponseWriter, id int64) {
@@ -2315,6 +2764,7 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 		{"ikev2", 500, "10.10.0.0/20", `{"auth_type":"psk","psk":"","dns1":"8.8.8.8","dns2":"8.8.4.4","dpd_interval":30,"dpd_timeout":150,"rekey_time":"4h","ike_proposals":"aes256-sha256-modp2048","esp_proposals":"aes256-sha256"}`},
 		{"ssh", 2222, "", `{"listen_address":"0.0.0.0","key_type":"ed25519","max_sessions":10,"idle_timeout":0,"shell_access":false,"accounting_enabled":true,"accounting_interval":300}`},
 		{"wireguard", 51820, "10.66.0.0/20", `{"dns_1":"1.1.1.1","dns_2":"8.8.8.8","gaming_optimize":false}`},
+		{"cisco_ipsec", 500, "10.11.0.0/20", `{"ike_version":"ikev1","auth_method":"xauth_psk","psk":"","dns1":"8.8.8.8","dns2":"8.8.4.4","dpd_interval":30,"dpd_timeout":150}`},
 	}
 	for _, dc := range defaultConfigs {
 		_, _ = s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json) VALUES(?, ?, 0, ?, ?, ?)`,
@@ -2323,19 +2773,23 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.created", "node", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("nodes:")
+	}
 	writeJSON(w, map[string]any{"ok": true, "id": id, "token": token})
 }
 
 func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 	var in struct {
-		Name          string  `json:"name"`
-		PublicIP      string  `json:"public_ip"`
-		Domain        string  `json:"domain"`
-		ProxyEnabled  *bool   `json:"proxy_enabled,omitempty"`
-		ProxyType     *string `json:"proxy_type,omitempty"`
-		ProxyAddress  *string `json:"proxy_address,omitempty"`
-		ProxyUsername *string `json:"proxy_username,omitempty"`
-		ProxyPassword *string `json:"proxy_password,omitempty"`
+		Name             string  `json:"name"`
+		PublicIP         string  `json:"public_ip"`
+		Domain           string  `json:"domain"`
+		BandwidthQuotaGB *int64  `json:"bandwidth_quota_gb,omitempty"`
+		ProxyEnabled     *bool   `json:"proxy_enabled,omitempty"`
+		ProxyType        *string `json:"proxy_type,omitempty"`
+		ProxyAddress     *string `json:"proxy_address,omitempty"`
+		ProxyUsername    *string `json:"proxy_username,omitempty"`
+		ProxyPassword    *string `json:"proxy_password,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -2384,6 +2838,19 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 			return
 		}
 	}
+
+	// Update bandwidth_quota_gb if provided
+	if in.BandwidthQuotaGB != nil {
+		var quotaVal any
+		if *in.BandwidthQuotaGB <= 0 {
+			quotaVal = nil // 0 or negative means remove quota
+		} else {
+			quotaVal = *in.BandwidthQuotaGB
+		}
+		if _, err := s.DB.Exec(`UPDATE nodes SET bandwidth_quota_gb = ? WHERE id = ?`, quotaVal, id); err != nil {
+			log.Printf("[bandwidth] failed to update quota for node %d: %v", id, err)
+		}
+	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.updated", "node", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
 
@@ -2395,6 +2862,9 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'agent.update_config', ?, 'pending', ?)`,
 		id, string(payloadJSON), actor)
 
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("nodes:")
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -2507,6 +2977,9 @@ func (s *Server) deleteNode(w http.ResponseWriter, id int64) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	if s.Cache != nil {
+		s.Cache.InvalidatePrefix("nodes:")
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -2532,6 +3005,20 @@ func (s *Server) scanNode(row nodeScanner) (Node, error) {
 }
 
 func (s *Server) fillNodeRuntime(n *Node) error {
+	// Populate bandwidth quota fields from nodes table
+	var quotaGB sql.NullInt64
+	var usedBytes int64
+	var resetAt sql.NullTime
+	if err := s.DB.QueryRow(`SELECT bandwidth_quota_gb, bandwidth_used_bytes, bandwidth_reset_at FROM nodes WHERE id=?`, n.ID).Scan(&quotaGB, &usedBytes, &resetAt); err == nil {
+		if quotaGB.Valid {
+			n.BandwidthQuotaGB = &quotaGB.Int64
+		}
+		n.BandwidthUsedBytes = usedBytes
+		if resetAt.Valid {
+			n.BandwidthResetAt = resetAt.Time.UTC().Format(time.RFC3339)
+		}
+	}
+
 	var updated sql.NullTime
 	_ = s.DB.QueryRow(`SELECT cpu_percent,ram_percent,disk_percent,rx_bps,tx_bps,openvpn_status,l2tp_status,ikev2_status,updated_at FROM node_status WHERE node_id=?`, n.ID).Scan(&n.StatusMetrics.CPUPercent, &n.StatusMetrics.RAMPercent, &n.StatusMetrics.DiskPercent, &n.StatusMetrics.RxBps, &n.StatusMetrics.TxBps, &n.StatusMetrics.OpenVPN, &n.StatusMetrics.L2TP, &n.StatusMetrics.IKEv2, &updated)
 	if updated.Valid {
@@ -2574,6 +3061,13 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 		&diag.AgentVersion, &diag.UptimeSeconds, &diag.GoVersion, &diag.Goroutines, &diag.MemAllocBytes)
 	if err == nil {
 		n.Diagnostics = &diag
+	}
+
+	// Populate health score from NodeConnectionManager
+	if s.NodeMgr != nil {
+		if conn, ok := s.NodeMgr.GetHealth(n.ID); ok {
+			n.HealthScore = conn.HealthScore
+		}
 	}
 
 	return nil
@@ -2883,7 +3377,12 @@ func (s *Server) nodeTaskPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT t.id,t.node_id,n.name,t.action,COALESCE(t.payload_json,JSON_OBJECT()),t.status,COALESCE(t.result_json,JSON_OBJECT()),COALESCE(t.error,''),COALESCE(t.created_by,''),t.claimed_at,t.completed_at,t.created_at,t.updated_at FROM node_tasks t LEFT JOIN nodes n ON n.id=t.node_id WHERE t.node_id=? AND t.status='pending' ORDER BY t.id ASC LIMIT 5 FOR UPDATE`, nodeID)
+	var rows *sql.Rows
+	if s.initStmts() {
+		rows, err = tx.Stmt(s.stmts.taskPollSelect).Query(nodeID)
+	} else {
+		rows, err = tx.Query(`SELECT t.id,t.node_id,n.name,t.action,COALESCE(t.payload_json,JSON_OBJECT()),t.status,COALESCE(t.result_json,JSON_OBJECT()),COALESCE(t.error,''),COALESCE(t.created_by,''),t.claimed_at,t.completed_at,t.created_at,t.updated_at FROM node_tasks t LEFT JOIN nodes n ON n.id=t.node_id WHERE t.node_id=? AND t.status='pending' ORDER BY t.id ASC LIMIT 5 FOR UPDATE`, nodeID)
+	}
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -2898,8 +3397,14 @@ func (s *Server) nodeTaskPoll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rows.Close()
-	for _, id := range ids {
-		_, _ = tx.Exec(`UPDATE node_tasks SET status='running',claimed_at=NOW() WHERE id=? AND status='pending'`, id)
+	if s.initStmts() {
+		for _, id := range ids {
+			_, _ = tx.Stmt(s.stmts.taskPollUpdate).Exec(id)
+		}
+	} else {
+		for _, id := range ids {
+			_, _ = tx.Exec(`UPDATE node_tasks SET status='running',claimed_at=NOW() WHERE id=? AND status='pending'`, id)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -2993,7 +3498,13 @@ func (s *Server) authNode(r *http.Request) (int64, bool) {
 	}
 	var id int64
 	var status string
-	if err := s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`, hashToken(token)).Scan(&id, &status); err != nil || status == "disabled" {
+	var err error
+	if s.initStmts() {
+		err = s.stmts.nodeAuth.QueryRow(hashToken(token)).Scan(&id, &status)
+	} else {
+		err = s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`, hashToken(token)).Scan(&id, &status)
+	}
+	if err != nil || status == "disabled" {
 		return 0, false
 	}
 	return id, true
@@ -4140,6 +4651,19 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	perUserL2TP := userBase + "-" + nodeBase + ".mobileconfig"
 	perUserIKEv2 := userBase + "-" + nodeBase + "-ikev2.mobileconfig"
 
+	// Check if Cisco IPSec is enabled for this node
+	var ciscoEnabled bool
+	if nodeID > 0 {
+		var cnt int
+		_ = s.DB.QueryRow(`SELECT COUNT(*) FROM node_vpn_configs WHERE node_id=? AND protocol='cisco_ipsec' AND enabled=1`, nodeID).Scan(&cnt)
+		ciscoEnabled = cnt > 0
+	} else {
+		// If no specific node, check if any node has it enabled
+		var cnt int
+		_ = s.DB.QueryRow(`SELECT COUNT(*) FROM node_vpn_configs WHERE protocol='cisco_ipsec' AND enabled=1 LIMIT 1`).Scan(&cnt)
+		ciscoEnabled = cnt > 0
+	}
+
 	// Get user's preferred node
 	var preferredNodeID int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
@@ -4195,6 +4719,18 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"protocol":  "ikev2",
 				"node":      nodeName,
 				"download":  fmt.Sprintf("/api/portal/profiles/ikev2.mobileconfig?node_id=%d", nodeID),
+			},
+			{
+				"type":        "cisco-ipsec",
+				"name":        "Cisco IPSec — " + nodeName,
+				"filename":    userBase + "-" + nodeBase + "-cisco.mobileconfig",
+				"available":   ciscoEnabled && host != "",
+				"remote":      host,
+				"port":        500,
+				"protocol":    "ipsec",
+				"node":        nodeName,
+				"download":    "/api/customer/configs/cisco-ipsec",
+				"description": "IKEv1 + XAUTH. For iOS, macOS, and Android (strongSwan).",
 			},
 		},
 	})
@@ -5115,7 +5651,11 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 			RxBytes       int64  `json:"rx_bytes"`
 			TxBytes       int64  `json:"tx_bytes"`
 		} `json:"wireguard_peers,omitempty"`
-		WireguardActivePeers int `json:"wireguard_active_peers"`
+		WireguardActivePeers int   `json:"wireguard_active_peers"`
+		AgentUptime          int64 `json:"agent_uptime"`
+		PushLatencyMs        int64 `json:"push_latency_ms"`
+		QueueDepth           int   `json:"queue_depth"`
+		RetryCount           int   `json:"retry_count"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -5130,16 +5670,26 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 	}
 	var nodeID int64
 	var status string
-	if err := s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`, hashToken(in.Token)).Scan(&nodeID, &status); err == sql.ErrNoRows {
+	var dbErr error
+	if s.initStmts() {
+		dbErr = s.stmts.nodeAuth.QueryRow(hashToken(in.Token)).Scan(&nodeID, &status)
+	} else {
+		dbErr = s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`, hashToken(in.Token)).Scan(&nodeID, &status)
+	}
+	if dbErr == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "bad_token"})
 		return
-	} else if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+	} else if dbErr != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": dbErr.Error()})
 		return
 	}
 	if status == "disabled" {
 		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "node_disabled"})
 		return
+	}
+	// If node was offline, close any open downtime entry (it's now back online)
+	if status == "offline" {
+		CloseNodeDowntime(s.DB, nodeID)
 	}
 	if in.OpenVPNStatus == "" {
 		in.OpenVPNStatus = in.Services["openvpn"]
@@ -5166,14 +5716,23 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	if in.PublicIP != "" {
-		_, _ = tx.Exec(`UPDATE nodes SET status='online',last_seen_at=NOW(),public_ip=? WHERE id=?`, in.PublicIP, nodeID)
+	if s.initStmts() {
+		if in.PublicIP != "" {
+			_, _ = tx.Stmt(s.stmts.nodePushUpdateWithIP).Exec(in.PublicIP, nodeID)
+		} else {
+			_, _ = tx.Stmt(s.stmts.nodePushUpdateNoIP).Exec(nodeID)
+		}
+		_, err = tx.Stmt(s.stmts.nodePushUpsertStatus).Exec(nodeID, in.CPUPercent, in.RAMPercent, in.DiskPercent, in.RxBps, in.TxBps, in.OpenVPNStatus, in.L2TPStatus, in.IKEv2Status, string(payload))
 	} else {
-		_, _ = tx.Exec(`UPDATE nodes SET status='online',last_seen_at=NOW() WHERE id=?`, nodeID)
-	}
-	_, err = tx.Exec(`INSERT INTO node_status(node_id,cpu_percent,ram_percent,disk_percent,rx_bps,tx_bps,openvpn_status,l2tp_status,ikev2_status,payload_json)
+		if in.PublicIP != "" {
+			_, _ = tx.Exec(`UPDATE nodes SET status='online',last_seen_at=NOW(),public_ip=? WHERE id=?`, in.PublicIP, nodeID)
+		} else {
+			_, _ = tx.Exec(`UPDATE nodes SET status='online',last_seen_at=NOW() WHERE id=?`, nodeID)
+		}
+		_, err = tx.Exec(`INSERT INTO node_status(node_id,cpu_percent,ram_percent,disk_percent,rx_bps,tx_bps,openvpn_status,l2tp_status,ikev2_status,payload_json)
 		VALUES(?,?,?,?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE cpu_percent=VALUES(cpu_percent),ram_percent=VALUES(ram_percent),disk_percent=VALUES(disk_percent),rx_bps=VALUES(rx_bps),tx_bps=VALUES(tx_bps),openvpn_status=VALUES(openvpn_status),l2tp_status=VALUES(l2tp_status),ikev2_status=VALUES(ikev2_status),payload_json=VALUES(payload_json)`, nodeID, in.CPUPercent, in.RAMPercent, in.DiskPercent, in.RxBps, in.TxBps, in.OpenVPNStatus, in.L2TPStatus, in.IKEv2Status, string(payload))
+	}
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -5186,7 +5745,11 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = tx.Exec(`INSERT INTO node_services(node_id,service,status) VALUES(?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status)`, nodeID, service, serviceStatus)
 	}
-	_, _ = tx.Exec(`INSERT INTO node_usage_snapshots(node_id,rx_bytes,tx_bytes,online_users) VALUES(?,?,?,?)`, nodeID, in.RxBytes, in.TxBytes, in.OnlineUsers)
+	if s.initStmts() {
+		_, _ = tx.Stmt(s.stmts.nodePushSnapshot).Exec(nodeID, in.RxBytes, in.TxBytes, in.OnlineUsers)
+	} else {
+		_, _ = tx.Exec(`INSERT INTO node_usage_snapshots(node_id,rx_bytes,tx_bytes,online_users) VALUES(?,?,?,?)`, nodeID, in.RxBytes, in.TxBytes, in.OnlineUsers)
+	}
 	if in.Diagnostics != nil {
 		_, _ = tx.Exec(`INSERT INTO node_diagnostics(node_id, agent_version, uptime_seconds, go_version, goroutines, mem_alloc_bytes) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE agent_version=VALUES(agent_version), uptime_seconds=VALUES(uptime_seconds), go_version=VALUES(go_version), goroutines=VALUES(goroutines), mem_alloc_bytes=VALUES(mem_alloc_bytes)`,
 			nodeID, in.Diagnostics.AgentVersion, in.Diagnostics.UptimeSeconds, in.Diagnostics.GoVersion, in.Diagnostics.Goroutines, in.Diagnostics.MemAllocBytes)
@@ -5195,6 +5758,20 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+
+	// Update node connection health state
+	if s.NodeMgr != nil {
+		s.NodeMgr.HandlePush(nodeID, nodeapi.PushPayload{
+			NodeID:        nodeID,
+			AgentUptime:   in.AgentUptime,
+			PushLatencyMs: in.PushLatencyMs,
+			QueueDepth:    in.QueueDepth,
+			RetryCount:    in.RetryCount,
+		})
+	}
+
+	// Update bandwidth quota tracking (best-effort approximation)
+	UpdateBandwidthQuota(s.DB, nodeID, in.RxBytes, in.TxBytes)
 
 	// Store per-user bandwidth snapshots if present
 	if len(in.PerUserBandwidth) > 0 {
@@ -5355,35 +5932,88 @@ func redirectTo(target string) http.HandlerFunc {
 	}
 }
 
-func spaHandler(dir, prefix string) http.Handler {
+func spaHandler(dir, prefix string, embedded fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		indexPath := filepath.Join(dir, "index.html")
-		if _, err := os.Stat(indexPath); err != nil {
+
+		// Determine which filesystem to use: embedded (in binary) or disk (dev mode override)
+		var serve func(name string) (fs.File, error)
+		useEmbed := embedded != nil
+
+		// If a disk directory is configured and exists, prefer it (allows hot-reload in dev)
+		if dir != "" {
+			if _, err := os.Stat(filepath.Join(dir, "index.html")); err == nil {
+				useEmbed = false
+			}
+		}
+
+		if useEmbed {
+			serve = embedded.Open
+		} else {
+			if dir == "" {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`<html><body style="font-family:system-ui;background:#080a10;color:#f8fafc;padding:40px"><h1>Koris UI is not built yet</h1><p>Build the Vue app and rebuild the Go binary.</p></body></html>`))
+				return
+			}
+			serve = func(name string) (fs.File, error) {
+				return os.Open(filepath.Join(dir, filepath.FromSlash(name)))
+			}
+		}
+
+		// Check index.html exists
+		idx, err := serve("index.html")
+		if err != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`<html><body style="font-family:system-ui;background:#080a10;color:#f8fafc;padding:40px"><h1>Koris UI is not built yet</h1><p>Build the Vue app and copy it to the configured web directory.</p></body></html>`))
+			_, _ = w.Write([]byte(`<html><body style="font-family:system-ui;background:#080a10;color:#f8fafc;padding:40px"><h1>Koris UI is not built yet</h1><p>Build the Vue app and rebuild the Go binary.</p></body></html>`))
 			return
 		}
+		idx.Close()
 
 		rel := strings.TrimPrefix(r.URL.Path, prefix)
 		clean := path.Clean("/" + rel)
 		if clean != "/" {
 			assetPath := strings.TrimPrefix(clean, "/")
-			fullPath := filepath.Join(dir, filepath.FromSlash(assetPath))
-			if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
-				if strings.HasPrefix(assetPath, "assets/") {
-					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			if useEmbed {
+				if f, err := embedded.Open(assetPath); err == nil {
+					defer f.Close()
+					stat, _ := f.Stat()
+					if stat != nil && !stat.IsDir() {
+						if strings.HasPrefix(assetPath, "assets/") {
+							w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+						}
+						http.ServeContent(w, r, stat.Name(), stat.ModTime(), f.(io.ReadSeeker))
+						return
+					}
 				}
-				http.ServeFile(w, r, fullPath)
-				return
+			} else {
+				fullPath := filepath.Join(dir, filepath.FromSlash(assetPath))
+				if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+					if strings.HasPrefix(assetPath, "assets/") {
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					}
+					http.ServeFile(w, r, fullPath)
+					return
+				}
 			}
 		}
+
+		// SPA fallback: serve index.html
 		w.Header().Set("Cache-Control", "no-store")
-		http.ServeFile(w, r, indexPath)
+		if useEmbed {
+			f, _ := embedded.Open("index.html")
+			if f != nil {
+				defer f.Close()
+				stat, _ := f.Stat()
+				http.ServeContent(w, r, "index.html", stat.ModTime(), f.(io.ReadSeeker))
+			}
+		} else {
+			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+		}
 	})
 }
 
@@ -7297,10 +7927,23 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 func writeJSONCode(w http.ResponseWriter, code int, v any) {
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer func() {
+		buf.Reset()
+		bufPool.Put(buf)
+	}()
+
+	enc := json.NewEncoder(buf)
+	if err := enc.Encode(v); err != nil {
+		http.Error(w, `{"ok":false,"error":"encoding_error"}`, http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = buf.WriteTo(w)
 }
 
 // limitBody wraps the request body with a max size reader (1MB default for JSON endpoints).
@@ -7397,7 +8040,7 @@ func (s *Server) nodeVPNConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getNodeVPNConfigs(w http.ResponseWriter, nodeID int64) {
-	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=? ORDER BY FIELD(protocol,'openvpn','l2tp','ikev2','ssh')`, nodeID)
+	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=? ORDER BY FIELD(protocol,'openvpn','l2tp','ikev2','ssh','wireguard','cisco_ipsec')`, nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -7430,7 +8073,7 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 		return
 	}
 	in.Protocol = strings.ToLower(strings.TrimSpace(in.Protocol))
-	if in.Protocol != "openvpn" && in.Protocol != "l2tp" && in.Protocol != "ikev2" && in.Protocol != "ssh" && in.Protocol != "wireguard" {
+	if in.Protocol != "openvpn" && in.Protocol != "l2tp" && in.Protocol != "ikev2" && in.Protocol != "ssh" && in.Protocol != "wireguard" && in.Protocol != "cisco_ipsec" {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_protocol"})
 		return
 	}
@@ -7491,11 +8134,12 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 
 	// Auto-start/stop service on the node when toggled
 	serviceMap := map[string]string{
-		"openvpn":   "openvpn-server@server",
-		"l2tp":      "xl2tpd",
-		"ikev2":     "strongswan-starter",
-		"ssh":       "ssh",
-		"wireguard": "wg-quick@wg0",
+		"openvpn":     "openvpn-server@server",
+		"l2tp":        "xl2tpd",
+		"ikev2":       "strongswan-starter",
+		"ssh":         "ssh",
+		"wireguard":   "wg-quick@wg0",
+		"cisco_ipsec": "strongswan",
 	}
 	if svcName, ok := serviceMap[in.Protocol]; ok {
 		if in.Enabled {
@@ -7725,21 +8369,34 @@ func (s *Server) publicSettings(w http.ResponseWriter, r *http.Request) {
 		"panel_name": true,
 		"language":   true,
 	}
+	brandingKeys := map[string]string{
+		"branding_logo_url":      "logo_url",
+		"branding_app_name":      "app_name",
+		"branding_primary_color": "primary_color",
+	}
 	rows, err := s.DB.Query(`SELECT setting_key, setting_value FROM panel_settings ORDER BY setting_key`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	defer rows.Close()
-	settings := map[string]string{}
+	settings := map[string]any{}
+	branding := map[string]string{
+		"logo_url":      "",
+		"app_name":      "",
+		"primary_color": "",
+	}
 	for rows.Next() {
 		var k, v string
 		if rows.Scan(&k, &v) == nil {
 			if allowedKeys[k] {
 				settings[k] = v
+			} else if field, ok := brandingKeys[k]; ok {
+				branding[field] = v
 			}
 		}
 	}
+	settings["branding"] = branding
 	writeJSON(w, map[string]any{"ok": true, "settings": settings})
 }
 

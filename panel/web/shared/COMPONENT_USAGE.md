@@ -31,6 +31,7 @@ These components are fully implemented and ready to use but have not yet been im
 
 | Component | Purpose | Planned Integration |
 |-----------|---------|---------------------|
+| **HealthDot** | Colored dot (green/yellow/red) indicating node health score (0-1) | admin/NodesView.vue next to node name in card header |
 | **KAlert** | Inline info/warning/error/success messages with optional dismissal | General use across admin and portal for contextual alerts |
 | **KBreadcrumb** | Breadcrumb navigation component | Navigation enhancement for nested views |
 | **KDrawer** | Slide-out side panel (right or left) | Customer detail drawer (see DESIGN_SYSTEM.md "Next UI components to add") |

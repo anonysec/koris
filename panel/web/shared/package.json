@@ -7,10 +7,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "sortablejs": "^1.15.7",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@types/sortablejs": "^1.15.9",
+    "@vitejs/plugin-vue": "^6.0.7",
     "@vue/test-utils": "^2.4.11",
     "fast-check": "^4.8.0",
     "happy-dom": "^20.10.3",

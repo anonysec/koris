@@ -1,16 +1,43 @@
 [Unit]
-Description=Koris Next Panel
-After=network.target mariadb.service
-Wants=mariadb.service
+Description=KorisPanel Server
+After=network-online.target mariadb.service
+Wants=network-online.target mariadb.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
-Type=simple
+Type=notify
 EnvironmentFile=/etc/panel/panel.env
 ExecStart=/usr/local/bin/panel
-Restart=always
-RestartSec=3
-User=root
-WorkingDirectory=/opt/KorisPanel
+ExecReload=/bin/kill -HUP $MAINPID
+WatchdogSec=30
+Restart=on-failure
+RestartSec=5
+
+# Resource Limits
+LimitNOFILE=65535
+LimitNPROC=4096
+MemoryMax=1G
+CPUQuota=400%
+TasksMax=4096
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/log/panel /etc/panel /opt/KorisPanel /var/run/panel.sock
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=koris-panel
 
 [Install]
 WantedBy=multi-user.target

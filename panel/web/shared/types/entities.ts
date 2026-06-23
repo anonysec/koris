@@ -103,12 +103,17 @@ export interface NodeItem {
   name: string
   public_ip: string
   domain: string
-  status: 'online' | 'offline'
+  status: 'online' | 'offline' | 'disabled'
   last_seen_at: string
   created_at: string
   status_metrics: NodeMetrics
   services: NodeService[]
   history?: BandwidthSnapshot[]
+  agent_version?: string
+  group_id?: number | null
+  max_capacity?: number
+  bandwidth_quota_gb?: number | null
+  bandwidth_used_bytes?: number
 }
 
 export interface Ticket {

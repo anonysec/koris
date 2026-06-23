@@ -40,6 +40,66 @@ const searchQuery = ref('')
 const activeStatusTab = ref<string>('all')
 const currentMainTab = ref<string>('users')
 
+// ─── Advanced Filters Panel ─────────────────────────────────────────────────
+const showAdvancedFilters = ref(false)
+const filterPlanId = ref('')
+const filterDateFrom = ref('')
+const filterDateTo = ref('')
+
+const planFilterOptions = computed(() => {
+  const options = [{ label: t('customers.no_plan'), value: '' }]
+  for (const p of plansStore.list) {
+    options.push({ label: p.name, value: String(p.id) })
+  }
+  return options
+})
+
+// ─── Column Visibility Toggle ───────────────────────────────────────────────
+const showColumnToggle = ref(false)
+
+interface ColumnVisibility {
+  key: string
+  label: string
+  visible: boolean
+}
+
+const columnVisibility = ref<ColumnVisibility[]>([
+  { key: 'username', label: 'customers.col_username', visible: true },
+  { key: 'display_name', label: 'customers.col_display_name', visible: true },
+  { key: 'status', label: 'customers.col_status', visible: true },
+  { key: 'plan', label: 'customers.col_plan', visible: true },
+  { key: 'credit', label: 'customers.col_credit', visible: true },
+  { key: 'created_by', label: 'customers.col_created_by', visible: true },
+  { key: 'created_at', label: 'customers.col_created_at', visible: true },
+])
+
+function toggleColumnVisibility(key: string) {
+  const col = columnVisibility.value.find(c => c.key === key)
+  if (col) col.visible = !col.visible
+}
+
+// ─── Export ─────────────────────────────────────────────────────────────────
+const exporting = ref(false)
+
+async function handleExport(format: 'csv' | 'json') {
+  exporting.value = true
+  try {
+    const params = new URLSearchParams()
+    params.set('format', format)
+    if (searchQuery.value) params.set('search', searchQuery.value)
+    if (activeStatusTab.value !== 'all' && activeStatusTab.value !== 'online') {
+      params.set('status', activeStatusTab.value)
+    }
+    if (filterPlanId.value) params.set('plan_id', filterPlanId.value)
+
+    const url = `/api/admin/customers/export?${params.toString()}`
+    // Use window.open for file download
+    window.open(url, '_blank')
+  } finally {
+    exporting.value = false
+  }
+}
+
 /** Tracks selected customer IDs for bulk actions */
 const selectedIds = ref<number[]>([])
 
@@ -171,7 +231,7 @@ const statusTabs = computed(() => [
 // ─── Users Table ────────────────────────────────────────────────────────────
 
 const columns = computed(() => {
-  const cols = [
+  const allCols = [
     { key: 'username', label: t('user.username'), sortable: true },
     { key: 'display_name', label: t('user.display_name'), sortable: true },
     { key: 'status', label: t('user.status'), sortable: true },
@@ -179,13 +239,15 @@ const columns = computed(() => {
     { key: 'credit', label: t('user.balance'), sortable: true, align: 'right' as const },
   ]
   if (!isReseller.value) {
-    cols.push({ key: 'created_by', label: t('user.created_by'), sortable: true })
+    allCols.push({ key: 'created_by', label: t('user.created_by'), sortable: true })
   }
-  cols.push(
+  allCols.push(
     { key: 'created_at', label: t('user.created'), sortable: true },
     { key: 'actions', label: '', sortable: false, align: 'center' as const, width: '80px' } as any,
   )
-  return cols
+  // Filter by visibility
+  const visibleKeys = new Set(columnVisibility.value.filter(c => c.visible).map(c => c.key))
+  return allCols.filter(col => col.key === 'actions' || visibleKeys.has(col.key))
 })
 
 /** Set of usernames currently online (from live sessions) */
@@ -195,10 +257,34 @@ const onlineUsernames = computed(() => {
 
 /** The data shown in the table depends on which status filter is active */
 const tableData = computed(() => {
+  let result = store.paginatedList as any[]
+
   if (activeStatusTab.value === 'online') {
-    return store.paginatedList.filter((c: any) => onlineUsernames.value.has(c.username))
+    result = result.filter((c: any) => onlineUsernames.value.has(c.username))
   }
-  return store.paginatedList
+
+  // Advanced filter: plan
+  if (filterPlanId.value) {
+    result = result.filter((c: any) => String(c.plan_id) === filterPlanId.value)
+  }
+
+  // Advanced filter: date from
+  if (filterDateFrom.value) {
+    result = result.filter((c: any) => {
+      if (!c.created_at) return false
+      return c.created_at >= filterDateFrom.value
+    })
+  }
+
+  // Advanced filter: date to
+  if (filterDateTo.value) {
+    result = result.filter((c: any) => {
+      if (!c.created_at) return false
+      return c.created_at <= filterDateTo.value + 'T23:59:59'
+    })
+  }
+
+  return result
 })
 
 // ─── Resellers Table ────────────────────────────────────────────────────────
@@ -315,6 +401,16 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
       cancelText: t('btn.cancel'),
     })
     if (!confirmed) return
+  } else if (action === 'disable') {
+    const confirmed = await confirm({
+      title: t('customers.confirm_bulk_title'),
+      message: t('customers.confirm_bulk_msg').replace('{action}', t('customers.disable')).replace('{count}', String(selectedIds.value.length)),
+      variant: 'danger',
+      icon: '\u26A0',
+      confirmText: t('btn.disable'),
+      cancelText: t('btn.cancel'),
+    })
+    if (!confirmed) return
   }
 
   const request: BulkActionRequest = {
@@ -338,6 +434,210 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
   } else {
     toast.error(t('customers.bulk_error').replace('{count}', String(selectedIds.value.length)))
   }
+}
+
+// Extended bulk actions (using admin API)
+const showBulkPlanSlide = ref(false)
+const bulkPlanId = ref('')
+const bulkExtendDays = ref('')
+const bulkAddDataGb = ref('')
+const showBulkExtendSlide = ref(false)
+const showBulkDataSlide = ref(false)
+
+// Bulk Assign Tag
+const showBulkTagSlide = ref(false)
+const bulkTagId = ref('')
+const availableTags = ref<{ id: number; name: string; color: string }[]>([])
+
+// Import
+const showImportSlide = ref(false)
+const importMode = ref<'file' | 'paste'>('file')
+const importFileInput = ref<HTMLInputElement | null>(null)
+const importCsvText = ref('')
+const importPreview = ref<{ rows: any[]; errors: string[] } | null>(null)
+const importLoading = ref(false)
+const importResult = ref<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null)
+
+async function executeBulkExtend() {
+  if (!bulkExtendDays.value || selectedIds.value.length === 0) return
+  saving.value = true
+  try {
+    const res = await api.post<{ ok: boolean }>('/api/admin/customers/bulk', {
+      customer_ids: [...selectedIds.value],
+      action: 'extend',
+      days: Number(bulkExtendDays.value),
+    })
+    if (res?.ok) {
+      toast.success(t('customers.bulk_success').replace('{count}', String(selectedIds.value.length)))
+      clearSelection()
+      store.loadCustomers()
+    }
+  } catch {
+    toast.error(t('customers.bulk_error').replace('{count}', String(selectedIds.value.length)))
+  } finally {
+    saving.value = false
+    showBulkExtendSlide.value = false
+    bulkExtendDays.value = ''
+  }
+}
+
+async function executeBulkChangePlan() {
+  if (!bulkPlanId.value || selectedIds.value.length === 0) return
+  saving.value = true
+  try {
+    const res = await api.post<{ ok: boolean }>('/api/admin/customers/bulk', {
+      customer_ids: [...selectedIds.value],
+      action: 'change_plan',
+      plan_id: Number(bulkPlanId.value),
+    })
+    if (res?.ok) {
+      toast.success(t('customers.bulk_success').replace('{count}', String(selectedIds.value.length)))
+      clearSelection()
+      store.loadCustomers()
+    }
+  } catch {
+    toast.error(t('customers.bulk_error').replace('{count}', String(selectedIds.value.length)))
+  } finally {
+    saving.value = false
+    showBulkPlanSlide.value = false
+    bulkPlanId.value = ''
+  }
+}
+
+async function executeBulkAddData() {
+  if (!bulkAddDataGb.value || selectedIds.value.length === 0) return
+  saving.value = true
+  try {
+    const res = await api.post<{ ok: boolean }>('/api/admin/customers/bulk', {
+      customer_ids: [...selectedIds.value],
+      action: 'add_data',
+      data_gb: Number(bulkAddDataGb.value),
+    })
+    if (res?.ok) {
+      toast.success(t('customers.bulk_success').replace('{count}', String(selectedIds.value.length)))
+      clearSelection()
+      store.loadCustomers()
+    }
+  } catch {
+    toast.error(t('customers.bulk_error').replace('{count}', String(selectedIds.value.length)))
+  } finally {
+    saving.value = false
+    showBulkDataSlide.value = false
+    bulkAddDataGb.value = ''
+  }
+}
+
+// ─── Bulk Assign Tag ────────────────────────────────────────────────────────
+
+async function loadAvailableTags() {
+  try {
+    const data = await api.get<{ ok: boolean; tags: { id: number; name: string; color: string }[] }>('/api/tags')
+    if (data?.ok) {
+      availableTags.value = data.tags || []
+    }
+  } catch { /* ignore */ }
+}
+
+function openBulkTagSlide() {
+  loadAvailableTags()
+  bulkTagId.value = ''
+  showBulkTagSlide.value = true
+}
+
+async function executeBulkAssignTag() {
+  if (!bulkTagId.value || selectedIds.value.length === 0) return
+  saving.value = true
+  try {
+    const res = await api.post<{ ok: boolean }>('/api/admin/customers/bulk', {
+      customer_ids: [...selectedIds.value],
+      action: 'assign_tag',
+      tag_id: Number(bulkTagId.value),
+    })
+    if (res?.ok) {
+      toast.success(t('customers.bulk_success').replace('{count}', String(selectedIds.value.length)))
+      clearSelection()
+      store.loadCustomers()
+    }
+  } catch {
+    toast.error(t('customers.bulk_error').replace('{count}', String(selectedIds.value.length)))
+  } finally {
+    saving.value = false
+    showBulkTagSlide.value = false
+    bulkTagId.value = ''
+  }
+}
+
+// ─── CSV Import ─────────────────────────────────────────────────────────────
+
+function openImportSlide() {
+  importMode.value = 'file'
+  importCsvText.value = ''
+  importPreview.value = null
+  importResult.value = null
+  showImportSlide.value = true
+}
+
+function handleFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files?.length) return
+  const file = input.files[0]
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    importCsvText.value = e.target?.result as string
+    previewImport()
+  }
+  reader.readAsText(file)
+}
+
+async function previewImport() {
+  if (!importCsvText.value.trim()) {
+    toast.error(t('customers.import_empty'))
+    return
+  }
+  importLoading.value = true
+  try {
+    const data = await api.post<{ ok: boolean; rows: any[]; errors: string[] }>('/api/customers/import/preview', {
+      csv_data: importCsvText.value,
+    })
+    if (data?.ok) {
+      importPreview.value = { rows: data.rows || [], errors: data.errors || [] }
+    }
+  } catch {
+    // error toast handled by useApi
+  } finally {
+    importLoading.value = false
+  }
+}
+
+async function executeImport() {
+  if (!importCsvText.value.trim()) return
+  importLoading.value = true
+  try {
+    const data = await api.post<{ ok: boolean; created: number; updated: number; skipped: number; errors: string[] }>('/api/customers/import', {
+      csv_data: importCsvText.value,
+    })
+    if (data?.ok) {
+      importResult.value = {
+        created: data.created || 0,
+        updated: data.updated || 0,
+        skipped: data.skipped || 0,
+        errors: data.errors || [],
+      }
+      toast.success(t('customers.import_success'))
+      store.loadCustomers()
+    }
+  } catch {
+    // error toast handled by useApi
+  } finally {
+    importLoading.value = false
+  }
+}
+
+function closeImport() {
+  showImportSlide.value = false
+  importPreview.value = null
+  importResult.value = null
+  importCsvText.value = ''
 }
 
 // ─── Reseller Actions ───────────────────────────────────────────────────────
@@ -466,6 +766,40 @@ onMounted(async () => {
   <div class="page customers-view">
     <!-- Header -->
     <header class="page-header">
+      <div class="page-header__actions">
+        <KButton
+          v-if="currentMainTab === 'users'"
+          variant="ghost"
+          size="sm"
+          @click="showAdvancedFilters = !showAdvancedFilters"
+        >{{ t('customers.advanced_filters') }}</KButton>
+        <KButton
+          v-if="currentMainTab === 'users'"
+          variant="ghost"
+          size="sm"
+          @click="showColumnToggle = !showColumnToggle"
+        >{{ t('customers.columns') }}</KButton>
+        <KButton
+          v-if="currentMainTab === 'users'"
+          variant="ghost"
+          size="sm"
+          :loading="exporting"
+          @click="handleExport('csv')"
+        >{{ t('customers.export_csv') }}</KButton>
+        <KButton
+          v-if="currentMainTab === 'users'"
+          variant="ghost"
+          size="sm"
+          :loading="exporting"
+          @click="handleExport('json')"
+        >{{ t('customers.export_json') }}</KButton>
+        <KButton
+          v-if="currentMainTab === 'users'"
+          variant="ghost"
+          size="sm"
+          @click="openImportSlide"
+        >{{ t('customers.import_csv') }}</KButton>
+      </div>
       <KButton
         v-if="currentMainTab === 'users'"
         variant="primary"
@@ -494,6 +828,47 @@ onMounted(async () => {
 
     <!-- ═══════════════ USERS TAB ═══════════════ -->
     <template v-if="currentMainTab === 'users'">
+      <!-- Column Visibility Toggle Panel -->
+      <Transition name="panel-slide">
+        <div v-if="showColumnToggle" class="columns-panel" role="group" aria-label="Column visibility">
+          <label
+            v-for="col in columnVisibility"
+            :key="col.key"
+            class="column-toggle"
+          >
+            <input
+              type="checkbox"
+              :checked="col.visible"
+              @change="toggleColumnVisibility(col.key)"
+            />
+            <span>{{ t(col.label) }}</span>
+          </label>
+        </div>
+      </Transition>
+
+      <!-- Advanced Filters Panel -->
+      <Transition name="panel-slide">
+        <div v-if="showAdvancedFilters" class="advanced-filters-panel" role="search" aria-label="Advanced filters">
+          <div class="advanced-filters-grid">
+            <KFormField name="filter-plan" :label="t('customers.filter_plan')">
+              <template #default="{ fieldId }">
+                <KSelect :id="fieldId" v-model="filterPlanId" :options="planFilterOptions" />
+              </template>
+            </KFormField>
+            <KFormField name="filter-date-from" :label="t('customers.filter_date_from')">
+              <template #default="{ fieldId }">
+                <input :id="fieldId" v-model="filterDateFrom" type="date" class="filter-date-input" />
+              </template>
+            </KFormField>
+            <KFormField name="filter-date-to" :label="t('customers.filter_date_to')">
+              <template #default="{ fieldId }">
+                <input :id="fieldId" v-model="filterDateTo" type="date" class="filter-date-input" />
+              </template>
+            </KFormField>
+          </div>
+        </div>
+      </Transition>
+
       <!-- Bulk Action Toolbar -->
       <Transition name="bulk-toolbar">
         <div v-if="hasSelection" class="bulk-toolbar" role="toolbar" aria-label="Bulk actions">
@@ -502,6 +877,10 @@ onMounted(async () => {
             <KButton variant="ghost" size="sm" @click="executeBulkAction('enable')">{{ t('customers.enable') }}</KButton>
             <KButton variant="ghost" size="sm" @click="executeBulkAction('disable')">{{ t('customers.disable') }}</KButton>
             <KButton variant="ghost" size="sm" @click="executeBulkAction('traffic_reset')">{{ t('customers.traffic_reset') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="showBulkExtendSlide = true">{{ t('customers.bulk_extend') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="showBulkPlanSlide = true">{{ t('customers.bulk_change_plan') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="showBulkDataSlide = true">{{ t('customers.bulk_add_data') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="openBulkTagSlide">{{ t('customers.bulk_assign_tag') }}</KButton>
             <KButton variant="danger" size="sm" @click="executeBulkAction('delete')">{{ t('customers.delete') }}</KButton>
           </div>
           <button class="bulk-toolbar__clear" @click="clearSelection" :aria-label="t('customers.clear')">{{ t('customers.clear') }}</button>
@@ -777,13 +1156,299 @@ onMounted(async () => {
         </div>
       </form>
     </KSlideOver>
+
+    <!-- Bulk Extend Slide-Over -->
+    <KSlideOver :open="showBulkExtendSlide" :title="t('customers.bulk_extend')" width="360px" @close="showBulkExtendSlide = false">
+      <form class="slide-form" @submit.prevent="executeBulkExtend">
+        <p class="slide-form__hint">{{ selectedIds.length }} {{ t('customers.selected') }}</p>
+        <KFormField name="bulk-extend-days" :label="t('plans.duration_days')" required>
+          <template #default="{ fieldId }">
+            <KInput :id="fieldId" v-model="bulkExtendDays" type="number" placeholder="30" />
+          </template>
+        </KFormField>
+        <div class="slide-form__footer">
+          <KButton type="button" variant="ghost" @click="showBulkExtendSlide = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">{{ t('customers.bulk_extend') }}</KButton>
+        </div>
+      </form>
+    </KSlideOver>
+
+    <!-- Bulk Change Plan Slide-Over -->
+    <KSlideOver :open="showBulkPlanSlide" :title="t('customers.bulk_change_plan')" width="360px" @close="showBulkPlanSlide = false">
+      <form class="slide-form" @submit.prevent="executeBulkChangePlan">
+        <p class="slide-form__hint">{{ selectedIds.length }} {{ t('customers.selected') }}</p>
+        <KFormField name="bulk-plan" :label="t('user.plan')" required>
+          <template #default="{ fieldId }">
+            <KSelect :id="fieldId" v-model="bulkPlanId" :options="planOptions" :placeholder="t('resellers.select_plan')" />
+          </template>
+        </KFormField>
+        <div class="slide-form__footer">
+          <KButton type="button" variant="ghost" @click="showBulkPlanSlide = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">{{ t('customers.bulk_change_plan') }}</KButton>
+        </div>
+      </form>
+    </KSlideOver>
+
+    <!-- Bulk Add Data Slide-Over -->
+    <KSlideOver :open="showBulkDataSlide" :title="t('customers.bulk_add_data')" width="360px" @close="showBulkDataSlide = false">
+      <form class="slide-form" @submit.prevent="executeBulkAddData">
+        <p class="slide-form__hint">{{ selectedIds.length }} {{ t('customers.selected') }}</p>
+        <KFormField name="bulk-data-gb" :label="t('plans.data_gb')" required>
+          <template #default="{ fieldId }">
+            <KInput :id="fieldId" v-model="bulkAddDataGb" type="number" placeholder="10" />
+          </template>
+        </KFormField>
+        <div class="slide-form__footer">
+          <KButton type="button" variant="ghost" @click="showBulkDataSlide = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">{{ t('customers.bulk_add_data') }}</KButton>
+        </div>
+      </form>
+    </KSlideOver>
+
+    <!-- Bulk Assign Tag Slide-Over -->
+    <KSlideOver :open="showBulkTagSlide" :title="t('customers.bulk_assign_tag')" width="400px" @close="showBulkTagSlide = false">
+      <form class="slide-form" @submit.prevent="executeBulkAssignTag">
+        <p class="slide-form__hint">{{ selectedIds.length }} {{ t('customers.selected') }}</p>
+        <KFormField name="bulk-tag" :label="t('tags.select_tag')" required>
+          <template #default>
+            <div class="tag-select-list">
+              <label
+                v-for="tag in availableTags"
+                :key="tag.id"
+                class="tag-select-item"
+                :class="{ 'tag-select-item--active': bulkTagId === String(tag.id) }"
+              >
+                <input
+                  v-model="bulkTagId"
+                  type="radio"
+                  name="bulk-tag"
+                  :value="String(tag.id)"
+                  class="tag-radio"
+                />
+                <span class="tag-swatch" :style="{ backgroundColor: tag.color }" />
+                <span class="tag-select-name">{{ tag.name }}</span>
+              </label>
+              <p v-if="availableTags.length === 0" class="empty-hint">{{ t('tags.empty_title') }}</p>
+            </div>
+          </template>
+        </KFormField>
+        <div class="slide-form__footer">
+          <KButton type="button" variant="ghost" @click="showBulkTagSlide = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving" :disabled="!bulkTagId">{{ t('customers.bulk_assign_tag') }}</KButton>
+        </div>
+      </form>
+    </KSlideOver>
+
+    <!-- CSV Import Slide-Over -->
+    <KSlideOver :open="showImportSlide" :title="t('customers.import_title')" width="600px" @close="closeImport">
+      <div class="slide-form">
+        <!-- Mode Toggle -->
+        <div class="import-mode-toggle">
+          <button
+            type="button"
+            class="mode-btn"
+            :class="{ 'mode-btn--active': importMode === 'file' }"
+            @click="importMode = 'file'"
+          >{{ t('customers.import_file') }}</button>
+          <button
+            type="button"
+            class="mode-btn"
+            :class="{ 'mode-btn--active': importMode === 'paste' }"
+            @click="importMode = 'paste'"
+          >{{ t('customers.import_paste') }}</button>
+        </div>
+
+        <!-- File Upload -->
+        <div v-if="importMode === 'file'" class="import-file-section">
+          <label class="import-file-label">
+            <input
+              ref="importFileInput"
+              type="file"
+              accept=".csv,text/csv"
+              class="import-file-input"
+              @change="handleFileSelect"
+            />
+            <span class="import-file-btn">{{ t('customers.import_choose_file') }}</span>
+          </label>
+          <p class="import-hint">{{ t('customers.import_format_hint') }}</p>
+        </div>
+
+        <!-- CSV Paste -->
+        <div v-if="importMode === 'paste'" class="import-paste-section">
+          <KFormField name="import-csv" :label="t('customers.import_csv_data')">
+            <template #default="{ fieldId }">
+              <textarea
+                :id="fieldId"
+                v-model="importCsvText"
+                class="import-textarea"
+                rows="8"
+                :placeholder="t('customers.import_csv_placeholder')"
+              />
+            </template>
+          </KFormField>
+          <KButton variant="ghost" size="sm" @click="previewImport" :loading="importLoading">
+            {{ t('customers.import_preview') }}
+          </KButton>
+        </div>
+
+        <!-- Preview Results -->
+        <div v-if="importPreview" class="import-preview">
+          <h4 class="import-preview__title">{{ t('customers.import_preview_title') }}</h4>
+          <p class="import-preview__count">
+            {{ importPreview.rows.length }} {{ t('customers.import_rows_valid') }}
+          </p>
+          <div v-if="importPreview.errors.length > 0" class="import-errors">
+            <p class="import-errors__title">{{ t('customers.import_errors') }}:</p>
+            <ul class="import-errors__list">
+              <li v-for="(err, idx) in importPreview.errors.slice(0, 10)" :key="idx">{{ err }}</li>
+              <li v-if="importPreview.errors.length > 10">
+                ... {{ t('customers.import_more_errors').replace('{count}', String(importPreview.errors.length - 10)) }}
+              </li>
+            </ul>
+          </div>
+          <div v-if="importPreview.rows.length > 0" class="import-preview-table">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>{{ t('user.username') }}</th>
+                  <th>{{ t('user.status') }}</th>
+                  <th>{{ t('user.plan') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in importPreview.rows.slice(0, 5)" :key="idx">
+                  <td>{{ row.username }}</td>
+                  <td>{{ row.status || 'active' }}</td>
+                  <td>{{ row.plan || '—' }}</td>
+                </tr>
+                <tr v-if="importPreview.rows.length > 5">
+                  <td colspan="3" class="preview-more">
+                    ... {{ importPreview.rows.length - 5 }} {{ t('customers.import_more_rows') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Import Result -->
+        <div v-if="importResult" class="import-result">
+          <h4 class="import-result__title">{{ t('customers.import_complete') }}</h4>
+          <div class="import-result__stats">
+            <span class="stat stat--success">{{ importResult.created }} {{ t('customers.import_created') }}</span>
+            <span class="stat stat--info">{{ importResult.updated }} {{ t('customers.import_updated') }}</span>
+            <span class="stat stat--warn">{{ importResult.skipped }} {{ t('customers.import_skipped') }}</span>
+          </div>
+          <div v-if="importResult.errors.length > 0" class="import-errors">
+            <ul class="import-errors__list">
+              <li v-for="(err, idx) in importResult.errors.slice(0, 10)" :key="idx">{{ err }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="slide-form__footer">
+          <KButton type="button" variant="ghost" @click="closeImport">{{ t('btn.cancel') }}</KButton>
+          <KButton
+            v-if="importPreview && !importResult"
+            variant="primary"
+            :loading="importLoading"
+            :disabled="!importPreview.rows.length"
+            @click="executeImport"
+          >{{ t('customers.import_execute') }}</KButton>
+        </div>
+      </div>
+    </KSlideOver>
   </div>
 </template>
 
 <style scoped>
 .customers-view { display: flex; flex-direction: column; gap: var(--space-4); }
 
-.page-header { display: flex; align-items: center; justify-content: flex-end; }
+.page-header { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
+.page-header__actions { display: flex; gap: var(--space-2); margin-right: auto; }
+
+/* Advanced Filters Panel */
+.advanced-filters-panel {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.advanced-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.filter-date-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.filter-date-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+/* Column Visibility Toggle */
+.columns-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.column-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+/* Panel transition */
+.panel-slide-enter-active,
+.panel-slide-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-out),
+              max-height var(--duration-normal) var(--ease-out);
+  overflow: hidden;
+}
+
+.panel-slide-enter-from,
+.panel-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.panel-slide-enter-to,
+.panel-slide-leave-from {
+  max-height: 200px;
+}
+
+/* Slide form hint */
+.slide-form__hint {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  margin: 0;
+}
 
 /* Main page-level tabs (Users | Resellers) */
 .main-tabs {
@@ -1149,5 +1814,257 @@ onMounted(async () => {
   color: var(--color-text-secondary, #64748b);
   font-size: 0.8rem;
   margin: 0;
+}
+
+/* Tag Select in Bulk Assign */
+.tag-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: 8px;
+  background: var(--color-surface, #0b1120);
+}
+
+.tag-select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.tag-select-item:hover {
+  background: var(--color-surface-2);
+}
+
+.tag-select-item--active {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.tag-radio {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary, #3b82f6);
+}
+
+.tag-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.tag-select-name {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+/* Import Slide-Over */
+.import-mode-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-btn:not(:last-child) {
+  border-right: 1px solid var(--color-border);
+}
+
+.mode-btn--active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.import-file-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.import-file-label {
+  display: block;
+  cursor: pointer;
+}
+
+.import-file-input {
+  display: none;
+}
+
+.import-file-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  transition: border-color 0.15s;
+}
+
+.import-file-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.import-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.import-paste-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.import-textarea {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: monospace;
+  font-size: var(--text-xs);
+  resize: vertical;
+}
+
+.import-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-subtle);
+}
+
+.import-preview {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.import-preview__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+.import-preview__count {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.import-errors {
+  margin-top: var(--space-2);
+}
+
+.import-errors__title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-danger, #ef4444);
+  margin: 0 0 var(--space-1);
+}
+
+.import-errors__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-danger, #ef4444);
+}
+
+.import-errors__list li {
+  padding: 2px 0;
+}
+
+.import-preview-table {
+  margin-top: var(--space-3);
+  overflow-x: auto;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.preview-table th,
+.preview-table td {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.preview-table th {
+  background: var(--color-surface);
+  font-weight: 600;
+}
+
+.preview-more {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.import-result {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.import-result__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+.import-result__stats {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.stat {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.stat--success {
+  color: var(--color-success, #22c55e);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.stat--info {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.stat--warn {
+  color: var(--color-warning, #f59e0b);
+  background: rgba(245, 158, 11, 0.1);
 }
 </style>

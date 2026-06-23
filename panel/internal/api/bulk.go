@@ -10,15 +10,9 @@ import (
 
 // BulkActionRequest represents a request to perform bulk operations on customers.
 type BulkActionRequest struct {
-	CustomerIDs []int64 `json:"customer_ids"`
-	Action      string  `json:"action"` // "enable", "disable", "delete", "traffic_reset"
-}
-
-// BulkActionResponse represents the result of a bulk operation.
-type BulkActionResponse struct {
-	OK        bool          `json:"ok"`
-	Succeeded []int64       `json:"succeeded"`
-	Failed    []BulkFailure `json:"failed"`
+	CustomerIDs []int64        `json:"customer_ids"`
+	Action      string         `json:"action"` // "enable", "disable", "delete", "traffic_reset", "extend", "change_plan", "assign_tag"
+	Params      map[string]any `json:"params"`
 }
 
 // BulkFailure represents a single failure within a bulk operation.
@@ -34,19 +28,20 @@ func (s *Server) customersBulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limitBody(w, r, maxJSONBody)
 	var req BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
 		return
 	}
 
 	if len(req.CustomerIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "bad_request", "customer_ids is required")
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "customer_ids_required"})
 		return
 	}
 
 	if len(req.CustomerIDs) > 200 {
-		writeError(w, http.StatusBadRequest, "bulk_limit_exceeded", "bulk actions are limited to 200 customers at a time")
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bulk_limit_exceeded"})
 		return
 	}
 
@@ -55,17 +50,26 @@ func (s *Server) customersBulk(w http.ResponseWriter, r *http.Request) {
 		"disable":       true,
 		"delete":        true,
 		"traffic_reset": true,
+		"extend":        true,
+		"change_plan":   true,
+		"assign_tag":    true,
 	}
 	if !validActions[req.Action] {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid action: must be enable, disable, delete, or traffic_reset")
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_action"})
+		return
+	}
+
+	// Validate params for actions that require them
+	if err := s.validateBulkParams(req.Action, req.Params); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 
 	actor, _, _ := s.currentAdmin(r)
 	ip := clientIP(r)
 
-	succeeded := []int64{}
-	failed := []BulkFailure{}
+	succeeded := 0
+	failures := []BulkFailure{}
 
 	for _, customerID := range req.CustomerIDs {
 		var err error
@@ -78,22 +82,35 @@ func (s *Server) customersBulk(w http.ResponseWriter, r *http.Request) {
 			err = s.bulkDelete(customerID, actor, ip)
 		case "traffic_reset":
 			err = s.bulkTrafficReset(customerID, actor, ip)
+		case "extend":
+			err = s.bulkExtend(customerID, req.Params, actor, ip)
+		case "change_plan":
+			err = s.bulkChangePlan(customerID, req.Params, actor, ip)
+		case "assign_tag":
+			err = s.bulkAssignTag(customerID, req.Params, actor, ip)
 		}
 
 		if err != nil {
-			failed = append(failed, BulkFailure{
+			failures = append(failures, BulkFailure{
 				CustomerID: customerID,
 				Error:      err.Error(),
 			})
 		} else {
-			succeeded = append(succeeded, customerID)
+			succeeded++
 		}
 	}
 
-	writeJSON(w, BulkActionResponse{
-		OK:        len(failed) == 0,
-		Succeeded: succeeded,
-		Failed:    failed,
+	// Log audit trail
+	s.logAudit(actor, "customers.bulk_"+req.Action, "customer", "", nil, map[string]any{
+		"count": len(req.CustomerIDs),
+	}, ip)
+
+	writeJSON(w, map[string]any{
+		"ok":        true,
+		"total":     len(req.CustomerIDs),
+		"succeeded": succeeded,
+		"failed":    len(failures),
+		"failures":  failures,
 	})
 }
 
@@ -186,5 +203,133 @@ func (s *Server) bulkTrafficReset(customerID int64, actor, ip string) error {
 	// 5. Insert audit_log entry
 	s.logAudit(actor, "customer.traffic_reset", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{"username": username, "bulk": true}, ip)
 
+	return nil
+}
+
+// validateBulkParams validates params for actions that require them in the basic bulk endpoint.
+func (s *Server) validateBulkParams(action string, params map[string]any) error {
+	switch action {
+	case "extend":
+		days, ok := params["days"]
+		if !ok {
+			return fmt.Errorf("params_days_required")
+		}
+		d, valid := toPositiveInt(days)
+		if !valid || d <= 0 {
+			return fmt.Errorf("params_days_invalid")
+		}
+	case "change_plan":
+		planID, ok := params["plan_id"]
+		if !ok {
+			return fmt.Errorf("params_plan_id_required")
+		}
+		p, valid := toPositiveInt(planID)
+		if !valid || p <= 0 {
+			return fmt.Errorf("params_plan_id_invalid")
+		}
+	case "assign_tag":
+		tagID, ok := params["tag_id"]
+		if !ok {
+			return fmt.Errorf("params_tag_id_required")
+		}
+		t, valid := toPositiveInt(tagID)
+		if !valid || t <= 0 {
+			return fmt.Errorf("params_tag_id_invalid")
+		}
+	}
+	return nil
+}
+
+// bulkExtend extends a customer's subscription by N days.
+func (s *Server) bulkExtend(customerID int64, params map[string]any, actor, ip string) error {
+	username, err := s.customerUsername(customerID)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("customer not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	days, _ := toPositiveInt(params["days"])
+
+	res, err := s.DB.Exec(
+		`UPDATE subscriptions SET expires_at = DATE_ADD(expires_at, INTERVAL ? DAY) WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`,
+		days, customerID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to extend subscription: %v", err)
+	}
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("no active subscription found")
+	}
+
+	s.logAudit(actor, "customer.subscription_extended", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{
+		"username": username, "days": days, "bulk": true,
+	}, ip)
+	return nil
+}
+
+// bulkChangePlan changes a customer's plan.
+func (s *Server) bulkChangePlan(customerID int64, params map[string]any, actor, ip string) error {
+	username, err := s.customerUsername(customerID)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("customer not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	planID, _ := toPositiveInt(params["plan_id"])
+
+	// Verify plan exists
+	var planExists int
+	err = s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=? AND is_active=1 LIMIT 1`, planID).Scan(&planExists)
+	if err != nil {
+		return fmt.Errorf("plan not found or inactive")
+	}
+
+	_, err = s.DB.Exec(`UPDATE customers SET plan_id=? WHERE id=? AND deleted_at IS NULL`, planID, customerID)
+	if err != nil {
+		return fmt.Errorf("failed to change plan: %v", err)
+	}
+
+	// Update active subscription's plan reference
+	_, _ = s.DB.Exec(`UPDATE subscriptions SET plan_id=? WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`, planID, customerID)
+
+	s.logAudit(actor, "customer.plan_changed", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{
+		"username": username, "plan_id": planID, "bulk": true,
+	}, ip)
+	return nil
+}
+
+// bulkAssignTag assigns a tag to a customer (INSERT IGNORE for idempotency).
+func (s *Server) bulkAssignTag(customerID int64, params map[string]any, actor, ip string) error {
+	username, err := s.customerUsername(customerID)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("customer not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	tagID, _ := toPositiveInt(params["tag_id"])
+
+	// Verify tag exists
+	var tagExists int
+	err = s.DB.QueryRow(`SELECT 1 FROM user_tags WHERE id=? LIMIT 1`, tagID).Scan(&tagExists)
+	if err != nil {
+		return fmt.Errorf("tag not found")
+	}
+
+	// INSERT IGNORE for idempotency — no error if already assigned
+	_, err = s.DB.Exec(`INSERT IGNORE INTO customer_tags (customer_id, tag_id) VALUES (?, ?)`, customerID, tagID)
+	if err != nil {
+		return fmt.Errorf("failed to assign tag: %v", err)
+	}
+
+	s.logAudit(actor, "customer.tag_assigned", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{
+		"username": username, "tag_id": tagID, "bulk": true,
+	}, ip)
 	return nil
 }
