@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 #
-# KorisPanel Installer
+# KorisPanel Unified Installer
 # Usage: bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
+#
+# Installs one of:
+#   1) koris     — Full panel (all features)
+#   2) korislite — Lite panel (OpenVPN/L2TP, users, nodes, settings only)
+#   3) knode     — Node agent only (for VPN servers managed by the panel)
 #
 
 set -e
@@ -22,6 +27,7 @@ gen_secret() { openssl rand -hex "$1" 2>/dev/null || head -c "$1" /dev/urandom |
 OS=$ID
 
 REPO="anonysec/panel"
+KNODE_REPO="anonysec/knode"
 BRANCH="main"
 INSTALL_DIR="/opt/KorisPanel"
 CONFIG_DIR="/etc/koris"
@@ -36,11 +42,121 @@ cat << 'EOF'
   ██╔═██╗ ██║   ██║██╔══██╗██║╚════██║
   ██║  ██╗╚██████╔╝██║  ██║██║███████║
   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝
-                         Panel Installer
+                      Unified Installer
 EOF
 echo -e "${plain}"
 echo -e "  ${cyan}OS:${plain} ${PRETTY_NAME:-$OS} ($(uname -m))"
 echo ""
+
+# ─── Edition Selection ───────────────────────────────────────────────
+echo -e "${bold}What do you want to install?${plain}"
+echo ""
+echo -e "  ${cyan}1)${plain} koris      — Full panel (billing, tickets, xray, reseller, all features)"
+echo -e "  ${cyan}2)${plain} korislite  — Lite panel (OpenVPN, L2TP, users, nodes, settings)"
+echo -e "  ${cyan}3)${plain} knode      — Node agent only (install on VPN servers)"
+echo ""
+read -rp "$(echo -e "${cyan}Choose [1/2/3]: ${plain}")" EDITION_CHOICE </dev/tty
+case "$EDITION_CHOICE" in
+    1) EDITION="full"; BINARY_NAME="koris"; SERVICE_NAME="koris"; BUILD_TAGS="" ;;
+    2) EDITION="lite"; BINARY_NAME="korislite"; SERVICE_NAME="korislite"; BUILD_TAGS="-tags lite" ;;
+    3) EDITION="node"; BINARY_NAME="knode"; SERVICE_NAME="knode" ;;
+    *) fatal "Invalid choice. Run the script again." ;;
+esac
+echo ""
+info "Selected: ${bold}${BINARY_NAME}${plain}"
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════
+# NODE AGENT ONLY
+# ═══════════════════════════════════════════════════════════════════════
+if [[ "$EDITION" == "node" ]]; then
+    read -rp "$(echo -e "${cyan}Panel URL (e.g. https://panel.example.com): ${plain}")" PANEL_URL </dev/tty
+    [[ -z "$PANEL_URL" ]] && fatal "Panel URL is required."
+    read -rp "$(echo -e "${cyan}Node token (from panel admin): ${plain}")" NODE_TOKEN </dev/tty
+    [[ -z "$NODE_TOKEN" ]] && fatal "Node token is required."
+    read -rp "$(echo -e "${cyan}Node name [$(hostname -s)]: ${plain}")" NODE_NAME </dev/tty
+    NODE_NAME="${NODE_NAME:-$(hostname -s)}"
+
+    info "Installing dependencies..."
+    export DEBIAN_FRONTEND=noninteractive
+    case "$OS" in
+        ubuntu|debian)
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq git curl golang-go openvpn wireguard-tools strongswan xl2tpd iproute2 >/dev/null 2>&1
+            ;;
+        centos|almalinux|rocky|rhel|fedora)
+            dnf install -y -q git curl golang openvpn wireguard-tools strongswan xl2tpd iproute >/dev/null 2>&1
+            ;;
+        *) fatal "Unsupported OS: $OS" ;;
+    esac
+
+    info "Downloading knode..."
+    KNODE_DIR="/opt/knode"
+    if [[ -d "$KNODE_DIR/.git" ]]; then
+        cd "$KNODE_DIR" && git fetch origin master --depth=1 >/dev/null 2>&1 && git reset --hard origin/master >/dev/null 2>&1
+    else
+        rm -rf "$KNODE_DIR"
+        git clone --depth=1 "https://github.com/${KNODE_REPO}.git" "$KNODE_DIR" >/dev/null 2>&1
+    fi
+    cd "$KNODE_DIR"
+
+    info "Building knode..."
+    go build -ldflags="-s -w" -o /usr/local/bin/knode ./cmd/node/
+    chmod +x /usr/local/bin/knode
+
+    mkdir -p /etc/knode
+    cat > /etc/knode/node.env <<NENV
+PANEL_URL='${PANEL_URL}'
+NODE_TOKEN='${NODE_TOKEN}'
+NODE_NAME='${NODE_NAME}'
+NENV
+    chmod 600 /etc/knode/node.env
+
+    cat > /etc/systemd/system/knode.service <<SVC
+[Unit]
+Description=Koris Node Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/knode/node.env
+ExecStart=/usr/local/bin/knode
+Restart=always
+RestartSec=3
+User=root
+WorkingDirectory=/opt/knode
+
+[Install]
+WantedBy=multi-user.target
+SVC
+
+    systemctl daemon-reload
+    systemctl enable --now knode >/dev/null 2>&1
+    sleep 2
+
+    if systemctl is-active knode >/dev/null 2>&1; then
+        info "knode is ${green}running${plain}"
+    else
+        warn "knode may have failed to start. Check: journalctl -u knode -n 20"
+    fi
+
+    echo ""
+    echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
+    echo -e "${bold}${green}     knode Installed Successfully!${plain}"
+    echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
+    echo -e "  ${cyan}Panel URL:${plain}   ${PANEL_URL}"
+    echo -e "  ${cyan}Node Name:${plain}  ${NODE_NAME}"
+    echo -e "  ${cyan}Config:${plain}     /etc/knode/node.env"
+    echo -e "  ${cyan}Logs:${plain}       journalctl -u knode -f"
+    echo -e "  ${cyan}Restart:${plain}    systemctl restart knode"
+    echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
+    exit 0
+fi
+
+# ═══════════════════════════════════════════════════════════════════════
+# PANEL INSTALL (koris or korislite)
+# ═══════════════════════════════════════════════════════════════════════
 
 # Config prompts
 read -rp "$(echo -e "${cyan}Panel port [8080]: ${plain}")" PANEL_PORT </dev/tty; PANEL_PORT="${PANEL_PORT:-8080}"
@@ -66,12 +182,12 @@ case "$OS" in
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq git curl openssl ca-certificates mariadb-server \
             freeradius freeradius-mysql freeradius-utils nginx golang-go iproute2 \
-            wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx haproxy >/dev/null 2>&1
+            wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
         ;;
     centos|almalinux|rocky|rhel|fedora)
         dnf install -y -q git curl openssl ca-certificates mariadb-server \
             freeradius freeradius-mysql freeradius-utils nginx golang iproute \
-            wireguard-tools openvpn strongswan xl2tpd certbot python3-certbot-nginx haproxy >/dev/null 2>&1
+            wireguard-tools openvpn strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
         ;;
     *) fatal "Unsupported OS: $OS" ;;
 esac
@@ -96,23 +212,23 @@ if [[ -f "$SCHEMA" ]]; then
 fi
 
 # MariaDB performance tuning
+TOTAL_RAM_MB=$(free -m | awk '/Mem:/{print $2}')
+INNODB_POOL="256M"
+[[ $TOTAL_RAM_MB -ge 2000 ]] && INNODB_POOL="512M"
+[[ $TOTAL_RAM_MB -ge 4000 ]] && INNODB_POOL="1G"
 cat > /etc/mysql/mariadb.conf.d/99-koris-performance.cnf <<MYCNF
 [mysqld]
-innodb_buffer_pool_size = 1G
-innodb_log_file_size = 256M
+innodb_buffer_pool_size = ${INNODB_POOL}
+innodb_log_file_size = 128M
 innodb_flush_log_at_trx_commit = 2
 innodb_flush_method = O_DIRECT
-max_connections = 300
-thread_cache_size = 32
-tmp_table_size = 64M
-max_heap_table_size = 64M
+max_connections = 200
+thread_cache_size = 16
 skip-name-resolve
 MYCNF
-
-# MariaDB security: bind to localhost only
 sed -i 's/^bind-address\s*=.*/bind-address = 127.0.0.1/' /etc/mysql/mariadb.conf.d/50-server.cnf 2>/dev/null || true
 systemctl restart mariadb >/dev/null 2>&1
-info "Database ready (optimized, bound to localhost)."
+info "Database ready."
 
 # FreeRADIUS
 info "Configuring FreeRADIUS..."
@@ -126,7 +242,7 @@ if [[ -f "$SQL_MOD" ]]; then
     systemctl restart freeradius >/dev/null 2>&1 || true
 fi
 
-# Clone/Update repo
+# Clone/Update panel repo
 info "Downloading KorisPanel..."
 if [[ -d "$INSTALL_DIR/.git" ]]; then
     cd "$INSTALL_DIR" && git fetch origin "$BRANCH" --depth=1 >/dev/null 2>&1 && git reset --hard "origin/$BRANCH" >/dev/null 2>&1
@@ -138,28 +254,27 @@ cd "$INSTALL_DIR"
 VERSION="$(cat VERSION 2>/dev/null || echo dev)"
 info "Source ready (v${VERSION})."
 
-# Build binary
-info "Building panel binary..."
+# Build panel binary
+info "Building ${BINARY_NAME}..."
 go mod tidy >/dev/null 2>&1
-go build -ldflags="-s -w" -o /usr/local/bin/koris ./panel/cmd/panel
-chmod +x /usr/local/bin/koris
+go build -ldflags="-s -w" ${BUILD_TAGS} -o "/usr/local/bin/${BINARY_NAME}" ./panel/cmd/panel/
+chmod +x "/usr/local/bin/${BINARY_NAME}"
+info "${BINARY_NAME} built."
 
-info "Building node agent..."
-go build -ldflags="-s -w" -o /usr/local/bin/knode ./node/cmd/node
+# Build knode (panel server also acts as a node)
+info "Building knode..."
+KNODE_DIR="/opt/knode"
+if [[ -d "$KNODE_DIR/.git" ]]; then
+    cd "$KNODE_DIR" && git fetch origin master --depth=1 >/dev/null 2>&1 && git reset --hard origin/master >/dev/null 2>&1
+else
+    rm -rf "$KNODE_DIR"
+    git clone --depth=1 "https://github.com/${KNODE_REPO}.git" "$KNODE_DIR" >/dev/null 2>&1
+fi
+cd "$KNODE_DIR"
+go build -ldflags="-s -w" -o /usr/local/bin/knode ./cmd/node/
 chmod +x /usr/local/bin/knode
-
-# Frontend: www/ directories are pre-built and committed to git.
-# No npm needed on the server — the cloned repo already has the built assets.
-if [ ! -f "$INSTALL_DIR/panel/web/admin/www/index.html" ]; then
-    warn "panel/web/admin/www/index.html not found in repo — dashboard may not work."
-fi
-if [ ! -f "$INSTALL_DIR/panel/web/portal/www/index.html" ]; then
-    warn "panel/web/portal/www/index.html not found in repo — portal may not work."
-fi
-
-# Install files
-mkdir -p /opt/KorisPanel/panel
-cp -a "$INSTALL_DIR/panel/migrations" /opt/KorisPanel/panel/migrations 2>/dev/null || true
+cd "$INSTALL_DIR"
+info "knode built."
 
 # VPN hook scripts
 if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then
@@ -187,27 +302,26 @@ ENV
 chmod 600 "${CONFIG_DIR}/panel.env"
 
 # Systemd — Panel
-info "Installing panel service..."
-cp "$INSTALL_DIR/panel/systemd/koris.service" /etc/systemd/system/koris.service 2>/dev/null || cat > /etc/systemd/system/koris.service <<SVC
+cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<SVC
 [Unit]
-Description=Koris Next Panel
+Description=Koris Panel (${EDITION})
 After=network-online.target mariadb.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 EnvironmentFile=${CONFIG_DIR}/panel.env
-ExecStart=/usr/local/bin/koris
+ExecStart=/usr/local/bin/${BINARY_NAME}
 Restart=always
 RestartSec=3
 User=root
+WorkingDirectory=/opt/KorisPanel
 
 [Install]
 WantedBy=multi-user.target
 SVC
 
-# Systemd — Node Agent
-info "Installing node agent service..."
+# Systemd — Node Agent (local)
 NODE_TOKEN="kn_$(gen_secret 24)"
 mkdir -p /etc/knode
 cat > /etc/knode/node.env <<NENV
@@ -219,8 +333,8 @@ chmod 600 /etc/knode/node.env
 
 cat > /etc/systemd/system/knode.service <<SVC
 [Unit]
-Description=Koris Next Node Agent
-After=network-online.target
+Description=Koris Node Agent
+After=network-online.target ${SERVICE_NAME}.service
 Wants=network-online.target
 
 [Service]
@@ -230,36 +344,33 @@ ExecStart=/usr/local/bin/knode
 Restart=always
 RestartSec=3
 User=root
-WorkingDirectory=/opt/KorisPanel
+WorkingDirectory=/opt/knode
 
 [Install]
 WantedBy=multi-user.target
 SVC
 
 systemctl daemon-reload
-systemctl enable --now panel >/dev/null 2>&1
+systemctl enable --now "${SERVICE_NAME}" >/dev/null 2>&1
 systemctl enable --now knode >/dev/null 2>&1
-systemctl restart koris
 sleep 2
 
-# Health
+# Health check
 if curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null 2>&1; then
     info "Health check ${green}PASSED${plain}"
 else
     warn "Health check failed — checking logs:"
-    journalctl -u koris -n 20 --no-pager
+    journalctl -u "${SERVICE_NAME}" -n 20 --no-pager
 fi
 
 # Nginx
-info "Configuring Nginx with HTTPS..."
-# Generate self-signed cert if no cert exists
+info "Configuring Nginx..."
 if [[ ! -f "${CONFIG_DIR}/cert.pem" ]]; then
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
         -keyout "${CONFIG_DIR}/key.pem" -out "${CONFIG_DIR}/cert.pem" \
         -subj "/CN=${DOMAIN}" >/dev/null 2>&1
-    info "Self-signed SSL certificate generated."
 fi
-cat > /etc/nginx/sites-available/koris-panel.conf <<NGINX
+cat > /etc/nginx/sites-available/koris.conf <<NGINX
 server {
     listen 80 default_server;
     server_name ${DOMAIN};
@@ -284,89 +395,42 @@ server {
 }
 NGINX
 rm -f /etc/nginx/sites-enabled/default 2>/dev/null
-ln -sf /etc/nginx/sites-available/koris-panel.conf /etc/nginx/sites-enabled/koris-panel.conf
+ln -sf /etc/nginx/sites-available/koris.conf /etc/nginx/sites-enabled/koris.conf
 nginx -t >/dev/null 2>&1 && systemctl reload nginx
+
+# Swap
+if ! swapon --show | grep -q '/'; then
+    SWAP_SIZE="2G"
+    [[ $TOTAL_RAM_MB -ge 4000 ]] && SWAP_SIZE="4G"
+    fallocate -l "$SWAP_SIZE" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    chmod 600 /swapfile && mkswap /swapfile >/dev/null 2>&1 && swapon /swapfile
+    grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    sysctl -w vm.swappiness=10 >/dev/null 2>&1
+    info "Swap configured (${SWAP_SIZE})."
+fi
 
 # Management CLI
 cp "$INSTALL_DIR/koris.sh" /usr/local/bin/koris 2>/dev/null || true
 chmod +x /usr/local/bin/koris 2>/dev/null || true
 
-# Security hardening
-info "Applying security hardening..."
-
-# Swap (2GB) if none exists
-if ! swapon --show | grep -q '/'; then
-    TOTAL_RAM_MB=$(free -m | awk '/Mem:/{print $2}')
-    SWAP_SIZE="2G"
-    [[ $TOTAL_RAM_MB -ge 8000 ]] && SWAP_SIZE="4G"
-    fallocate -l "$SWAP_SIZE" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_SIZE%G}000 status=none
-    chmod 600 /swapfile
-    mkswap /swapfile >/dev/null 2>&1
-    swapon /swapfile
-    grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
-    # Tune swappiness for a server workload
-    sysctl -w vm.swappiness=10 >/dev/null 2>&1
-    grep -q 'vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' >> /etc/sysctl.conf
-    info "Swap configured (${SWAP_SIZE})."
-fi
-
-# fail2ban
-if ! command -v fail2ban-client >/dev/null 2>&1; then
-    apt-get install -y -qq fail2ban >/dev/null 2>&1 || dnf install -y -q fail2ban >/dev/null 2>&1 || true
-fi
-if command -v fail2ban-client >/dev/null 2>&1; then
-    cat > /etc/fail2ban/jail.local <<F2B
-[DEFAULT]
-bantime = 3600
-findtime = 600
-maxretry = 5
-ignoreip = 127.0.0.1/8
-
-[sshd]
-enabled = true
-port = ssh
-maxretry = 3
-bantime = 7200
-
-[nginx-limit-req]
-enabled = true
-port = http,https
-logpath = /var/log/nginx/error.log
-maxretry = 10
-findtime = 60
-bantime = 600
-
-[nginx-botsearch]
-enabled = true
-port = http,https
-logpath = /var/log/nginx/access.log
-maxretry = 10
-findtime = 60
-bantime = 3600
-F2B
-    systemctl enable --now fail2ban >/dev/null 2>&1
-    info "fail2ban installed (SSH + Nginx jails)."
-fi
-
-info "Security hardening complete."
-
 # Result
 SERVER_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 echo ""
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
-echo -e "${bold}${green}     KorisPanel Installed Successfully!${plain}"
+echo -e "${bold}${green}     ${BINARY_NAME} Installed Successfully!${plain}"
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
-echo -e "  ${cyan}Dashboard:${plain}  http://${SERVER_IP}/dashboard/"
-echo -e "  ${cyan}Portal:${plain}     http://${SERVER_IP}/portal/"
+echo -e "  ${cyan}Edition:${plain}    ${EDITION}"
+echo -e "  ${cyan}Dashboard:${plain}  https://${SERVER_IP}/dashboard/"
+echo -e "  ${cyan}Portal:${plain}     https://${SERVER_IP}/portal/"
 echo -e "  ${cyan}Setup Key:${plain}  ${yellow}${SETUP_KEY}${plain}"
 echo -e "  ${cyan}DB Pass:${plain}    ${DB_PASS}"
 echo -e "  ${cyan}Node Token:${plain} ${NODE_TOKEN}"
 echo -e "  ${cyan}Version:${plain}    ${VERSION}"
 echo -e "${bold}${green}───────────────────────────────────────────────${plain}"
 echo -e "  ${cyan}Manage:${plain}     koris"
-echo -e "  ${cyan}SSL:${plain}        koris ssl"
-echo -e "  ${cyan}Commands:${plain}   koris status|restart|update|logs|uninstall"
+echo -e "  ${cyan}SSL:${plain}        certbot --nginx -d ${DOMAIN}"
+echo -e "  ${cyan}Logs:${plain}       journalctl -u ${SERVICE_NAME} -f"
+echo -e "  ${cyan}Restart:${plain}    systemctl restart ${SERVICE_NAME}"
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
 echo ""
-echo -e "${yellow}Open the Dashboard and use the Setup Key to create your admin account.${plain}"
-echo -e "${yellow}SSL: run 'koris ssl' to setup HTTPS with Let's Encrypt.${plain}"
+echo -e "${yellow}Open the Dashboard and use the Setup Key above to create your admin account.${plain}"
