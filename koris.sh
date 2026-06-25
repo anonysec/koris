@@ -12,17 +12,57 @@ error() { echo -e "${red}[-]${plain} $*"; }
 INSTALL_DIR="/opt/KorisPanel"
 PANEL_ENV="/etc/koris/panel.env"
 NODE_ENV="/etc/knode/node.env"
+COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
 
-is_panel() { [[ -f /usr/local/bin/koris && -f "$PANEL_ENV" ]]; }
-is_node()  { [[ -f /usr/local/bin/knode && -f "$NODE_ENV" ]]; }
+is_docker() { [[ -f "$COMPOSE_FILE" ]] && command -v docker &>/dev/null; }
+is_panel() { is_docker || [[ -f /usr/local/bin/koris && -f "$PANEL_ENV" ]]; }
+is_node()  { [[ -f /usr/local/bin/knode && -f "$NODE_ENV" ]] || docker ps --format '{{.Names}}' 2>/dev/null | grep -qx knode; }
 get_version() { cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "?"; }
 
-panel_status() { systemctl is-active koris 2>/dev/null || echo "not installed"; }
-node_status()  { systemctl is-active knode 2>/dev/null || echo "not installed"; }
+panel_status() {
+    if is_docker; then
+        docker inspect -f '{{.State.Status}}' koris 2>/dev/null || echo "not running"
+    else
+        systemctl is-active koris 2>/dev/null || echo "not installed"
+    fi
+}
+node_status() {
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx knode; then
+        echo "running (docker)"
+    elif systemctl is-active knode 2>/dev/null; then
+        echo "running"
+    else
+        echo "not running"
+    fi
+}
 
-cmd_start()   { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl start koris && info "Panel started"; is_node && systemctl start knode && info "Node started"; }
-cmd_stop()    { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl stop koris && info "Panel stopped"; is_node && systemctl stop knode && info "Node stopped"; }
-cmd_restart() { [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }; is_panel && systemctl restart koris && info "Panel restarted"; is_node && systemctl restart knode && info "Node restarted"; }
+cmd_start() {
+    [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }
+    if is_docker; then
+        cd "$INSTALL_DIR" && docker compose up -d && info "Panel started"
+    else
+        systemctl start koris && info "Panel started"
+        systemctl start knode 2>/dev/null && info "Node started"
+    fi
+}
+cmd_stop() {
+    [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }
+    if is_docker; then
+        cd "$INSTALL_DIR" && docker compose down && info "Panel stopped"
+    else
+        systemctl stop koris && info "Panel stopped"
+        systemctl stop knode 2>/dev/null && info "Node stopped"
+    fi
+}
+cmd_restart() {
+    [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }
+    if is_docker; then
+        cd "$INSTALL_DIR" && docker compose restart && info "Panel restarted"
+    else
+        systemctl restart koris && info "Panel restarted"
+        systemctl restart knode 2>/dev/null && info "Node restarted"
+    fi
+}
 
 cmd_status() {
     echo -e "${bold}${blue}KorisPanel${plain} v$(get_version)"
@@ -41,13 +81,20 @@ cmd_status() {
 }
 
 cmd_logs() {
-    is_panel && { echo -e "${cyan}=== Panel ===${plain}"; journalctl -u koris -n 50 --no-pager; }
-    is_node  && { echo -e "${cyan}=== Node ===${plain}"; journalctl -u knode -n 50 --no-pager; }
+    if is_docker; then
+        cd "$INSTALL_DIR" && docker compose logs --tail 50
+    else
+        is_panel && { echo -e "${cyan}=== Panel ===${plain}"; journalctl -u koris -n 50 --no-pager; }
+        is_node  && { echo -e "${cyan}=== Node ===${plain}"; journalctl -u knode -n 50 --no-pager; }
+    fi
 }
 
 cmd_follow() {
-    is_panel && exec journalctl -u koris -f
-    is_node  && exec journalctl -u knode -f
+    if is_docker; then
+        cd "$INSTALL_DIR" && exec docker compose logs -f
+    else
+        is_panel && exec journalctl -u koris -f
+    fi
 }
 
 cmd_update() {
