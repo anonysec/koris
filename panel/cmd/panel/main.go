@@ -1078,13 +1078,15 @@ func main() {
 		// New built-in TLS mode: autocert or custom cert/key
 		logger.Info("tls", "PANEL_TLS_ENABLED=true — starting built-in TLS", map[string]any{"addr": cfg.TLSAddr})
 
-		// Start the plain HTTP server in the background (for any non-TLS traffic or fallback)
-		go func() {
-			logger.Info("main", "HTTP listener (fallback/internal)", map[string]any{"addr": cfg.Addr})
-			if err := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); err != nil {
-				logger.Error("main", "HTTP server failed", map[string]any{"error": err.Error()})
-			}
-		}()
+		// Only start HTTP fallback if it's on a different port than TLS
+		if cfg.Addr != cfg.TLSAddr {
+			go func() {
+				logger.Info("main", "HTTP listener (fallback/internal)", map[string]any{"addr": cfg.Addr})
+				if err := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); err != nil {
+					logger.Error("main", "HTTP server failed", map[string]any{"error": err.Error()})
+				}
+			}()
+		}
 
 		// startTLSListener blocks — it handles autocert or custom cert mode
 		startTLSListener(limiter.Middleware(handler), cfg)
