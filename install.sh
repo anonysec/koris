@@ -211,6 +211,11 @@ install_docker() {
     CERT_PATH="${CONFIG_DIR}/cert.pem"
     KEY_PATH="${CONFIG_DIR}/key.pem"
     log "Self-signed certificate generated for ${cert_cn}"
+  elif [[ "${TLS_MODE}" == "acme" ]]; then
+    # ACME mode: no cert generated — panel will obtain from Let's Encrypt on first start
+    # Just create the cache directory
+    mkdir -p "${CONFIG_DIR}/certs"
+    log "ACME (Let's Encrypt) mode — cert will be obtained on first start for ${DOMAIN}"
   fi
 
   cat > "${CONFIG_DIR}/panel.env" <<ENV
