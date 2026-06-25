@@ -23,12 +23,13 @@ func NewEnforcer(db *sql.DB) *Enforcer {
 func (e *Enforcer) EnforceConnLimit() {
 	// Get users with Simultaneous-Use > 0 who have more active sessions than allowed
 	rows, err := e.db.Query(`
-		SELECT r.username, CAST(r.value AS BIGINT) AS conn_limit,
-			(SELECT COUNT(*) FROM radacct WHERE username=r.username AND acctstoptime IS NULL) AS active
-		FROM radcheck r
-		JOIN customers c ON c.username = r.username AND c.status = 'active' AND c.deleted_at IS NULL
-		WHERE r.attribute = 'Simultaneous-Use' AND CAST(r.value AS BIGINT) > 0
-		HAVING active > conn_limit
+		SELECT sub.username, sub.conn_limit, sub.active FROM (
+			SELECT r.username, CAST(r.value AS BIGINT) AS conn_limit,
+				(SELECT COUNT(*) FROM radacct WHERE username=r.username AND acctstoptime IS NULL) AS active
+			FROM radcheck r
+			JOIN customers c ON c.username = r.username AND c.status = 'active' AND c.deleted_at IS NULL
+			WHERE r.attribute = 'Simultaneous-Use' AND CAST(r.value AS BIGINT) > 0
+		) sub WHERE sub.active > sub.conn_limit
 	`)
 	if err != nil {
 		log.Printf("[enforcer] query: %v", err)
