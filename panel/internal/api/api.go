@@ -1955,7 +1955,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 	}
 
 	var plan Plan
-	var active int
+	var active bool
 	if err := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=$1 LIMIT 1`, in.PlanID).Scan(&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active, &plan.SortOrder, new(sql.NullTime)); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
 		return
@@ -1963,8 +1963,8 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	plan.IsActive = active == 1
-	if active != 1 {
+	plan.IsActive = active
+	if !active {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "plan_inactive"})
 		return
 	}
@@ -2137,13 +2137,13 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 
 	// Get the new plan
 	var newPlan Plan
-	var active int
+	var active bool
 	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=$1`, in.PlanID).Scan(
 		&newPlan.ID, &newPlan.Name, &newPlan.DataGB, &newPlan.SpeedMbps, &newPlan.DurationDays, &newPlan.Price, &active); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
 		return
 	}
-	if active != 1 {
+	if !active {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "plan_inactive"})
 		return
 	}
@@ -2244,7 +2244,7 @@ func calculateProRatedRefund(paidAmount, dataGB float64, durationDays int, usedG
 // applyPlanDirectly applies a plan to a customer without wallet deduction (used after switch-plan refund).
 func (s *Server) applyPlanDirectly(customerID int64, username string, planID int64, r *http.Request) {
 	var plan Plan
-	var active int
+	var active bool
 	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=$1`, planID).Scan(
 		&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active); err != nil {
 		return
@@ -2496,17 +2496,17 @@ type planScanner interface {
 
 func scanPlan(row planScanner) (Plan, error) {
 	var p Plan
-	var active int
-	var disconnectOnZero int
-	var allowPasswordless int
+	var active bool
+	var disconnectOnZero bool
+	var allowPasswordless bool
 	var created sql.NullTime
 	var billingType sql.NullString
 	if err := row.Scan(&p.ID, &p.Name, &p.DataGB, &p.SpeedMbps, &p.DurationDays, &p.Price, &billingType, &p.PricePerGB, &p.PricePerDay, &disconnectOnZero, &allowPasswordless, &active, &p.SortOrder, &created); err != nil {
 		return p, err
 	}
-	p.IsActive = active == 1
-	p.DisconnectOnZero = disconnectOnZero == 1
-	p.AllowPasswordless = allowPasswordless == 1
+	p.IsActive = active
+	p.DisconnectOnZero = disconnectOnZero
+	p.AllowPasswordless = allowPasswordless
 	if billingType.Valid {
 		p.BillingType = billingType.String
 	} else {
@@ -3455,12 +3455,12 @@ type paymentMethodScanner interface{ Scan(dest ...any) error }
 
 func scanPaymentMethod(row paymentMethodScanner) (PaymentMethod, error) {
 	var method PaymentMethod
-	var active int
+	var active bool
 	var created sql.NullTime
 	if err := row.Scan(&method.ID, &method.Name, &method.Type, &method.Instructions, &active, &method.SortOrder, &created); err != nil {
 		return method, err
 	}
-	method.IsActive = active == 1
+	method.IsActive = active
 	if created.Valid {
 		method.CreatedAt = created.Time.Format(time.RFC3339)
 	}
@@ -4030,12 +4030,12 @@ func (s *Server) applyPlanIntentTx(tx *sql.Tx, username string, planID, paymentI
 		return err
 	}
 	var plan Plan
-	var active int
+	var active bool
 	var created sql.NullTime
 	if err := tx.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=$1 LIMIT 1`, planID).Scan(&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active, &plan.SortOrder, &created); err != nil {
 		return err
 	}
-	if active != 1 {
+	if !active {
 		return fmt.Errorf("plan_inactive")
 	}
 	var walletCredit float64
@@ -5422,9 +5422,9 @@ func (s *Server) currentAdmin(r *http.Request) (string, string, bool) {
 		return "", "", false
 	}
 	var role string
-	var active int
+	var active bool
 	err := s.DB.QueryRow(`SELECT role,is_active FROM admins WHERE username=$1 LIMIT 1`, username).Scan(&role, &active)
-	if err != nil || active != 1 {
+	if err != nil || !active {
 		return "", "", false
 	}
 	return username, role, true
@@ -6575,10 +6575,10 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 		list := []Reseller{}
 		for rows.Next() {
 			var res Reseller
-			var active int
+			var active bool
 			var created time.Time
 			if err := rows.Scan(&res.ID, &res.Username, &res.Role, &active, &res.Credit, &res.Avatar, &created); err == nil {
-				res.IsActive = active == 1
+				res.IsActive = active
 				res.CreatedAt = created.Format(time.RFC3339)
 				list = append(list, res)
 			}
@@ -7582,10 +7582,10 @@ func (s *Server) getNodeVPNConfigs(w http.ResponseWriter, nodeID int64) {
 	configs := []NodeVPNConfig{}
 	for rows.Next() {
 		var c NodeVPNConfig
-		var enabled int
+		var enabled bool
 		var extra []byte
 		if err := rows.Scan(&c.ID, &c.NodeID, &c.Protocol, &enabled, &c.Port, &c.Network, &extra); err == nil {
-			c.Enabled = enabled == 1
+			c.Enabled = enabled
 			c.Extra = extra
 			configs = append(configs, c)
 		}

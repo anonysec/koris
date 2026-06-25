@@ -57,7 +57,7 @@ func (s *Server) failoverProviderByID(w http.ResponseWriter, r *http.Request) {
 func (s *Server) testFailoverProvider(w http.ResponseWriter, r *http.Request, id int64) {
 	// Look up the provider
 	var providerType, apiTokenEncrypted, zoneID string
-	var isActive int
+	var isActive bool
 	err := s.DB.QueryRow(
 		`SELECT type, api_token_encrypted, zone_id, is_active FROM dns_providers WHERE id = $1 LIMIT 1`, id,
 	).Scan(&providerType, &apiTokenEncrypted, &zoneID, &isActive)
@@ -173,12 +173,12 @@ func (s *Server) listFailoverProviders(w http.ResponseWriter) {
 	providers := []DNSProvider{}
 	for rows.Next() {
 		var p DNSProvider
-		var isActive int
+		var isActive bool
 		if err := rows.Scan(&p.ID, &p.Name, &p.Type, &p.ZoneID, &p.AccountID, &isActive, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
-		p.IsActive = isActive == 1
+		p.IsActive = isActive
 		providers = append(providers, p)
 	}
 	writeJSON(w, map[string]any{"ok": true, "providers": providers})

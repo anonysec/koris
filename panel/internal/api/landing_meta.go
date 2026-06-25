@@ -46,9 +46,9 @@ func (s *Server) landingMetaHandler() http.Handler {
 		}
 
 		// Check landing_settings enabled flag
-		var enabled int
+		var enabled bool
 		err := s.DB.QueryRow(`SELECT enabled FROM landing_settings WHERE id=1`).Scan(&enabled)
-		if err != nil || enabled == 0 {
+		if err != nil || !enabled {
 			// Landing disabled — redirect to login
 			http.Redirect(w, r, "/portal/", http.StatusFound)
 			return

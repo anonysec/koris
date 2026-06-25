@@ -50,14 +50,14 @@ func (s *Server) listAntiDPIConfigs(w http.ResponseWriter, nodeID int64) {
 	var configs []antiDPIConfig
 	for rows.Next() {
 		var c antiDPIConfig
-		var isActive int
+		var isActive bool
 		var configStr string
 		if err := rows.Scan(&c.ID, &c.Technique, &configStr, &isActive, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			log.Printf("[antidpi] scan error: %v", err)
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
 		}
-		c.IsActive = isActive == 1
+		c.IsActive = isActive
 		c.ConfigJSON = json.RawMessage(configStr)
 		configs = append(configs, c)
 	}

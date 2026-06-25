@@ -67,14 +67,14 @@ func (s *Server) listGateways(w http.ResponseWriter, r *http.Request) {
 	var gateways []gateway
 	for rows.Next() {
 		var g gateway
-		var isActive int
+		var isActive bool
 		var configStr string
 		if err := rows.Scan(&g.ID, &g.Name, &g.DisplayName, &configStr, &isActive, &g.CreatedAt); err != nil {
 			log.Printf("[payment] scan gateway error: %v", err)
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
 		}
-		g.IsActive = isActive == 1
+		g.IsActive = isActive
 		g.ConfigJSON = json.RawMessage(configStr)
 		gateways = append(gateways, g)
 	}

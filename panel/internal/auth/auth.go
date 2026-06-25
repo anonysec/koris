@@ -61,7 +61,7 @@ func (s Service) CreateOwner(username, password string) error {
 func (s Service) LoginAdmin(username, password string) (bool, error) {
 	username = strings.TrimSpace(username)
 	var hash string
-	var active int
+	var active bool
 	err := s.DB.QueryRow(`SELECT password_hash,is_active FROM admins WHERE username=$1 LIMIT 1`, username).Scan(&hash, &active)
 	if err == sql.ErrNoRows {
 		return false, nil
@@ -69,7 +69,7 @@ func (s Service) LoginAdmin(username, password string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return active == 1 && CheckPassword(hash, password), nil
+	return active && CheckPassword(hash, password), nil
 }
 
 func MakeSession(username, secret string, ttl time.Duration) string {

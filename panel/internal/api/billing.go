@@ -50,12 +50,12 @@ func (s *Server) listPromoCodes(w http.ResponseWriter) {
 	codes := []PromoCode{}
 	for rows.Next() {
 		var p PromoCode
-		var active int
+		var active bool
 		var starts, expires, created sql.NullTime
 		if err := rows.Scan(&p.ID, &p.Code, &p.Type, &p.Value, &p.MaxUses, &p.UsedCount, &p.MinAmount, &p.ApplicablePlans, &starts, &expires, &active, &p.CreatedBy, &created); err != nil {
 			continue
 		}
-		p.IsActive = active == 1
+		p.IsActive = active
 		if starts.Valid {
 			p.StartsAt = starts.Time.Format(time.RFC3339)
 		}
@@ -187,7 +187,7 @@ func (s *Server) portalApplyPromo(w http.ResponseWriter, r *http.Request) {
 
 	// Look up promo code
 	var promo PromoCode
-	var active int
+	var active bool
 	var starts, expires sql.NullTime
 	err := s.DB.QueryRow(`SELECT id, code, type, value, max_uses, used_count, min_amount, is_active, starts_at, expires_at FROM promo_codes WHERE code=$1`, in.Code).Scan(
 		&promo.ID, &promo.Code, &promo.Type, &promo.Value, &promo.MaxUses, &promo.UsedCount, &promo.MinAmount, &active, &starts, &expires)
@@ -199,7 +199,7 @@ func (s *Server) portalApplyPromo(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	promo.IsActive = active == 1
+	promo.IsActive = active
 
 	// Validate
 	if !promo.IsActive {
