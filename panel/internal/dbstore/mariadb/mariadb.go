@@ -1,4 +1,4 @@
-// Package mariadb implements the dbstore.Store interface using MariaDB/MySQL
+﻿// Package mariadb implements the dbstore.Store interface using MariaDB/MySQL
 // via the go-sql-driver/mysql driver and standard database/sql.
 package mariadb
 
@@ -118,7 +118,7 @@ func (s *Store) Migrate(ctx context.Context, dir string) error {
 
 	for _, name := range names {
 		var exists int
-		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version=?`, name).Scan(&exists); err != nil {
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version=$1`, name).Scan(&exists); err != nil {
 			return fmt.Errorf("%w: check migration %s: %v", dbstore.ErrMigrationFailed, name, err)
 		}
 		if exists > 0 {
@@ -134,7 +134,7 @@ func (s *Store) Migrate(ctx context.Context, dir string) error {
 			return fmt.Errorf("%w: apply %s: %v", dbstore.ErrMigrationFailed, name, err)
 		}
 
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version) VALUES(?)`, name); err != nil {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version) VALUES($1)`, name); err != nil {
 			return fmt.Errorf("%w: record %s: %v", dbstore.ErrMigrationFailed, name, err)
 		}
 
@@ -175,7 +175,7 @@ func (s *Store) GetSession(ctx context.Context, token string) (*dbstore.Session,
 		SELECT token, admin_id, customer_id, data, ip_address, user_agent,
 		       created_at, expires_at, last_seen
 		FROM panel_sessions
-		WHERE token = ?
+		WHERE token = $1
 	`, token).Scan(
 		&sess.Token,
 		&sess.AdminID,
@@ -199,7 +199,7 @@ func (s *Store) GetSession(ctx context.Context, token string) (*dbstore.Session,
 	}
 
 	// Update last_seen on access.
-	_, _ = s.db.ExecContext(ctx, `UPDATE panel_sessions SET last_seen = ? WHERE token = ?`,
+	_, _ = s.db.ExecContext(ctx, `UPDATE panel_sessions SET last_seen = $1 WHERE token = $2`,
 		time.Now().UTC(), token)
 
 	return sess, nil
@@ -209,15 +209,15 @@ func (s *Store) GetSession(ctx context.Context, token string) (*dbstore.Session,
 func (s *Store) SaveSession(ctx context.Context, sess *dbstore.Session) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO panel_sessions (token, admin_id, customer_id, data, ip_address, user_agent, created_at, expires_at, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			admin_id = VALUES(admin_id),
-			customer_id = VALUES(customer_id),
-			data = VALUES(data),
-			ip_address = VALUES(ip_address),
-			user_agent = VALUES(user_agent),
-			expires_at = VALUES(expires_at),
-			last_seen = VALUES(last_seen)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (token) DO UPDATE SET
+			admin_id = EXCLUDED.admin_id,
+			customer_id = EXCLUDED.customer_id,
+			data = EXCLUDED.data,
+			ip_address = EXCLUDED.ip_address,
+			user_agent = EXCLUDED.user_agent,
+			expires_at = EXCLUDED.expires_at,
+			last_seen = EXCLUDED.last_seen
 	`,
 		sess.Token,
 		sess.AdminID,
@@ -234,13 +234,13 @@ func (s *Store) SaveSession(ctx context.Context, sess *dbstore.Session) error {
 
 // DeleteSession removes a session by token.
 func (s *Store) DeleteSession(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM panel_sessions WHERE token = ?`, token)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM panel_sessions WHERE token = $1`, token)
 	return err
 }
 
 // CleanExpiredSessions removes all sessions past their expiry time.
 func (s *Store) CleanExpiredSessions(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM panel_sessions WHERE expires_at < ?`, time.Now().UTC())
+	_, err := s.db.ExecContext(ctx, `DELETE FROM panel_sessions WHERE expires_at < $1`, time.Now().UTC())
 	return err
 }
 
@@ -250,7 +250,7 @@ func (s *Store) CleanExpiredSessions(ctx context.Context) error {
 func (s *Store) InsertMetrics(ctx context.Context, nodeID int64, m *dbstore.MetricsRow) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO node_metrics_history (time, node_id, cpu_percent, ram_percent, disk_percent, rx_bps, tx_bps, active_sessions, uptime_seconds)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`,
 		m.Time.UTC(),
 		nodeID,
@@ -269,7 +269,7 @@ func (s *Store) InsertMetrics(ctx context.Context, nodeID int64, m *dbstore.Metr
 func (s *Store) InsertTrafficLog(ctx context.Context, entry *dbstore.TrafficLogEntry) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO user_traffic_log (time, user_id, node_id, rx_bytes, tx_bytes)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5)
 	`,
 		entry.Time.UTC(),
 		entry.UserID,
@@ -285,7 +285,7 @@ func (s *Store) QueryMetrics(ctx context.Context, nodeID int64, from, to time.Ti
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT time, cpu_percent, ram_percent, disk_percent, rx_bps, tx_bps, active_sessions, uptime_seconds
 		FROM node_metrics_history
-		WHERE node_id = ? AND time >= ? AND time <= ?
+		WHERE node_id = $1 AND time >= $2 AND time <= $3
 		ORDER BY time ASC
 	`, nodeID, from.UTC(), to.UTC())
 	if err != nil {

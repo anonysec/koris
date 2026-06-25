@@ -177,15 +177,15 @@ func (s *Server) updateKBArticle(w http.ResponseWriter, r *http.Request, id int6
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "title_required"})
 			return
 		}
-		setClauses = append(setClauses, "title = ?")
+		setClauses = append(setClauses, "title = $1")
 		args = append(args, *in.Title)
 	}
 	if in.Body != nil {
-		setClauses = append(setClauses, "body = ?")
+		setClauses = append(setClauses, "body = $1")
 		args = append(args, *in.Body)
 	}
 	if in.Category != nil {
-		setClauses = append(setClauses, "category = ?")
+		setClauses = append(setClauses, "category = $1")
 		args = append(args, *in.Category)
 	}
 	if in.Status != nil {
@@ -193,11 +193,11 @@ func (s *Server) updateKBArticle(w http.ResponseWriter, r *http.Request, id int6
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_status"})
 			return
 		}
-		setClauses = append(setClauses, "status = ?")
+		setClauses = append(setClauses, "status = $1")
 		args = append(args, *in.Status)
 	}
 	if in.Locale != nil {
-		setClauses = append(setClauses, "locale = ?")
+		setClauses = append(setClauses, "locale = $1")
 		args = append(args, *in.Locale)
 	}
 	if in.ParentID != nil {
@@ -207,7 +207,7 @@ func (s *Server) updateKBArticle(w http.ResponseWriter, r *http.Request, id int6
 				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "parent_not_found"})
 				return
 			}
-			setClauses = append(setClauses, "parent_id = ?")
+			setClauses = append(setClauses, "parent_id = $1")
 			args = append(args, *in.ParentID)
 		} else {
 			setClauses = append(setClauses, "parent_id = NULL")

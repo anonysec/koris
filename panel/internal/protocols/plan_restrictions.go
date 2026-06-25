@@ -1,4 +1,4 @@
-package protocols
+﻿package protocols
 
 import (
 	"database/sql"
@@ -10,7 +10,7 @@ import (
 // Returns nil if all protocols are allowed (no restrictions).
 func PlanAllowedProtocols(db *sql.DB, planID int64) []string {
 	var raw []byte
-	err := db.QueryRow(`SELECT plan_protocols FROM plans WHERE id = ?`, planID).Scan(&raw)
+	err := db.QueryRow(`SELECT plan_protocols FROM plans WHERE id = $1`, planID).Scan(&raw)
 	if err != nil || len(raw) == 0 || string(raw) == "null" {
 		return nil // no restriction
 	}

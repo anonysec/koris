@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -209,7 +209,7 @@ chmod 600 /etc/knode/node.env && systemctl restart knode`,
 	}
 
 	res, err := s.DB.Exec(
-		`INSERT INTO nodes (name, public_ip, api_token_hash, status, group_id) VALUES (?, ?, ?, 'online', ?)`,
+		`INSERT INTO nodes (name, public_ip, api_token_hash, status, group_id) VALUES ($1, $2, $3, 'online', $4)`,
 		nodeName, host, tokenHash, groupIDVal,
 	)
 	if err != nil {
@@ -244,7 +244,7 @@ chmod 600 /etc/knode/node.env && systemctl restart knode`,
 		case <-ticker.C:
 			var lastSeen sql.NullTime
 			err := s.DB.QueryRow(
-				`SELECT last_seen_at FROM nodes WHERE id = ? AND status = 'online'`, nodeID,
+				`SELECT last_seen_at FROM nodes WHERE id = $1 AND status = 'online'`, nodeID,
 			).Scan(&lastSeen)
 			if err == nil && lastSeen.Valid && time.Since(lastSeen.Time) < 30*time.Second {
 				healthy = true

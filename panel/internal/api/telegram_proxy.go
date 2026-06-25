@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -93,7 +93,7 @@ func (s *Server) customerTelegramProxies(w http.ResponseWriter, r *http.Request)
 
 	// Get the customer's plan_id
 	var planID int64
-	err := s.DB.QueryRow(`SELECT COALESCE(plan_id, 0) FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&planID)
+	err := s.DB.QueryRow(`SELECT COALESCE(plan_id, 0) FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&planID)
 	if err != nil || planID == 0 {
 		writeJSON(w, map[string]any{"ok": true, "proxies": []any{}})
 		return
@@ -296,6 +296,6 @@ func (s *Server) rotateTelegramProxySecret(w http.ResponseWriter, r *http.Reques
 // getNodeIP fetches the public IP for a node.
 func (s *Server) getNodeIP(nodeID int64) string {
 	var ip string
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip, '') FROM nodes WHERE id = ?`, nodeID).Scan(&ip)
+	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip, '') FROM nodes WHERE id = $1`, nodeID).Scan(&ip)
 	return ip
 }

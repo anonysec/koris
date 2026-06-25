@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -87,7 +87,7 @@ func (s *Server) updateSLAConfig(w http.ResponseWriter, r *http.Request) {
 
 	for _, entry := range in {
 		_, err := s.DB.Exec(
-			`UPDATE sla_config SET response_minutes = ? WHERE priority = ?`,
+			`UPDATE sla_config SET response_minutes = $1 WHERE priority = $2`,
 			entry.ResponseMinutes, entry.Priority,
 		)
 		if err != nil {
@@ -158,7 +158,7 @@ func (s *Server) handleSLAStats(w http.ResponseWriter, r *http.Request) {
 	// Calculate average first-response time (time between ticket created_at and first admin reply)
 	var avgResponseMinutes float64
 	err = s.DB.QueryRow(`
-		SELECT COALESCE(AVG(TIMESTAMPDIFF(MINUTE, t.created_at, first_reply.reply_at)), 0)
+		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (first_reply.reply_at - t.created_at)) / 60), 0)
 		FROM tickets t
 		INNER JOIN (
 			SELECT ticket_id, MIN(created_at) AS reply_at
@@ -190,7 +190,7 @@ func (s *Server) checkSLABreaches() {
 		SELECT id, subject, priority
 		FROM tickets
 		WHERE status IN ('open', 'in_progress')
-		  AND sla_breached = 0
+		  AND sla_breached = FALSE
 		  AND sla_deadline_at IS NOT NULL
 		  AND sla_deadline_at < NOW()
 	`)
@@ -208,7 +208,7 @@ func (s *Server) checkSLABreaches() {
 			continue
 		}
 
-		_, err := s.DB.Exec(`UPDATE tickets SET sla_breached = 1 WHERE id = ?`, ticketID)
+		_, err := s.DB.Exec(`UPDATE tickets SET sla_breached = TRUE WHERE id = $1`, ticketID)
 		if err != nil {
 			log.Printf("[sla] failed to mark ticket %d as breached: %v", ticketID, err)
 			continue
@@ -279,7 +279,7 @@ func (s *Server) autoCloseStaleTickets() {
 
 	for _, st := range staleTickets {
 		// Close the ticket
-		_, err := s.DB.Exec(`UPDATE tickets SET status = 'closed', closed_at = NOW() WHERE id = ?`, st.ID)
+		_, err := s.DB.Exec(`UPDATE tickets SET status = 'closed', closed_at = NOW() WHERE id = $1`, st.ID)
 		if err != nil {
 			log.Printf("[sla] failed to auto-close ticket %d: %v", st.ID, err)
 			continue
@@ -287,7 +287,7 @@ func (s *Server) autoCloseStaleTickets() {
 
 		// Insert system message
 		_, err = s.DB.Exec(
-			`INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message) VALUES (?, 'system', 'System', ?)`,
+			`INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message) VALUES ($1, 'system', 'System', $2)`,
 			st.ID, "Ticket auto-closed due to inactivity",
 		)
 		if err != nil {

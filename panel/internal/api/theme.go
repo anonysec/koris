@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -99,7 +99,7 @@ func (s *Server) themePost(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing_active_id"})
 			return
 		}
-		_, err := s.DB.Exec(`INSERT INTO panel_settings (key_name, value) VALUES ('theme_active_id', ?) ON DUPLICATE KEY UPDATE value=?`, in.ActiveID, in.ActiveID)
+		_, err := s.DB.Exec(`INSERT INTO panel_settings (key_name, value) VALUES ('theme_active_id', $1) ON CONFLICT (key_name) DO UPDATE SET value = EXCLUDED.value`, in.ActiveID, in.ActiveID)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
@@ -111,7 +111,7 @@ func (s *Server) themePost(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing_fields"})
 			return
 		}
-		_, err := s.DB.Exec(`INSERT INTO theme_presets (id, name, mode, config_json, is_default) VALUES (?, ?, ?, ?, FALSE)`,
+		_, err := s.DB.Exec(`INSERT INTO theme_presets (id, name, mode, config_json, is_default) VALUES ($1, $2, $3, $4, FALSE)`,
 			in.ID, in.Name, in.Mode, string(in.Config))
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -124,7 +124,7 @@ func (s *Server) themePost(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing_id"})
 			return
 		}
-		_, err := s.DB.Exec(`UPDATE theme_presets SET name=?, mode=?, config_json=? WHERE id=?`,
+		_, err := s.DB.Exec(`UPDATE theme_presets SET name=$1, mode=$2, config_json=$3 WHERE id=$4`,
 			in.Name, in.Mode, string(in.Config), in.ID)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -137,7 +137,7 @@ func (s *Server) themePost(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing_id"})
 			return
 		}
-		_, err := s.DB.Exec(`DELETE FROM theme_presets WHERE id=? AND is_default=FALSE`, in.ID)
+		_, err := s.DB.Exec(`DELETE FROM theme_presets WHERE id=$1 AND is_default=FALSE`, in.ID)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
@@ -177,7 +177,7 @@ func (s *Server) brandingPost(w http.ResponseWriter, r *http.Request) {
 
 	for key, val := range settings {
 		if val != "" {
-			_, err := s.DB.Exec(`INSERT INTO panel_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value=?`, key, val, val)
+			_, err := s.DB.Exec(`INSERT INTO panel_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`, key, val, val)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 				return

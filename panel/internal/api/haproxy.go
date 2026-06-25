@@ -24,7 +24,7 @@ func (s *Server) haproxyApply(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.DB.Query(`
 		SELECT n.id, n.name, COALESCE(n.domain,''), n.public_ip, c.port
 		FROM nodes n
-		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = 1
+		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
 		WHERE n.status <> 'disabled'
 		ORDER BY n.id`)
 	if err != nil {

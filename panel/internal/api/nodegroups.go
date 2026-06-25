@@ -138,15 +138,15 @@ func (s *Server) updateNodeGroup(w http.ResponseWriter, r *http.Request, id int6
 	var setClauses []string
 	var args []any
 	if in.Name != nil {
-		setClauses = append(setClauses, "name = ?")
+		setClauses = append(setClauses, "name = $1")
 		args = append(args, *in.Name)
 	}
 	if in.Region != nil {
-		setClauses = append(setClauses, "region = ?")
+		setClauses = append(setClauses, "region = $1")
 		args = append(args, *in.Region)
 	}
 	if in.Description != nil {
-		setClauses = append(setClauses, "description = ?")
+		setClauses = append(setClauses, "description = $1")
 		args = append(args, *in.Description)
 	}
 	if in.LoadBalancingEnabled != nil {
@@ -154,12 +154,12 @@ func (s *Server) updateNodeGroup(w http.ResponseWriter, r *http.Request, id int6
 		if *in.LoadBalancingEnabled {
 			lbEnabled = 1
 		}
-		setClauses = append(setClauses, "load_balancing_enabled = ?")
+		setClauses = append(setClauses, "load_balancing_enabled = $1")
 		args = append(args, lbEnabled)
 	}
 	if in.MaxLoadPercent != nil {
 		if *in.MaxLoadPercent > 0 && *in.MaxLoadPercent <= 100 {
-			setClauses = append(setClauses, "max_load_percent = ?")
+			setClauses = append(setClauses, "max_load_percent = $1")
 			args = append(args, *in.MaxLoadPercent)
 		}
 	}

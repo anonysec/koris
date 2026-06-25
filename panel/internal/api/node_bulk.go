@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -90,7 +90,7 @@ func (s *Server) nodeBulk(w http.ResponseWriter, r *http.Request) {
 
 		// Check node exists
 		var exists int
-		err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&exists)
+		err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&exists)
 		if err != nil {
 			result.Error = "node not found"
 			results = append(results, result)
@@ -212,7 +212,7 @@ func (s *Server) nodeBulkDispatchGRPC(ctx context.Context, nodeID int64, action 
 
 // nodeBulkSetMaintenance updates the maintenance_mode flag on a node.
 func (s *Server) nodeBulkSetMaintenance(nodeID int64, enabled bool) error {
-	_, err := s.DB.Exec(`UPDATE nodes SET maintenance_mode=? WHERE id=?`, enabled, nodeID)
+	_, err := s.DB.Exec(`UPDATE nodes SET maintenance_mode=$1 WHERE id=$2`, enabled, nodeID)
 	if err != nil {
 		return fmt.Errorf("failed to update maintenance mode: %v", err)
 	}

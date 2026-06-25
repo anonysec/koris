@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/csv"
@@ -182,7 +182,7 @@ func (s *Server) adminCustomersImport(w http.ResponseWriter, r *http.Request) {
 	}
 	for pid := range planIDs {
 		var exists int
-		if err := s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=? AND is_active=1 LIMIT 1`, pid).Scan(&exists); err == nil {
+		if err := s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=$1 AND is_active=TRUE LIMIT 1`, pid).Scan(&exists); err == nil {
 			planIDs[pid] = true
 		}
 	}
@@ -215,7 +215,7 @@ func (s *Server) adminCustomersImport(w http.ResponseWriter, r *http.Request) {
 	finalRows := make([]importRow, 0, len(validRows))
 	for _, row := range validRows {
 		var existingID int64
-		err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? LIMIT 1`, row.Username).Scan(&existingID)
+		err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 LIMIT 1`, row.Username).Scan(&existingID)
 		if err == nil {
 			rowErrors = append(rowErrors, ImportRowError{Row: 0, Error: fmt.Sprintf("username_exists_%s", row.Username)})
 			continue
@@ -258,7 +258,7 @@ func (s *Server) adminCustomersImport(w http.ResponseWriter, r *http.Request) {
 	for _, row := range prepared {
 		// Insert customer
 		res, err := tx.Exec(
-			`INSERT INTO customers(username, display_name, email, plan_id, sub_token, status, created_by) VALUES(?,?,?,?,?,'active',?)`,
+			`INSERT INTO customers(username, display_name, email, plan_id, sub_token, status, created_by) VALUES($1,$2,$3,$4,$5,'active',$6)`,
 			row.Username, row.DisplayName, nullString(row.Email), row.PlanID, auth.RandomToken(24), actor,
 		)
 		if err != nil {
@@ -268,19 +268,19 @@ func (s *Server) adminCustomersImport(w http.ResponseWriter, r *http.Request) {
 		customerID, _ := res.LastInsertId()
 
 		// Insert wallet
-		if _, err := tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES(?,?,0)`, customerID, row.Username); err != nil {
+		if _, err := tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES($1,$2,0)`, customerID, row.Username); err != nil {
 			rowErrors = append(rowErrors, ImportRowError{Row: 0, Error: fmt.Sprintf("wallet_error_%s", row.Username)})
 			continue
 		}
 
 		// Insert radcheck password
-		if _, err := tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Cleartext-Password',':=',?)`, row.Username, row.Password); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Cleartext-Password',':=',$2)`, row.Username, row.Password); err != nil {
 			rowErrors = append(rowErrors, ImportRowError{Row: 0, Error: fmt.Sprintf("radcheck_error_%s", row.Username)})
 			continue
 		}
 
 		// Insert radcheck simultaneous-use (default: 1)
-		if _, err := tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Simultaneous-Use',':=','1')`, row.Username); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Simultaneous-Use',':=','1')`, row.Username); err != nil {
 			rowErrors = append(rowErrors, ImportRowError{Row: 0, Error: fmt.Sprintf("radcheck_error_%s", row.Username)})
 			continue
 		}

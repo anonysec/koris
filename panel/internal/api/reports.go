@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/csv"
@@ -24,24 +24,24 @@ func (s *Server) revenueReport(w http.ResponseWriter, r *http.Request) {
 	var groupBy, dateFormat string
 	switch period {
 	case "weekly":
-		groupBy = "YEARWEEK(created_at)"
-		dateFormat = "%Y-W%u"
+		groupBy = "TO_CHAR(created_at, 'IYYY-\"W\"IW')"
+		dateFormat = "IYYY-\"W\"IW"
 	case "monthly":
-		groupBy = "DATE_FORMAT(created_at, '%Y-%m')"
-		dateFormat = "%Y-%m"
+		groupBy = "TO_CHAR(created_at, 'YYYY-MM')"
+		dateFormat = "YYYY-MM"
 	default:
 		groupBy = "DATE(created_at)"
-		dateFormat = "%Y-%m-%d"
+		dateFormat = "YYYY-MM-DD"
 	}
 
 	// Revenue by period
 	rows, err := s.DB.Query(`
-		SELECT DATE_FORMAT(created_at, '` + dateFormat + `') as period,
+		SELECT TO_CHAR(created_at, '` + dateFormat + `') as period,
 		       COUNT(*) as count,
 		       COALESCE(SUM(amount), 0) as total
 		FROM payments
 		WHERE status = 'approved'
-		AND created_at >= NOW() - INTERVAL 90 DAY
+		AND created_at >= NOW() - INTERVAL '90 days'
 		GROUP BY ` + groupBy + `
 		ORDER BY period DESC
 		LIMIT 90`)
@@ -70,7 +70,7 @@ func (s *Server) revenueReport(w http.ResponseWriter, r *http.Request) {
 		FROM payments pay
 		LEFT JOIN subscriptions sub ON sub.id = pay.intent_id AND pay.intent_type = 'plan'
 		LEFT JOIN plans p ON p.id = sub.plan_id
-		WHERE pay.status = 'approved' AND pay.created_at >= NOW() - INTERVAL 30 DAY
+		WHERE pay.status = 'approved' AND pay.created_at >= NOW() - INTERVAL '30 days'
 		GROUP BY p.name
 		ORDER BY total DESC`)
 	type PlanRevenue struct {
@@ -93,7 +93,7 @@ func (s *Server) revenueReport(w http.ResponseWriter, r *http.Request) {
 	var totalRevenue, todayRevenue float64
 	var totalPayments, pendingPayments int
 	s.DB.QueryRow(`SELECT COALESCE(SUM(amount),0), COUNT(*) FROM payments WHERE status='approved'`).Scan(&totalRevenue, &totalPayments)
-	s.DB.QueryRow(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved' AND DATE(created_at)=CURDATE()`).Scan(&todayRevenue)
+	s.DB.QueryRow(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved' AND DATE(created_at)=CURRENT_DATE`).Scan(&todayRevenue)
 	s.DB.QueryRow(`SELECT COUNT(*) FROM payments WHERE status='pending'`).Scan(&pendingPayments)
 
 	writeJSON(w, map[string]any{
@@ -120,7 +120,7 @@ func (s *Server) userReport(w http.ResponseWriter, r *http.Request) {
 	regRows, _ := s.DB.Query(`
 		SELECT DATE(created_at) as day, COUNT(*) as count
 		FROM customers
-		WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL 30 DAY
+		WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '30 days'
 		GROUP BY DATE(created_at)
 		ORDER BY day DESC`)
 	type DayCount struct {
@@ -176,20 +176,20 @@ func (s *Server) bandwidthStats(w http.ResponseWriter, r *http.Request) {
 	var whereClause, groupBy, labelFormat string
 	switch period {
 	case "1d":
-		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL 1 DAY"
-		groupBy = "HOUR(acctstarttime)"
+		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL '1 day'"
+		groupBy = "EXTRACT(HOUR FROM acctstarttime)"
 		labelFormat = "hour"
 	case "7d":
-		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL 7 DAY"
+		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL '7 days'"
 		groupBy = "DATE(acctstarttime)"
 		labelFormat = "date"
 	case "30d":
-		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL 30 DAY"
+		whereClause = "WHERE acctstarttime >= NOW() - INTERVAL '30 days'"
 		groupBy = "DATE(acctstarttime)"
 		labelFormat = "date"
 	case "all":
 		whereClause = ""
-		groupBy = "DATE_FORMAT(acctstarttime, '%Y-%m')"
+		groupBy = "TO_CHAR(acctstarttime, 'YYYY-MM')"
 		labelFormat = "month"
 	default:
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_period"})
@@ -205,13 +205,13 @@ func (s *Server) bandwidthStats(w http.ResponseWriter, r *http.Request) {
 	var pointsQuery string
 	switch labelFormat {
 	case "hour":
-		pointsQuery = fmt.Sprintf(`SELECT HOUR(acctstarttime) as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
+		pointsQuery = fmt.Sprintf(`SELECT EXTRACT(HOUR FROM acctstarttime)::INT as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
 			FROM radacct %s GROUP BY %s ORDER BY lbl ASC`, whereClause, groupBy)
 	case "date":
-		pointsQuery = fmt.Sprintf(`SELECT DATE_FORMAT(DATE(acctstarttime), '%%Y-%%m-%%d') as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
+		pointsQuery = fmt.Sprintf(`SELECT TO_CHAR(DATE(acctstarttime), 'YYYY-MM-DD') as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
 			FROM radacct %s GROUP BY %s ORDER BY lbl ASC`, whereClause, groupBy)
 	case "month":
-		pointsQuery = fmt.Sprintf(`SELECT DATE_FORMAT(acctstarttime, '%%Y-%%m') as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
+		pointsQuery = fmt.Sprintf(`SELECT TO_CHAR(acctstarttime, 'YYYY-MM') as lbl, COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0)
 			FROM radacct GROUP BY %s ORDER BY lbl ASC LIMIT 12`, groupBy)
 	}
 
@@ -328,7 +328,7 @@ func (s *Server) bandwidthReport(w http.ResponseWriter, r *http.Request) {
 		SELECT n.name, COALESCE(SUM(s.rx_bytes),0) as rx, COALESCE(SUM(s.tx_bytes),0) as tx
 		FROM node_usage_snapshots s
 		JOIN nodes n ON n.id = s.node_id
-		WHERE s.created_at >= NOW() - INTERVAL 24 HOUR
+		WHERE s.created_at >= NOW() - INTERVAL '24 hours'
 		GROUP BY n.id, n.name
 		ORDER BY rx + tx DESC`)
 	type NodeBandwidth struct {
@@ -351,7 +351,7 @@ func (s *Server) bandwidthReport(w http.ResponseWriter, r *http.Request) {
 	userRows, _ := s.DB.Query(`
 		SELECT username, COALESCE(SUM(acctinputoctets),0) as rx, COALESCE(SUM(acctoutputoctets),0) as tx
 		FROM radacct
-		WHERE acctstarttime >= NOW() - INTERVAL 24 HOUR
+		WHERE acctstarttime >= NOW() - INTERVAL '24 hours'
 		GROUP BY username
 		ORDER BY rx + tx DESC
 		LIMIT 20`)
@@ -373,7 +373,7 @@ func (s *Server) bandwidthReport(w http.ResponseWriter, r *http.Request) {
 
 	// Total bandwidth today
 	var todayRx, todayTx int64
-	s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct WHERE acctstarttime >= CURDATE()`).Scan(&todayRx, &todayTx)
+	s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct WHERE acctstarttime >= CURRENT_DATE`).Scan(&todayRx, &todayTx)
 
 	writeJSON(w, map[string]any{
 		"ok":        true,
@@ -394,7 +394,7 @@ func (s *Server) exportRevenueCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.DB.Query(`
 		SELECT DATE(created_at), username, amount, method, status
 		FROM payments
-		WHERE created_at >= NOW() - INTERVAL 90 DAY
+		WHERE created_at >= NOW() - INTERVAL '90 days'
 		ORDER BY created_at DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -427,7 +427,7 @@ func (s *Server) uptimeReport(w http.ResponseWriter, r *http.Request) {
 	// Node uptime over last 24h (based on status changes)
 	rows, err := s.DB.Query(`
 		SELECT n.id, n.name, n.status, n.last_seen_at,
-		       TIMESTAMPDIFF(MINUTE, COALESCE(n.last_seen_at, n.created_at), NOW()) as minutes_since_seen
+		       EXTRACT(EPOCH FROM (NOW() - COALESCE(n.last_seen_at, n.created_at)))::INT / 60 as minutes_since_seen
 		FROM nodes n
 		WHERE n.status <> 'disabled'
 		ORDER BY n.id`)

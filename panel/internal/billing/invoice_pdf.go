@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package billing
 
@@ -254,7 +254,7 @@ func (b *BillingEngine) SaveInvoicePDF(ctx context.Context, inv *Invoice, brandi
 	}
 
 	// Update database with pdf_path
-	_, err = b.db.ExecContext(ctx, `UPDATE invoices SET pdf_path = ? WHERE id = ?`, filePath, inv.ID)
+	_, err = b.db.ExecContext(ctx, `UPDATE invoices SET pdf_path = $1 WHERE id = $2`, filePath, inv.ID)
 	if err != nil {
 		// Attempt cleanup on DB failure
 		_ = os.Remove(filePath)

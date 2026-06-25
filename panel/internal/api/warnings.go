@@ -24,7 +24,7 @@ func (s *Server) checkDataWarnings(username string) {
 	var totalUsage int64
 	err := s.DB.QueryRow(
 		`SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0)
-		 FROM radacct WHERE username = ?`,
+		 FROM radacct WHERE username = $1`,
 		username,
 	).Scan(&totalUsage)
 	if err != nil {
@@ -46,7 +46,7 @@ func (s *Server) checkDataWarnings(username string) {
 		 FROM customers c
 		 LEFT JOIN subscriptions sub ON sub.username = c.username AND sub.status = 'active'
 		 LEFT JOIN plans p ON p.id = COALESCE(sub.plan_id, c.plan_id)
-		 WHERE c.username = ?
+		 WHERE c.username = $1
 		 LIMIT 1`,
 		username,
 	).Scan(&customerID, &dataCapBytes)
@@ -86,7 +86,7 @@ func (s *Server) checkDataWarnings(username string) {
 		var existingCount int
 		err := s.DB.QueryRow(
 			`SELECT COUNT(*) FROM events
-			 WHERE type = 'data_warning' AND related = ? AND title LIKE ?`,
+			 WHERE type = 'data_warning' AND related = $1 AND title LIKE $2`,
 			username, fmt.Sprintf("%%%d%%", threshold),
 		).Scan(&existingCount)
 		if err != nil {
@@ -112,14 +112,14 @@ func (s *Server) checkDataWarnings(username string) {
 		var capReachedCount int
 		_ = s.DB.QueryRow(
 			`SELECT COUNT(*) FROM events
-			 WHERE type = 'data_cap_reached' AND related = ?`,
+			 WHERE type = 'data_cap_reached' AND related = $1`,
 			username,
 		).Scan(&capReachedCount)
 
 		if capReachedCount == 0 {
 			// Update customer status to limited
 			_, err := s.DB.Exec(
-				`UPDATE customers SET status = 'limited' WHERE username = ? AND status != 'limited'`,
+				`UPDATE customers SET status = 'limited' WHERE username = $1 AND status != 'limited'`,
 				username,
 			)
 			if err != nil {
@@ -137,8 +137,6 @@ func (s *Server) checkDataWarnings(username string) {
 	}
 }
 
-
-
 // portalWarnings returns active data warning events for the authenticated customer.
 // GET /api/portal/warnings
 func (s *Server) portalWarnings(w http.ResponseWriter, r *http.Request) {
@@ -155,7 +153,7 @@ func (s *Server) portalWarnings(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.DB.Query(
 		`SELECT id, type, severity, title, message, created_at
 		 FROM events
-		 WHERE related = ? AND type IN ('data_warning', 'data_cap_reached')
+		 WHERE related = $1 AND type IN ('data_warning', 'data_cap_reached')
 		 ORDER BY created_at DESC LIMIT 20`,
 		username,
 	)
@@ -255,8 +253,8 @@ func (s *Server) putDataWarningThresholds(w http.ResponseWriter, r *http.Request
 
 	// Update panel_settings
 	_, err = s.DB.Exec(
-		`INSERT INTO panel_settings(setting_key, setting_value) VALUES('data_warning_thresholds', ?)
-		 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+		`INSERT INTO panel_settings(setting_key, setting_value) VALUES('data_warning_thresholds', $1)
+		 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
 		string(thresholdJSON),
 	)
 	if err != nil {
@@ -337,8 +335,8 @@ func (s *Server) putWarningConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = s.DB.Exec(
-		`INSERT INTO panel_settings(setting_key, setting_value) VALUES('warning_config', ?)
-		 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+		`INSERT INTO panel_settings(setting_key, setting_value) VALUES('warning_config', $1)
+		 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
 		string(cfgJSON),
 	)
 	if err != nil {
@@ -368,7 +366,7 @@ func (s *Server) checkExpiryWarnings(username string) {
 	// Get subscription expiry
 	var expiresAt sql.NullTime
 	err := s.DB.QueryRow(
-		`SELECT expires_at FROM subscriptions WHERE username = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+		`SELECT expires_at FROM subscriptions WHERE username = $1 AND status = 'active' ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&expiresAt)
 	if err != nil || !expiresAt.Valid {
@@ -385,7 +383,7 @@ func (s *Server) checkExpiryWarnings(username string) {
 		// Check if we already warned
 		var count int
 		_ = s.DB.QueryRow(
-			`SELECT COUNT(*) FROM events WHERE type = 'expiry_warning' AND related = ? AND title LIKE ?`,
+			`SELECT COUNT(*) FROM events WHERE type = 'expiry_warning' AND related = $1 AND title LIKE $2`,
 			username, fmt.Sprintf("%%%d day%%", threshold),
 		).Scan(&count)
 		if count > 0 {
@@ -419,7 +417,7 @@ func (s *Server) checkConnectionWarnings(username string) {
 	// Get max sessions from radcheck (Simultaneous-Use attribute)
 	var maxSessions int
 	err := s.DB.QueryRow(
-		`SELECT CAST(value AS UNSIGNED) FROM radcheck WHERE username = ? AND attribute = 'Simultaneous-Use' ORDER BY id DESC LIMIT 1`,
+		`SELECT CAST(value AS BIGINT) FROM radcheck WHERE username = $1 AND attribute = 'Simultaneous-Use' ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&maxSessions)
 	if err != nil || maxSessions <= 0 {
@@ -429,7 +427,7 @@ func (s *Server) checkConnectionWarnings(username string) {
 	// Get current session count
 	var currentSessions int
 	_ = s.DB.QueryRow(
-		`SELECT COUNT(*) FROM radacct WHERE username = ? AND acctstoptime IS NULL`,
+		`SELECT COUNT(*) FROM radacct WHERE username = $1 AND acctstoptime IS NULL`,
 		username,
 	).Scan(&currentSessions)
 
@@ -446,7 +444,7 @@ func (s *Server) checkConnectionWarnings(username string) {
 
 		var count int
 		_ = s.DB.QueryRow(
-			`SELECT COUNT(*) FROM events WHERE type = 'conn_warning' AND related = ? AND title LIKE ? AND created_at > NOW() - INTERVAL 1 HOUR`,
+			`SELECT COUNT(*) FROM events WHERE type = 'conn_warning' AND related = $1 AND title LIKE $2 AND created_at > NOW() - INTERVAL '1 hour'`,
 			username, fmt.Sprintf("%%%d%%", threshold),
 		).Scan(&count)
 		if count > 0 {

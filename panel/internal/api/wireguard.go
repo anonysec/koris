@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -61,7 +61,7 @@ func (s *Server) listWireguardPeers(w http.ResponseWriter, r *http.Request) {
 	// Filter by customer_id if provided
 	if cidStr := r.URL.Query().Get("customer_id"); cidStr != "" {
 		if cid, err := strconv.ParseInt(cidStr, 10, 64); err == nil && cid > 0 {
-			query += ` WHERE p.customer_id = ?`
+			query += ` WHERE p.customer_id = $1`
 			args = append(args, cid)
 		}
 	}
@@ -119,7 +119,7 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 		// Fetch the node's WireGuard network CIDR and extra_json for dual-stack
 		var networkCIDR string
 		var cfgExtraJSON []byte
-		err := s.DB.QueryRow(`SELECT network, COALESCE(extra_json,'{}') FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard' LIMIT 1`, in.NodeID).Scan(&networkCIDR, &cfgExtraJSON)
+		err := s.DB.QueryRow(`SELECT network, COALESCE(extra_json,'{}') FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard' LIMIT 1`, in.NodeID).Scan(&networkCIDR, &cfgExtraJSON)
 		if err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "wireguard_config_not_found_for_node"})
 			return
@@ -135,7 +135,7 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Query active peer IPs for the node
-		rows, err := s.DB.Query(`SELECT allowed_ips FROM wg_peers WHERE node_id=? AND status='active'`, in.NodeID)
+		rows, err := s.DB.Query(`SELECT allowed_ips FROM wg_peers WHERE node_id=$1 AND status='active'`, in.NodeID)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -225,7 +225,7 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 	// Insert peer into database (store private key encrypted - for now store as-is)
 	res, err := s.DB.Exec(`
 		INSERT INTO wg_peers (customer_id, node_id, public_key, preshared_key, private_key_encrypted, allowed_ips, status)
-		VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+		VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
 		in.CustomerID, in.NodeID, publicKey, presharedKey, privateKey, in.AllowedIPs)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -236,7 +236,7 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 	// Sync user to knode via gRPC (the peer add is communicated via user sync)
 	if s.UserSync != nil {
 		var username string
-		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, in.CustomerID).Scan(&username)
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = $1`, in.CustomerID).Scan(&username)
 		if username != "" {
 			go func() {
 				if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
@@ -273,14 +273,14 @@ func (s *Server) deleteWireguardPeer(w http.ResponseWriter, r *http.Request, id 
 	var nodeID int64
 	var publicKey string
 	var customerID int64
-	err := s.DB.QueryRow(`SELECT node_id, public_key, customer_id FROM wg_peers WHERE id=?`, id).Scan(&nodeID, &publicKey, &customerID)
+	err := s.DB.QueryRow(`SELECT node_id, public_key, customer_id FROM wg_peers WHERE id=$1`, id).Scan(&nodeID, &publicKey, &customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "peer_not_found"})
 		return
 	}
 
 	// Set peer status to revoked
-	if _, err := s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -288,7 +288,7 @@ func (s *Server) deleteWireguardPeer(w http.ResponseWriter, r *http.Request, id 
 	// Sync user to knode via gRPC (the peer removal is communicated via user sync)
 	if s.UserSync != nil {
 		var username string
-		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, customerID).Scan(&username)
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = $1`, customerID).Scan(&username)
 		if username != "" {
 			go func() {
 				if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
@@ -313,7 +313,7 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 	err := s.DB.QueryRow(`
 		SELECT id, customer_id, node_id, public_key, COALESCE(preshared_key,''),
 		       COALESCE(private_key_encrypted,''), allowed_ips, COALESCE(endpoint,''), status
-		FROM wg_peers WHERE id=?`, id).Scan(
+		FROM wg_peers WHERE id=$1`, id).Scan(
 		&peer.ID, &customerID, &peer.NodeID, &peer.PublicKey,
 		&peer.PresharedKey, &peer.PrivateKeyEncrypted, &peer.AllowedIPs,
 		&peer.Endpoint, &peer.Status)
@@ -333,7 +333,7 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 	var extraJSON []byte
 	err = s.DB.QueryRow(`
 		SELECT COALESCE(extra_json,'{}'), port
-		FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON, new(int))
+		FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON, new(int))
 	if err != nil {
 		// Fallback: no WireGuard config found for this node
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "wireguard_config_not_found_for_node"})
@@ -361,8 +361,8 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 	// Get the node's public IP or domain as the endpoint
 	var nodeIP, nodeDomain string
 	var wgPort int
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=?`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
-	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
+	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
 	if nodeDomain != "" {
 		serverEndpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)
@@ -411,7 +411,7 @@ func (s *Server) portalWireguardPeers(w http.ResponseWriter, r *http.Request) {
 
 	// Get customer ID from username
 	var customerID int64
-	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
@@ -421,7 +421,7 @@ func (s *Server) portalWireguardPeers(w http.ResponseWriter, r *http.Request) {
 		SELECT p.id, p.node_id, COALESCE(n.name,''), p.status, p.allowed_ips, p.created_at
 		FROM wg_peers p
 		LEFT JOIN nodes n ON n.id = p.node_id
-		WHERE p.customer_id = ?
+		WHERE p.customer_id = $1
 		ORDER BY p.id DESC`, customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -486,7 +486,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 
 	// Get customer ID
 	var customerID int64
-	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
@@ -498,7 +498,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 	err = s.DB.QueryRow(`
 		SELECT id, customer_id, node_id, public_key, COALESCE(preshared_key,''),
 		       COALESCE(private_key_encrypted,''), allowed_ips, COALESCE(endpoint,''), status
-		FROM wg_peers WHERE id=?`, id).Scan(
+		FROM wg_peers WHERE id=$1`, id).Scan(
 		&peer.ID, &peerCustomerID, &peer.NodeID, &peer.PublicKey,
 		&peer.PresharedKey, &peer.PrivateKeyEncrypted, &peer.AllowedIPs,
 		&peer.Endpoint, &peer.Status)
@@ -522,7 +522,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 	var extraJSON []byte
 	err = s.DB.QueryRow(`
 		SELECT COALESCE(extra_json,'{}')
-		FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON)
+		FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "wireguard_config_not_found_for_node"})
 		return
@@ -549,8 +549,8 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 	// Get node endpoint
 	var nodeIP, nodeDomain string
 	var wgPort int
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=?`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
-	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
+	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
 	if nodeDomain != "" {
 		serverEndpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)
@@ -580,7 +580,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 
 	// Serve as downloadable .conf file
 	var nodeName string
-	_ = s.DB.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id=?`, peer.NodeID).Scan(&nodeName)
+	_ = s.DB.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeName)
 	if nodeName == "" {
 		nodeName = fmt.Sprintf("node%d", peer.NodeID)
 	}
@@ -596,7 +596,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 // This is called after subscription activation to auto-provision VPN access.
 func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 	// Find all WireGuard-enabled nodes
-	rows, err := s.DB.Query(`SELECT node_id, network, COALESCE(extra_json,'{}') FROM node_vpn_configs WHERE protocol='wireguard' AND enabled=1`)
+	rows, err := s.DB.Query(`SELECT node_id, network, COALESCE(extra_json,'{}') FROM node_vpn_configs WHERE protocol='wireguard' AND enabled=TRUE`)
 	if err != nil {
 		return
 	}
@@ -622,7 +622,7 @@ func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 	for _, node := range nodes {
 		// Check if customer already has an active peer on this node
 		var existing int
-		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM wg_peers WHERE customer_id=? AND node_id=? AND status='active'`, customerID, node.NodeID).Scan(&existing); err != nil || existing > 0 {
+		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM wg_peers WHERE customer_id=$1 AND node_id=$2 AND status='active'`, customerID, node.NodeID).Scan(&existing); err != nil || existing > 0 {
 			continue
 		}
 
@@ -636,7 +636,7 @@ func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 		}
 
 		// Get used IPs on this node
-		ipRows, err := s.DB.Query(`SELECT allowed_ips FROM wg_peers WHERE node_id=? AND status='active'`, node.NodeID)
+		ipRows, err := s.DB.Query(`SELECT allowed_ips FROM wg_peers WHERE node_id=$1 AND status='active'`, node.NodeID)
 		if err != nil {
 			continue
 		}
@@ -688,7 +688,7 @@ func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 		}
 
 		// Insert peer
-		_, err = s.DB.Exec(`INSERT INTO wg_peers (customer_id, node_id, public_key, preshared_key, private_key_encrypted, allowed_ips, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+		_, err = s.DB.Exec(`INSERT INTO wg_peers (customer_id, node_id, public_key, preshared_key, private_key_encrypted, allowed_ips, status) VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
 			customerID, node.NodeID, publicKey, presharedKey, privateKey, formattedIP)
 		if err != nil {
 			continue
@@ -697,7 +697,7 @@ func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 		// Sync user to knode via gRPC after peer creation
 		if s.UserSync != nil {
 			var username string
-			_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, customerID).Scan(&username)
+			_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = $1`, customerID).Scan(&username)
 			if username != "" {
 				go func() {
 					if syncErr := s.UserSync.SyncUser(context.Background(), username); syncErr != nil {
@@ -712,7 +712,7 @@ func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 // autoRevokeWireGuardPeers revokes all active WireGuard peers for a customer
 // and triggers user sync to propagate the change via gRPC.
 func (s *Server) autoRevokeWireGuardPeers(customerID int64) {
-	rows, err := s.DB.Query(`SELECT id FROM wg_peers WHERE customer_id=? AND status='active'`, customerID)
+	rows, err := s.DB.Query(`SELECT id FROM wg_peers WHERE customer_id=$1 AND status='active'`, customerID)
 	if err != nil {
 		return
 	}
@@ -731,13 +731,13 @@ func (s *Server) autoRevokeWireGuardPeers(customerID int64) {
 	}
 
 	for _, id := range peerIDs {
-		_, _ = s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, id)
+		_, _ = s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=$1`, id)
 	}
 
 	// Sync user to knode via gRPC (disabled state will be communicated)
 	if s.UserSync != nil && len(peerIDs) > 0 {
 		var username string
-		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, customerID).Scan(&username)
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = $1`, customerID).Scan(&username)
 		if username != "" {
 			go func() {
 				if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
@@ -752,7 +752,7 @@ func (s *Server) autoRevokeWireGuardPeers(customerID int64) {
 // It revokes all active WireGuard peers for a given customer ID.
 // Note: User sync is triggered by the caller (background worker) after revocation.
 func AutoRevokeWireGuardPeersByDB(db *sql.DB, customerID int64) {
-	rows, err := db.Query(`SELECT id FROM wg_peers WHERE customer_id=? AND status='active'`, customerID)
+	rows, err := db.Query(`SELECT id FROM wg_peers WHERE customer_id=$1 AND status='active'`, customerID)
 	if err != nil {
 		return
 	}
@@ -771,7 +771,7 @@ func AutoRevokeWireGuardPeersByDB(db *sql.DB, customerID int64) {
 	}
 
 	for _, id := range peerIDs {
-		_, _ = db.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, id)
+		_, _ = db.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=$1`, id)
 	}
 }
 
@@ -787,7 +787,7 @@ func (s *Server) portalWireguardPeerQR(w http.ResponseWriter, r *http.Request, i
 
 	// Get customer ID
 	var customerID int64
-	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
@@ -799,7 +799,7 @@ func (s *Server) portalWireguardPeerQR(w http.ResponseWriter, r *http.Request, i
 	err = s.DB.QueryRow(`
 		SELECT id, customer_id, node_id, public_key, COALESCE(preshared_key,''),
 		       COALESCE(private_key_encrypted,''), allowed_ips, COALESCE(endpoint,''), status
-		FROM wg_peers WHERE id=?`, id).Scan(
+		FROM wg_peers WHERE id=$1`, id).Scan(
 		&peer.ID, &peerCustomerID, &peer.NodeID, &peer.PublicKey,
 		&peer.PresharedKey, &peer.PrivateKeyEncrypted, &peer.AllowedIPs,
 		&peer.Endpoint, &peer.Status)
@@ -823,7 +823,7 @@ func (s *Server) portalWireguardPeerQR(w http.ResponseWriter, r *http.Request, i
 	var extraJSON []byte
 	err = s.DB.QueryRow(`
 		SELECT COALESCE(extra_json,'{}')
-		FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON)
+		FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "wireguard_config_not_found_for_node"})
 		return
@@ -850,8 +850,8 @@ func (s *Server) portalWireguardPeerQR(w http.ResponseWriter, r *http.Request, i
 	// Get node endpoint
 	var nodeIP, nodeDomain string
 	var wgPort int
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=?`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
-	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
+	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
 	if nodeDomain != "" {
 		serverEndpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)

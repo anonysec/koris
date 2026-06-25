@@ -175,8 +175,8 @@ func (s *Server) cleanupSchedulePost(w http.ResponseWriter, r *http.Request) {
 
 	// Store in panel_settings as JSON
 	configJSON, _ := json.Marshal(in)
-	_, err := s.DB.Exec(`INSERT INTO panel_settings (key_name, value) VALUES ('auto_cleanup_config', ?) ON DUPLICATE KEY UPDATE value=?`,
-		string(configJSON), string(configJSON))
+	_, err := s.DB.Exec(`INSERT INTO panel_settings (key_name, value) VALUES ('auto_cleanup_config', $1) ON CONFLICT (key_name) DO UPDATE SET value=EXCLUDED.value`,
+		string(configJSON))
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return

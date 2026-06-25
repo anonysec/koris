@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -24,7 +24,7 @@ func (s *Server) customerBillingDebt(w http.ResponseWriter, r *http.Request) {
 
 	// Look up customer ID from username
 	var customerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}
@@ -51,7 +51,7 @@ func (s *Server) customerDataPacks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.DB.Query(`SELECT id, name, data_gb, price, currency FROM data_packs WHERE is_active = 1 ORDER BY price ASC`)
+	rows, err := s.DB.Query(`SELECT id, name, data_gb, price, currency FROM data_packs WHERE is_active = TRUE ORDER BY price ASC`)
 	if err != nil {
 		log.Printf("[billing] list data packs error: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -107,7 +107,7 @@ func (s *Server) customerBuyDataPack(w http.ResponseWriter, r *http.Request) {
 
 	// Look up customer ID from username
 	var customerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}

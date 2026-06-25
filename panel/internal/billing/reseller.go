@@ -31,7 +31,7 @@ func (b *BillingEngine) PurchaseResellerCredit(ctx context.Context, resellerID i
 	// Verify reseller exists and get username
 	var username string
 	err := b.db.QueryRowContext(ctx, `
-		SELECT username FROM admins WHERE id = ? AND role = 'reseller'`, resellerID,
+		SELECT username FROM admins WHERE id = $1 AND role = 'reseller'`, resellerID,
 	).Scan(&username)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -42,7 +42,7 @@ func (b *BillingEngine) PurchaseResellerCredit(ctx context.Context, resellerID i
 
 	// Add credit to reseller's balance
 	_, err = b.db.ExecContext(ctx, `
-		UPDATE admins SET credit = credit + ? WHERE id = ?`, amount, resellerID,
+		UPDATE admins SET credit = credit + $1 WHERE id = $2`, amount, resellerID,
 	)
 	if err != nil {
 		return fmt.Errorf("update reseller credit: %w", err)
@@ -52,7 +52,7 @@ func (b *BillingEngine) PurchaseResellerCredit(ctx context.Context, resellerID i
 	desc := fmt.Sprintf("Credit purchase (ref: %s)", gatewayRef)
 	_, err = b.db.ExecContext(ctx, `
 		INSERT INTO reseller_transactions (reseller_username, amount, type, description, actor)
-		VALUES (?, ?, 'allocation', ?, 'system')`,
+		VALUES ($1, $2, 'allocation', $3, 'system')`,
 		username, amount, desc,
 	)
 	if err != nil {
@@ -71,7 +71,7 @@ func (b *BillingEngine) GetResellerMargin(ctx context.Context, resellerID int64,
 	// Verify reseller exists and get username
 	var username string
 	err := b.db.QueryRowContext(ctx, `
-		SELECT username FROM admins WHERE id = ? AND role = 'reseller'`, resellerID,
+		SELECT username FROM admins WHERE id = $1 AND role = 'reseller'`, resellerID,
 	).Scan(&username)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -84,8 +84,8 @@ func (b *BillingEngine) GetResellerMargin(ctx context.Context, resellerID int64,
 	var totalPurchased float64
 	err = b.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(amount), 0) FROM reseller_transactions
-		WHERE reseller_username = ? AND type = 'allocation'
-		AND created_at >= ? AND created_at < ?`,
+		WHERE reseller_username = $1 AND type = 'allocation'
+		AND created_at >= $1 AND created_at < $2`,
 		username, from, to,
 	).Scan(&totalPurchased)
 	if err != nil {
@@ -97,8 +97,8 @@ func (b *BillingEngine) GetResellerMargin(ctx context.Context, resellerID int64,
 	var totalSold float64
 	err = b.db.QueryRowContext(ctx, `
 		SELECT COALESCE(-SUM(amount), 0) FROM reseller_transactions
-		WHERE reseller_username = ? AND type = 'deduction'
-		AND created_at >= ? AND created_at < ?`,
+		WHERE reseller_username = $1 AND type = 'deduction'
+		AND created_at >= $1 AND created_at < $2`,
 		username, from, to,
 	).Scan(&totalSold)
 	if err != nil {
@@ -109,7 +109,7 @@ func (b *BillingEngine) GetResellerMargin(ctx context.Context, resellerID int64,
 	var customerCount int
 	err = b.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM customers
-		WHERE created_by = ? AND deleted_at IS NULL AND status = 'active'`,
+		WHERE created_by = $1 AND deleted_at IS NULL AND status = 'active'`,
 		username,
 	).Scan(&customerCount)
 	if err != nil {
@@ -144,7 +144,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 	var username string
 	var credit float64
 	err := b.db.QueryRowContext(ctx, `
-		SELECT username, COALESCE(credit, 0) FROM admins WHERE id = ? AND role = 'reseller'`,
+		SELECT username, COALESCE(credit, 0) FROM admins WHERE id = $1 AND role = 'reseller'`,
 		resellerID,
 	).Scan(&username, &credit)
 	if err != nil {
@@ -157,7 +157,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 	// Verify customer belongs to this reseller
 	var custUsername string
 	err = b.db.QueryRowContext(ctx, `
-		SELECT username FROM customers WHERE id = ? AND created_by = ? AND deleted_at IS NULL`,
+		SELECT username FROM customers WHERE id = $1 AND created_by = $2 AND deleted_at IS NULL`,
 		customerID, username,
 	).Scan(&custUsername)
 	if err != nil {
@@ -170,7 +170,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 	// Verify plan is allowed for this reseller
 	var allowed int
 	err = b.db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM reseller_allowed_plans WHERE reseller_id = ? AND plan_id = ?`,
+		SELECT COUNT(*) FROM reseller_allowed_plans WHERE reseller_id = $1 AND plan_id = $2`,
 		resellerID, planID,
 	).Scan(&allowed)
 	if err != nil {
@@ -186,7 +186,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 	var planDataGB float64
 	var planDays int
 	err = b.db.QueryRowContext(ctx, `
-		SELECT name, price, data_gb, duration_days FROM plans WHERE id = ? AND is_active = 1`,
+		SELECT name, price, data_gb, duration_days FROM plans WHERE id = $1 AND is_active = TRUE`,
 		planID,
 	).Scan(&planName, &planPrice, &planDataGB, &planDays)
 	if err != nil {
@@ -204,7 +204,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 	// Deduct from reseller credit
 	if planPrice > 0 {
 		_, err = b.db.ExecContext(ctx, `
-			UPDATE admins SET credit = credit - ? WHERE id = ?`, planPrice, resellerID,
+			UPDATE admins SET credit = credit - $2 WHERE id = $3`, planPrice, resellerID,
 		)
 		if err != nil {
 			return fmt.Errorf("deduct reseller credit: %w", err)
@@ -214,7 +214,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 		desc := fmt.Sprintf("Subscription for %s: %s", custUsername, planName)
 		_, err = b.db.ExecContext(ctx, `
 			INSERT INTO reseller_transactions (reseller_username, amount, type, description, actor)
-			VALUES (?, ?, 'deduction', ?, ?)`,
+			VALUES ($2, $3, 'deduction', $4, $5)`,
 			username, -planPrice, desc, username,
 		)
 		if err != nil {
@@ -224,7 +224,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 
 	// Assign plan to customer
 	_, err = b.db.ExecContext(ctx, `
-		UPDATE customers SET plan_id = ?, data_limit_gb = ?, status = 'active' WHERE id = ?`,
+		UPDATE customers SET plan_id = $2, data_limit_gb = $3, status = 'active' WHERE id = $4`,
 		planID, planDataGB, customerID,
 	)
 	if err != nil {

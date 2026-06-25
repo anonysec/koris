@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package main
 
@@ -105,7 +105,7 @@ func startBot(database *sql.DB, srv *api.Server, mux *http.ServeMux) {
 // loadActiveGateways reads active payment gateways from the database and registers
 // known gateway implementations in the server's PaymentRegistry.
 func loadActiveGateways(database *sql.DB, srv *api.Server) {
-	rows, err := database.Query(`SELECT name, COALESCE(config_json, '{}') FROM payment_gateways WHERE is_active = 1`)
+	rows, err := database.Query(`SELECT name, COALESCE(config_json, '{}') FROM payment_gateways WHERE is_active = TRUE`)
 	if err != nil {
 		// Table might not exist on first run before migrations
 		return
@@ -174,7 +174,7 @@ func processPaygBilling(db *sql.DB) {
 	for _, c := range customers {
 		// Get last deduction time for this user
 		var lastDeduction time.Time
-		err := db.QueryRow(`SELECT COALESCE(MAX(created_at), CAST('2000-01-01' AS DATETIME)) FROM payg_deductions WHERE username = ?`, c.Username).Scan(&lastDeduction)
+		err := db.QueryRow(`SELECT COALESCE(MAX(created_at), CAST('2000-01-01' AS DATETIME)) FROM payg_deductions WHERE username = $1`, c.Username).Scan(&lastDeduction)
 		if err != nil {
 			logger.Warn("worker", "payg last deduction query failed", map[string]any{"username": c.Username, "error": err.Error()})
 			continue
@@ -185,7 +185,7 @@ func processPaygBilling(db *sql.DB) {
 		err = db.QueryRow(`
 			SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0)
 			FROM radacct
-			WHERE username = ? AND (acctstarttime >= ? OR (acctstoptime IS NULL AND acctupdatetime >= ?))
+			WHERE username = $1 AND (acctstarttime >= $2 OR (acctstoptime IS NULL AND acctupdatetime >= $3))
 		`, c.Username, lastDeduction, lastDeduction).Scan(&dataUsedBytes)
 		if err != nil {
 			logger.Warn("worker", "payg data usage query failed", map[string]any{"username": c.Username, "error": err.Error()})
@@ -210,7 +210,7 @@ func processPaygBilling(db *sql.DB) {
 		balanceAfter := balanceBefore - totalCharge
 
 		// Deduct from wallet
-		_, err = db.Exec(`UPDATE wallets SET credit = credit - ? WHERE username = ?`, totalCharge, c.Username)
+		_, err = db.Exec(`UPDATE wallets SET credit = credit - $1 WHERE username = $2`, totalCharge, c.Username)
 		if err != nil {
 			logger.Warn("worker", "payg wallet deduction failed", map[string]any{"username": c.Username, "error": err.Error()})
 			continue
@@ -218,21 +218,21 @@ func processPaygBilling(db *sql.DB) {
 
 		// Record data deduction if applicable
 		if dataCharge > 0.001 {
-			_, _ = db.Exec(`INSERT INTO payg_deductions(customer_id, username, plan_id, deduction_type, amount, usage_value, balance_before, balance_after) VALUES(?,?,?,?,?,?,?,?)`,
+			_, _ = db.Exec(`INSERT INTO payg_deductions(customer_id, username, plan_id, deduction_type, amount, usage_value, balance_before, balance_after) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
 				c.ID, c.Username, c.PlanID, "data", dataCharge, dataGB, balanceBefore, balanceAfter)
 		}
 
 		// Record time deduction if applicable
 		if timeCharge > 0.001 {
-			_, _ = db.Exec(`INSERT INTO payg_deductions(customer_id, username, plan_id, deduction_type, amount, usage_value, balance_before, balance_after) VALUES(?,?,?,?,?,?,?,?)`,
+			_, _ = db.Exec(`INSERT INTO payg_deductions(customer_id, username, plan_id, deduction_type, amount, usage_value, balance_before, balance_after) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
 				c.ID, c.Username, c.PlanID, "time", timeCharge, daysSinceLastDeduction, balanceBefore, balanceAfter)
 		}
 
 		// If wallet credit <= 0 and disconnect_on_zero, limit the customer
 		if balanceAfter <= 0 && c.DisconnectOnZero {
-			_, _ = db.Exec(`UPDATE customers SET status = 'limited' WHERE id = ? AND status = 'active'`, c.ID)
+			_, _ = db.Exec(`UPDATE customers SET status = 'limited' WHERE id = $1 AND status = 'active'`, c.ID)
 			// Disconnect active sessions
-			_, _ = db.Exec(`UPDATE radacct SET acctstoptime = NOW(), acctterminatecause = 'PAYG-Zero-Balance' WHERE username = ? AND acctstoptime IS NULL`, c.Username)
+			_, _ = db.Exec(`UPDATE radacct SET acctstoptime = NOW(), acctterminatecause = 'PAYG-Zero-Balance' WHERE username = $1 AND acctstoptime IS NULL`, c.Username)
 			logger.Info("worker", "payg: disconnected user (zero balance)", map[string]any{"username": c.Username})
 		}
 	}

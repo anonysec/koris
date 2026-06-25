@@ -277,7 +277,7 @@ func SaveConfigToDB(db *sql.DB, cfg LDAPConfig) error {
 		return fmt.Errorf("marshal ldap config: %w", err)
 	}
 	_, err = db.Exec(
-		`INSERT INTO panel_settings (setting_key, setting_value) VALUES ('ldap_config', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+		`INSERT INTO panel_settings (setting_key, setting_value) VALUES ('ldap_config', $1) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
 		string(data),
 	)
 	return err

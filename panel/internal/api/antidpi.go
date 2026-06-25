@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -30,7 +30,7 @@ func (s *Server) handleNodeAntiDPI(w http.ResponseWriter, r *http.Request, nodeI
 
 // listAntiDPIConfigs returns all anti-DPI configurations for a node.
 func (s *Server) listAntiDPIConfigs(w http.ResponseWriter, nodeID int64) {
-	rows, err := s.DB.Query(`SELECT id, technique, config_json, is_active, created_at, updated_at FROM node_antidpi WHERE node_id = ? ORDER BY technique`, nodeID)
+	rows, err := s.DB.Query(`SELECT id, technique, config_json, is_active, created_at, updated_at FROM node_antidpi WHERE node_id = $1 ORDER BY technique`, nodeID)
 	if err != nil {
 		log.Printf("[antidpi] list query failed for node %d: %v", nodeID, err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -107,9 +107,9 @@ func (s *Server) upsertAntiDPIConfig(w http.ResponseWriter, r *http.Request, nod
 		return
 	}
 
-	// Upsert: INSERT ... ON DUPLICATE KEY UPDATE (node_id + technique is unique)
-	_, err = s.DB.Exec(`INSERT INTO node_antidpi (node_id, technique, config_json, is_active) VALUES (?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE config_json = VALUES(config_json), is_active = VALUES(is_active), updated_at = CURRENT_TIMESTAMP`,
+	// Upsert: INSERT ... ON CONFLICT (node_id + technique is unique)
+	_, err = s.DB.Exec(`INSERT INTO node_antidpi (node_id, technique, config_json, is_active) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (node_id, technique) DO UPDATE SET config_json = EXCLUDED.config_json, is_active = EXCLUDED.is_active, updated_at = CURRENT_TIMESTAMP`,
 		nodeID, in.Technique, string(configBytes), isActive)
 	if err != nil {
 		log.Printf("[antidpi] upsert failed for node %d technique %s: %v", nodeID, in.Technique, err)
@@ -132,7 +132,7 @@ func (s *Server) deleteAntiDPIConfig(w http.ResponseWriter, nodeID int64, techni
 		return
 	}
 
-	result, err := s.DB.Exec(`DELETE FROM node_antidpi WHERE node_id = ? AND technique = ?`, nodeID, technique)
+	result, err := s.DB.Exec(`DELETE FROM node_antidpi WHERE node_id = $1 AND technique = $2`, nodeID, technique)
 	if err != nil {
 		log.Printf("[antidpi] delete failed for node %d technique %s: %v", nodeID, technique, err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})

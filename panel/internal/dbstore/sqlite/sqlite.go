@@ -184,7 +184,7 @@ func (s *SQLiteStore) ReleaseLock(_ context.Context, lockID int64) error {
 func (s *SQLiteStore) GetSession(ctx context.Context, token string) (*dbstore.Session, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT token, admin_id, customer_id, data, ip_address, user_agent, created_at, expires_at, last_seen
-		FROM panel_sessions WHERE token = ?
+		FROM panel_sessions WHERE token = $1
 	`, token)
 
 	sess := &dbstore.Session{}
@@ -224,7 +224,7 @@ func (s *SQLiteStore) GetSession(ctx context.Context, token string) (*dbstore.Se
 func (s *SQLiteStore) SaveSession(ctx context.Context, sess *dbstore.Session) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT OR REPLACE INTO panel_sessions (token, admin_id, customer_id, data, ip_address, user_agent, created_at, expires_at, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`,
 		sess.Token,
 		sess.AdminID,
@@ -262,7 +262,7 @@ func (s *SQLiteStore) CleanExpiredSessions(ctx context.Context) error {
 func (s *SQLiteStore) InsertMetrics(ctx context.Context, nodeID int64, m *dbstore.MetricsRow) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO node_metrics_history (time, node_id, cpu_percent, ram_percent, disk_percent, rx_bps, tx_bps, active_sessions, uptime_seconds)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`,
 		m.Time.Format(time.RFC3339),
 		nodeID,
@@ -281,7 +281,7 @@ func (s *SQLiteStore) InsertMetrics(ctx context.Context, nodeID int64, m *dbstor
 func (s *SQLiteStore) InsertTrafficLog(ctx context.Context, entry *dbstore.TrafficLogEntry) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO user_traffic_log (time, user_id, node_id, rx_bytes, tx_bytes)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5)
 	`,
 		entry.Time.Format(time.RFC3339),
 		entry.UserID,
@@ -297,7 +297,7 @@ func (s *SQLiteStore) QueryMetrics(ctx context.Context, nodeID int64, from, to t
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT time, cpu_percent, ram_percent, disk_percent, rx_bps, tx_bps, active_sessions, uptime_seconds
 		FROM node_metrics_history
-		WHERE node_id = ? AND time >= ? AND time <= ?
+		WHERE node_id = $1 AND time >= $2 AND time <= $3
 		ORDER BY time ASC
 	`, nodeID, from.Format(time.RFC3339), to.Format(time.RFC3339))
 	if err != nil {

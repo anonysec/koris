@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -103,21 +103,20 @@ func (mc *MetricsConsumer) ProcessEvent(nodeID int64, event MetricsEvent) error 
 }
 
 // updateNodeStatus writes the latest metrics to the node_status table.
-// Uses INSERT ... ON DUPLICATE KEY UPDATE for MariaDB/MySQL compatibility,
-// or INSERT ... ON CONFLICT for PostgreSQL (handled by raw SQL via database/sql).
+// Uses INSERT ... ON CONFLICT for PostgreSQL upsert behavior.
 func (mc *MetricsConsumer) updateNodeStatus(ctx context.Context, nodeID int64, event MetricsEvent, now time.Time) error {
 	db := mc.store.DB()
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO node_status (node_id, cpu_percent, ram_percent, disk_percent, rx_bps, tx_bps, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			cpu_percent = VALUES(cpu_percent),
-			ram_percent = VALUES(ram_percent),
-			disk_percent = VALUES(disk_percent),
-			rx_bps = VALUES(rx_bps),
-			tx_bps = VALUES(tx_bps),
-			updated_at = VALUES(updated_at)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (node_id) DO UPDATE SET
+			cpu_percent = EXCLUDED.cpu_percent,
+			ram_percent = EXCLUDED.ram_percent,
+			disk_percent = EXCLUDED.disk_percent,
+			rx_bps = EXCLUDED.rx_bps,
+			tx_bps = EXCLUDED.tx_bps,
+			updated_at = EXCLUDED.updated_at`,
 		nodeID,
 		event.CPUPercent,
 		event.RAMPercent,
@@ -133,8 +132,8 @@ func (mc *MetricsConsumer) updateNodeStatus(ctx context.Context, nodeID int64, e
 	// Also update the gRPC-specific columns added by migration 070
 	_, err = db.ExecContext(ctx, `
 		UPDATE node_status
-		SET last_metrics_at = ?, metrics_state = 'streaming', grpc_connected = TRUE
-		WHERE node_id = ?`,
+		SET last_metrics_at = $1, metrics_state = 'streaming', grpc_connected = TRUE
+		WHERE node_id = $2`,
 		now, nodeID,
 	)
 	return err
@@ -152,8 +151,8 @@ func (mc *MetricsConsumer) updateNodeServices(ctx context.Context, nodeID int64,
 	for _, core := range cores {
 		_, err := db.ExecContext(ctx, `
 			INSERT INTO node_services (node_id, service, status, updated_at)
-			VALUES (?, ?, ?, NOW())
-			ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = NOW()`,
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (node_id, service) DO UPDATE SET status = EXCLUDED.status, updated_at = NOW()`,
 			nodeID,
 			core.Type,
 			core.State,
@@ -211,7 +210,7 @@ func NewMetricsConsumerFromPool(store dbstore.Store, pool Pool) *MetricsConsumer
 // markNodeMetricsState updates the metrics_state column in node_status.
 // Called by the status monitor when a node transitions to stale or offline.
 func markNodeMetricsState(db *sql.DB, nodeID int64, state string) {
-	_, err := db.Exec(`UPDATE node_status SET metrics_state = ? WHERE node_id = ?`, state, nodeID)
+	_, err := db.Exec(`UPDATE node_status SET metrics_state = $1 WHERE node_id = $2`, state, nodeID)
 	if err != nil {
 		log.Printf("[grpc-client] Failed to update metrics_state for node %d: %v", nodeID, err)
 	}

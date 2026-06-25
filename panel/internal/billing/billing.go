@@ -125,7 +125,7 @@ func (b *BillingEngine) CreateInvoice(ctx context.Context, inv *Invoice) error {
 
 	result, err := b.db.ExecContext(ctx, `
 		INSERT INTO invoices (customer_id, invoice_number, amount, currency, status, type, description, plan_id, gateway_id, payment_ref, pdf_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		inv.CustomerID, inv.InvoiceNumber, inv.Amount, inv.Currency,
 		inv.Status, inv.Type, inv.Description,
 		inv.PlanID, inv.GatewayID, inv.PaymentRef, inv.PDFPath,
@@ -150,7 +150,7 @@ func (b *BillingEngine) CreateInvoice(ctx context.Context, inv *Invoice) error {
 func (b *BillingEngine) MarkInvoicePaid(ctx context.Context, invoiceID int64, paymentRef string) error {
 	now := time.Now().UTC()
 	_, err := b.db.ExecContext(ctx, `
-		UPDATE invoices SET status = 'paid', payment_ref = ?, paid_at = ? WHERE id = ?`,
+		UPDATE invoices SET status = 'paid', payment_ref = $1, paid_at = $2 WHERE id = $3`,
 		paymentRef, now, invoiceID,
 	)
 	if err != nil {
@@ -171,7 +171,7 @@ func (b *BillingEngine) GetInvoice(ctx context.Context, id int64) (*Invoice, err
 	err := b.db.QueryRowContext(ctx, `
 		SELECT id, customer_id, invoice_number, amount, currency, status, type,
 		       description, plan_id, gateway_id, payment_ref, pdf_path, created_at, paid_at
-		FROM invoices WHERE id = ?`, id,
+		FROM invoices WHERE id = $1`, id,
 	).Scan(
 		&inv.ID, &inv.CustomerID, &inv.InvoiceNumber, &inv.Amount, &inv.Currency,
 		&inv.Status, &inv.Type, &description, &planID, &gatewayID,
@@ -212,8 +212,8 @@ func (b *BillingEngine) ListInvoices(ctx context.Context, customerID int64, limi
 	rows, err := b.db.QueryContext(ctx, `
 		SELECT id, customer_id, invoice_number, amount, currency, status, type,
 		       description, plan_id, gateway_id, payment_ref, pdf_path, created_at, paid_at
-		FROM invoices WHERE customer_id = ?
-		ORDER BY created_at DESC LIMIT ?`, customerID, limit,
+		FROM invoices WHERE customer_id = $1
+		ORDER BY created_at DESC LIMIT $1`, customerID, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices: %w", err)
@@ -290,7 +290,7 @@ func (b *BillingEngine) ProcessAutoRenewal(ctx context.Context, customerID int64
 	var balance float64
 	err := b.db.QueryRowContext(ctx, `
 		SELECT plan_id, COALESCE(wallet_balance, 0)
-		FROM customers WHERE id = ? AND deleted_at IS NULL`, customerID,
+		FROM customers WHERE id = $1 AND deleted_at IS NULL`, customerID,
 	).Scan(&planID, &balance)
 	if err != nil {
 		return fmt.Errorf("fetch customer %d: %w", customerID, err)
@@ -304,7 +304,7 @@ func (b *BillingEngine) ProcessAutoRenewal(ctx context.Context, customerID int64
 	var planName string
 	var currency string
 	err = b.db.QueryRowContext(ctx, `
-		SELECT name, price, COALESCE(currency, 'IRR') FROM plans WHERE id = ?`, planID.Int64,
+		SELECT name, price, COALESCE(currency, 'IRR') FROM plans WHERE id = $1`, planID.Int64,
 	).Scan(&planName, &planPrice, &currency)
 	if err != nil {
 		return fmt.Errorf("fetch plan %d: %w", planID.Int64, err)
@@ -318,7 +318,7 @@ func (b *BillingEngine) ProcessAutoRenewal(ctx context.Context, customerID int64
 				customerID, balance))
 			_, _ = b.db.ExecContext(ctx, `
 				INSERT INTO events (type, severity, title, message, actor, related)
-				VALUES ('billing_debt', 'warning', ?, ?, 'system', ?)`,
+				VALUES ('billing_debt', 'warning', $1, $2, 'system', $3)`,
 				fmt.Sprintf("Renewal blocked: customer %d in debt", customerID),
 				fmt.Sprintf("Customer has outstanding debt of %.2f %s. Renewal for plan %s blocked.",
 					-balance, currency, planName),
@@ -347,7 +347,7 @@ func (b *BillingEngine) ProcessAutoRenewal(ctx context.Context, customerID int64
 
 	// Deduct from wallet
 	_, err = b.db.ExecContext(ctx, `
-		UPDATE customers SET wallet_balance = wallet_balance - ? WHERE id = ?`,
+		UPDATE customers SET wallet_balance = wallet_balance - $1 WHERE id = $2`,
 		planPrice, customerID,
 	)
 	if err != nil {
@@ -357,7 +357,7 @@ func (b *BillingEngine) ProcessAutoRenewal(ctx context.Context, customerID int64
 	// Record wallet transaction
 	_, err = b.db.ExecContext(ctx, `
 		INSERT INTO wallet_transactions (customer_id, invoice_id, amount, type, description, created_at)
-		VALUES (?, ?, ?, 'debit', ?, NOW())`,
+		VALUES ($1, $2, $3, 'debit', $4, NOW())`,
 		customerID, inv.ID, -planPrice, fmt.Sprintf("Auto-renewal: %s", planName),
 	)
 	if err != nil {
@@ -377,7 +377,7 @@ func (b *BillingEngine) PurchaseDataPack(ctx context.Context, customerID int64, 
 	var pack DataPack
 	err := b.db.QueryRowContext(ctx, `
 		SELECT id, name, data_gb, price, currency, is_active
-		FROM data_packs WHERE id = ?`, packID,
+		FROM data_packs WHERE id = $1`, packID,
 	).Scan(&pack.ID, &pack.Name, &pack.DataGB, &pack.Price, &pack.Currency, &pack.IsActive)
 	if err != nil {
 		return fmt.Errorf("fetch data pack %d: %w", packID, err)
@@ -389,7 +389,7 @@ func (b *BillingEngine) PurchaseDataPack(ctx context.Context, customerID int64, 
 	// Check wallet balance
 	var balance float64
 	err = b.db.QueryRowContext(ctx, `
-		SELECT COALESCE(wallet_balance, 0) FROM customers WHERE id = ? AND deleted_at IS NULL`,
+		SELECT COALESCE(wallet_balance, 0) FROM customers WHERE id = $1 AND deleted_at IS NULL`,
 		customerID,
 	).Scan(&balance)
 	if err != nil {
@@ -415,7 +415,7 @@ func (b *BillingEngine) PurchaseDataPack(ctx context.Context, customerID int64, 
 
 	// Deduct from wallet
 	_, err = b.db.ExecContext(ctx, `
-		UPDATE customers SET wallet_balance = wallet_balance - ? WHERE id = ?`,
+		UPDATE customers SET wallet_balance = wallet_balance - $1 WHERE id = $2`,
 		pack.Price, customerID,
 	)
 	if err != nil {
@@ -424,7 +424,7 @@ func (b *BillingEngine) PurchaseDataPack(ctx context.Context, customerID int64, 
 
 	// Add data to customer's allowance
 	_, err = b.db.ExecContext(ctx, `
-		UPDATE customers SET data_limit_gb = COALESCE(data_limit_gb, 0) + ? WHERE id = ?`,
+		UPDATE customers SET data_limit_gb = COALESCE(data_limit_gb, 0) + $1 WHERE id = $2`,
 		pack.DataGB, customerID,
 	)
 	if err != nil {
@@ -434,7 +434,7 @@ func (b *BillingEngine) PurchaseDataPack(ctx context.Context, customerID int64, 
 	// Record wallet transaction
 	_, err = b.db.ExecContext(ctx, `
 		INSERT INTO wallet_transactions (customer_id, invoice_id, amount, type, description, created_at)
-		VALUES (?, ?, ?, 'debit', ?, NOW())`,
+		VALUES ($1, $2, $3, 'debit', $4, NOW())`,
 		customerID, inv.ID, -pack.Price, fmt.Sprintf("Data Pack: %s", pack.Name),
 	)
 	if err != nil {

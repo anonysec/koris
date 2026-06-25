@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -136,7 +136,7 @@ func (s *Server) createFailoverDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Validate domain uniqueness among active domains
 	var existingCount int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM failover_domains WHERE domain = ? AND is_active = 1`, in.Domain).Scan(&existingCount)
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM failover_domains WHERE domain = $1 AND is_active = TRUE`, in.Domain).Scan(&existingCount)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -148,7 +148,7 @@ func (s *Server) createFailoverDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Validate node existence
 	var nodeExists int
-	err = s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = ?`, in.CurrentNodeID).Scan(&nodeExists)
+	err = s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = $1`, in.CurrentNodeID).Scan(&nodeExists)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -164,7 +164,7 @@ func (s *Server) createFailoverDomain(w http.ResponseWriter, r *http.Request) {
 	// Validate optional dns_provider_id reference
 	if in.DNSProviderID != nil && *in.DNSProviderID > 0 {
 		var providerExists int
-		err = s.DB.QueryRow(`SELECT COUNT(*) FROM dns_providers WHERE id = ? AND is_active = 1`, *in.DNSProviderID).Scan(&providerExists)
+		err = s.DB.QueryRow(`SELECT COUNT(*) FROM dns_providers WHERE id = $1 AND is_active = TRUE`, *in.DNSProviderID).Scan(&providerExists)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -177,7 +177,7 @@ func (s *Server) createFailoverDomain(w http.ResponseWriter, r *http.Request) {
 		in.DNSProviderID = nil
 	}
 
-	res, err := s.DB.Exec(`INSERT INTO failover_domains(domain, current_node_id, dns_provider_id, dns_record_id, ttl, is_active) VALUES(?,?,?,?,?,1)`,
+	res, err := s.DB.Exec(`INSERT INTO failover_domains(domain, current_node_id, dns_provider_id, dns_record_id, ttl, is_active) VALUES($1,$2,$3,$4,$5,1)`,
 		in.Domain, in.CurrentNodeID, in.DNSProviderID, in.DNSRecordID, ttl)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -215,7 +215,7 @@ func (s *Server) getFailoverDomain(w http.ResponseWriter, id int64) {
 		FROM failover_domains fd
 		LEFT JOIN nodes n ON n.id = fd.current_node_id
 		LEFT JOIN dns_providers dp ON dp.id = fd.dns_provider_id
-		WHERE fd.id = ?`, id).Scan(
+		WHERE fd.id = $1`, id).Scan(
 		&d.ID, &d.Domain, &d.CurrentNodeID, &providerID, &dnsRecordID,
 		&d.TTL, &d.IsActive, &lastFailover, &d.CreatedAt, &d.UpdatedAt,
 		&d.CurrentNodeName, &d.CurrentNodeIP,
@@ -246,7 +246,7 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 	// Check domain exists
 	var current FailoverDomain
 	var providerID sql.NullInt64
-	err := s.DB.QueryRow(`SELECT id, domain, current_node_id, dns_provider_id, dns_record_id, ttl, is_active FROM failover_domains WHERE id = ?`, id).Scan(
+	err := s.DB.QueryRow(`SELECT id, domain, current_node_id, dns_provider_id, dns_record_id, ttl, is_active FROM failover_domains WHERE id = $1`, id).Scan(
 		&current.ID, &current.Domain, &current.CurrentNodeID, &providerID, &current.DNSRecordID, &current.TTL, &current.IsActive,
 	)
 	if err == sql.ErrNoRows {
@@ -288,7 +288,7 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 		}
 		// Check uniqueness among active domains (excluding self)
 		var existingCount int
-		err := s.DB.QueryRow(`SELECT COUNT(*) FROM failover_domains WHERE domain = ? AND is_active = 1 AND id != ?`, domain, id).Scan(&existingCount)
+		err := s.DB.QueryRow(`SELECT COUNT(*) FROM failover_domains WHERE domain = $1 AND is_active = TRUE AND id != $2`, domain, id).Scan(&existingCount)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -297,13 +297,13 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 			writeJSONCode(w, http.StatusConflict, map[string]any{"ok": false, "error": "domain_exists", "message": "An active failover domain with this name already exists"})
 			return
 		}
-		sets = append(sets, "domain = ?")
+		sets = append(sets, "domain = $3")
 		args = append(args, domain)
 	}
 
 	if in.CurrentNodeID != nil {
 		var nodeExists int
-		err := s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = ?`, *in.CurrentNodeID).Scan(&nodeExists)
+		err := s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id = $1`, *in.CurrentNodeID).Scan(&nodeExists)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -312,7 +312,7 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_not_found", "message": "Referenced node does not exist"})
 			return
 		}
-		sets = append(sets, "current_node_id = ?")
+		sets = append(sets, "current_node_id = $3")
 		args = append(args, *in.CurrentNodeID)
 	}
 
@@ -322,7 +322,7 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 			sets = append(sets, "dns_provider_id = NULL")
 		} else {
 			var providerExists int
-			err := s.DB.QueryRow(`SELECT COUNT(*) FROM dns_providers WHERE id = ? AND is_active = 1`, *in.DNSProviderID).Scan(&providerExists)
+			err := s.DB.QueryRow(`SELECT COUNT(*) FROM dns_providers WHERE id = $1 AND is_active = TRUE`, *in.DNSProviderID).Scan(&providerExists)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
@@ -331,24 +331,24 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "provider_not_found", "message": "Referenced DNS provider does not exist or is inactive"})
 				return
 			}
-			sets = append(sets, "dns_provider_id = ?")
+			sets = append(sets, "dns_provider_id = $3")
 			args = append(args, *in.DNSProviderID)
 		}
 	}
 
 	if in.DNSRecordID != nil {
-		sets = append(sets, "dns_record_id = ?")
+		sets = append(sets, "dns_record_id = $3")
 		args = append(args, *in.DNSRecordID)
 	}
 
 	if in.TTL != nil {
 		ttl := normalizeFailoverTTL(*in.TTL)
-		sets = append(sets, "ttl = ?")
+		sets = append(sets, "ttl = $3")
 		args = append(args, ttl)
 	}
 
 	if in.IsActive != nil {
-		sets = append(sets, "is_active = ?")
+		sets = append(sets, "is_active = $3")
 		args = append(args, boolInt(*in.IsActive))
 	}
 
@@ -373,7 +373,7 @@ func (s *Server) updateFailoverDomain(w http.ResponseWriter, r *http.Request, id
 func (s *Server) deleteFailoverDomain(w http.ResponseWriter, r *http.Request, id int64) {
 	// Check existence
 	var domain string
-	err := s.DB.QueryRow(`SELECT domain FROM failover_domains WHERE id = ?`, id).Scan(&domain)
+	err := s.DB.QueryRow(`SELECT domain FROM failover_domains WHERE id = $1`, id).Scan(&domain)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -383,7 +383,7 @@ func (s *Server) deleteFailoverDomain(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	if _, err := s.DB.Exec(`DELETE FROM failover_domains WHERE id = ?`, id); err != nil {
+	if _, err := s.DB.Exec(`DELETE FROM failover_domains WHERE id = $1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -476,7 +476,7 @@ func (s *Server) failoverDomainStatus(w http.ResponseWriter, r *http.Request, do
 		       fd.is_active, fd.last_failover_at
 		FROM failover_domains fd
 		LEFT JOIN nodes n ON n.id = fd.current_node_id
-		WHERE fd.id = ?`, domainID).Scan(
+		WHERE fd.id = $1`, domainID).Scan(
 		&domain, &currentNodeID, &currentNodeName, &currentNodeIP,
 		&isActive, &lastFailoverAt,
 	)
@@ -501,7 +501,7 @@ func (s *Server) failoverDomainStatus(w http.ResponseWriter, r *http.Request, do
 		       dns_propagation_started_at, dns_propagation_completed_at,
 		       triggered_by, error_message, created_at
 		FROM failover_events
-		WHERE domain_id = ?
+		WHERE domain_id = $1
 		ORDER BY id DESC LIMIT 1`, domainID).Scan(
 		&evt.ID, &evt.DomainID, &evt.FromNodeID, &evt.ToNodeID,
 		&evt.Reason, &evt.Status,

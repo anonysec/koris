@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -99,7 +99,7 @@ func (s *Server) registerCore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.DB.Exec(`INSERT INTO core_plugins (name, version, download_url, checksum_sha256, protocols_json, config_template) VALUES (?, ?, ?, ?, ?, ?)`,
+	result, err := s.DB.Exec(`INSERT INTO core_plugins (name, version, download_url, checksum_sha256, protocols_json, config_template) VALUES ($1, $2, $3, $4, $5, $6)`,
 		in.Name, in.Version, in.DownloadURL, in.ChecksumSHA256, string(protocolsBytes), in.ConfigTemplate)
 	if err != nil {
 		log.Printf("[cores] insert failed: %v", err)
@@ -160,14 +160,14 @@ func (s *Server) nodeCoresInstall(w http.ResponseWriter, r *http.Request, nodeID
 
 	// Look up core plugin
 	var downloadURL, checksum string
-	err := s.DB.QueryRow(`SELECT download_url, checksum_sha256 FROM core_plugins WHERE name = ? AND version = ?`, in.CoreName, in.Version).Scan(&downloadURL, &checksum)
+	err := s.DB.QueryRow(`SELECT download_url, checksum_sha256 FROM core_plugins WHERE name = $1 AND version = $2`, in.CoreName, in.Version).Scan(&downloadURL, &checksum)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "core_not_found"})
 		return
 	}
 
 	// Insert into node_cores
-	_, err = s.DB.Exec(`INSERT INTO node_cores (node_id, core_name, version, status) VALUES (?, ?, ?, 'pending') ON DUPLICATE KEY UPDATE version = VALUES(version), status = 'pending'`,
+	_, err = s.DB.Exec(`INSERT INTO node_cores (node_id, core_name, version, status) VALUES ($1, $2, $3, 'pending') ON CONFLICT (node_id, core_name) DO UPDATE SET version = EXCLUDED.version, status = 'pending'`,
 		nodeID, in.CoreName, in.Version)
 	if err != nil {
 		log.Printf("[cores] node_cores insert failed: %v", err)
@@ -188,7 +188,7 @@ func (s *Server) nodeCoresInstall(w http.ResponseWriter, r *http.Request, nodeID
 			return
 		}
 		// Update node_cores status to installed on success
-		_, _ = s.DB.Exec(`UPDATE node_cores SET status = 'installed' WHERE node_id = ? AND core_name = ?`, nodeID, in.CoreName)
+		_, _ = s.DB.Exec(`UPDATE node_cores SET status = 'installed' WHERE node_id = $1 AND core_name = $2`, nodeID, in.CoreName)
 	} else {
 		log.Printf("[cores] gRPC pool not configured, cannot install core %s on node %d", in.CoreName, nodeID)
 	}
@@ -216,14 +216,14 @@ func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID 
 
 	// Look up new version from core_plugins
 	var downloadURL, checksum string
-	err := s.DB.QueryRow(`SELECT download_url, checksum_sha256 FROM core_plugins WHERE name = ? AND version = ?`, in.CoreName, in.Version).Scan(&downloadURL, &checksum)
+	err := s.DB.QueryRow(`SELECT download_url, checksum_sha256 FROM core_plugins WHERE name = $1 AND version = $2`, in.CoreName, in.Version).Scan(&downloadURL, &checksum)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "core_not_found"})
 		return
 	}
 
 	// Update node_cores
-	result, err := s.DB.Exec(`UPDATE node_cores SET version = ?, status = 'pending' WHERE node_id = ? AND core_name = ?`,
+	result, err := s.DB.Exec(`UPDATE node_cores SET version = $1, status = 'pending' WHERE node_id = $2 AND core_name = $3`,
 		in.Version, nodeID, in.CoreName)
 	if err != nil {
 		log.Printf("[cores] node_cores update failed: %v", err)
@@ -249,7 +249,7 @@ func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID 
 			return
 		}
 		// Update node_cores status to installed on success
-		_, _ = s.DB.Exec(`UPDATE node_cores SET status = 'installed' WHERE node_id = ? AND core_name = ?`, nodeID, in.CoreName)
+		_, _ = s.DB.Exec(`UPDATE node_cores SET status = 'installed' WHERE node_id = $1 AND core_name = $2`, nodeID, in.CoreName)
 	} else {
 		log.Printf("[cores] gRPC pool not configured, cannot update core %s on node %d", in.CoreName, nodeID)
 	}
@@ -262,7 +262,7 @@ func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID 
 func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID int64, coreName string) {
 	// Check if any active xray_inbounds depend on this core
 	var activeCount int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM xray_inbounds WHERE node_id = ? AND core_name = ? AND status = 'active'`, nodeID, coreName).Scan(&activeCount)
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM xray_inbounds WHERE node_id = $1 AND core_name = $2 AND status = 'active'`, nodeID, coreName).Scan(&activeCount)
 	if err != nil {
 		log.Printf("[cores] active inbounds check failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -286,7 +286,7 @@ func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID 
 	}
 
 	// Delete from node_cores
-	_, err = s.DB.Exec(`DELETE FROM node_cores WHERE node_id = ? AND core_name = ?`, nodeID, coreName)
+	_, err = s.DB.Exec(`DELETE FROM node_cores WHERE node_id = $1 AND core_name = $2`, nodeID, coreName)
 	if err != nil {
 		log.Printf("[cores] node_cores delete failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})

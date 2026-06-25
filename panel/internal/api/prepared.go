@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -22,7 +22,7 @@ func (p *PreparedStmts) prepareAll(db *sql.DB) {
 	p.once.Do(func() {
 		var err error
 
-		p.nodeAuth, err = db.Prepare(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`)
+		p.nodeAuth, err = db.Prepare(`SELECT id,status FROM nodes WHERE api_token_hash=$1 LIMIT 1`)
 		if err != nil {
 			log.Printf("[prepared] failed to prepare nodeAuth: %v", err)
 			p.err = err

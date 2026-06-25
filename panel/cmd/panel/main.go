@@ -132,7 +132,7 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 		JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username
 		JOIN plans p ON p.id = c.plan_id
 		LEFT JOIN wallets w ON w.username = c.username
-		WHERE c.status = 'active' AND c.auto_renew = 1 AND s.max_expires <= NOW()
+		WHERE c.status = 'active' AND c.auto_renew = TRUE AND s.max_expires <= NOW()
 		AND COALESCE(w.credit, 0) >= p.price`)
 	if autoRenewRows != nil {
 		for autoRenewRows.Next() {
@@ -142,10 +142,10 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 			var durationDays int
 			if autoRenewRows.Scan(&cid, &username, &planID, &price, &durationDays, &credit) == nil {
 				// Deduct from wallet and create new subscription
-				db.Exec(`UPDATE wallets SET credit = credit - ? WHERE username = ?`, price, username)
+				db.Exec(`UPDATE wallets SET credit = credit - $1 WHERE username = $2`, price, username)
 				expires := time.Now().AddDate(0, 0, durationDays)
-				db.Exec(`INSERT INTO subscriptions(customer_id, username, plan_id, expires_at, status) VALUES(?,?,?,?,'active')`, cid, username, planID, expires)
-				db.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES(?,?,?,?,?,?)`,
+				db.Exec(`INSERT INTO subscriptions(customer_id, username, plan_id, expires_at, status) VALUES($1,$2,$3,$4,'active')`, cid, username, planID, expires)
+				db.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES($1,$2,$3,$4,$5,$6)`,
 					cid, username, -price, "purchase", "Auto-renewal", "system")
 				logger.Info("worker", "auto-renewed customer", map[string]any{"username": username, "plan": planID, "charged": price})
 				notifier.SendEvent("renewal", fmt.Sprintf("🔄 Auto-renewed: %s", username), fmt.Sprintf("Plan renewed for %d days, charged $%.2f from wallet", durationDays, price))
@@ -173,10 +173,10 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 
 				if graceDays > 0 && now.Before(graceEnd) {
 					// Within grace period → set to 'limited' (not expired yet)
-					db.Exec(`UPDATE customers SET status='limited' WHERE id=? AND status='active'`, cid)
+					db.Exec(`UPDATE customers SET status='limited' WHERE id=$1 AND status='active'`, cid)
 				} else {
 					// Grace period over (or no grace days) → expire
-					db.Exec(`UPDATE customers SET status='expired' WHERE id=? AND status IN ('active','limited')`, cid)
+					db.Exec(`UPDATE customers SET status='expired' WHERE id=$1 AND status IN ('active','limited')`, cid)
 					expiringCustomerIDs = append(expiringCustomerIDs, cid)
 				}
 			}
@@ -191,11 +191,11 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 
 	// Usage warnings: notify admin via Telegram when users hit thresholds (80%, 95%)
 	warnRows, warnErr := db.Query(`
-		SELECT c.username, CAST(r.value AS UNSIGNED) as max_bytes, a.used
+		SELECT c.username, CAST(r.value AS BIGINT) as max_bytes, a.used
 		FROM customers c
 		JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data'
 		JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username
-		WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0`)
+		WHERE c.status='active' AND CAST(r.value AS BIGINT) > 0`)
 	if warnErr == nil {
 		for warnRows.Next() {
 			var username string
@@ -205,17 +205,17 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 				// Notify at 80% and 95% (check if not already notified via events)
 				if percent >= 95 {
 					var already int
-					db.QueryRow(`SELECT COUNT(*) FROM events WHERE related=? AND type='data_warning' AND title LIKE '%95%' AND created_at > NOW() - INTERVAL 1 DAY`, username).Scan(&already)
+					db.QueryRow(`SELECT COUNT(*) FROM events WHERE related=$1 AND type='data_warning' AND title LIKE '%95%' AND created_at > NOW() - INTERVAL '1 day'`, username).Scan(&already)
 					if already == 0 {
 						notifier.SendEvent("data_warning", fmt.Sprintf("⚠️ %s at 95%% data", username), fmt.Sprintf("User %s has used 95%% of their data limit", username))
-						db.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES('data_warning','warning',?,?,?,?)`, fmt.Sprintf("%s at 95%% data", username), fmt.Sprintf("Used %d%% of data limit", percent), "system", username)
+						db.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES('data_warning','warning',$1,$2,$3,$4)`, fmt.Sprintf("%s at 95%% data", username), fmt.Sprintf("Used %d%% of data limit", percent), "system", username)
 					}
 				} else if percent >= 80 {
 					var already int
-					db.QueryRow(`SELECT COUNT(*) FROM events WHERE related=? AND type='data_warning' AND title LIKE '%80%' AND created_at > NOW() - INTERVAL 1 DAY`, username).Scan(&already)
+					db.QueryRow(`SELECT COUNT(*) FROM events WHERE related=$1 AND type='data_warning' AND title LIKE '%80%' AND created_at > NOW() - INTERVAL '1 day'`, username).Scan(&already)
 					if already == 0 {
 						notifier.SendEvent("data_warning", fmt.Sprintf("📊 %s at 80%% data", username), fmt.Sprintf("User %s has used 80%% of their data limit", username))
-						db.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES('data_warning','info',?,?,?,?)`, fmt.Sprintf("%s at 80%% data", username), fmt.Sprintf("Used %d%% of data limit", percent), "system", username)
+						db.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES('data_warning','info',$1,$2,$3,$4)`, fmt.Sprintf("%s at 80%% data", username), fmt.Sprintf("Used %d%% of data limit", percent), "system", username)
 					}
 				}
 			}
@@ -223,13 +223,13 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 		warnRows.Close()
 	}
 
-	if _, err := db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`); err != nil {
+	if _, err := db.Exec(`UPDATE customers SET status='limited' FROM radcheck r JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON r.username=a.username WHERE customers.username=r.username AND r.attribute='Max-Data' AND customers.status='active' AND CAST(r.value AS BIGINT) > 0 AND a.used >= CAST(r.value AS BIGINT)`); err != nil {
 		logger.Error("worker", "data limit enforcement failed", map[string]any{"error": err.Error()})
 	}
-	_, _ = db.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Stalled session' WHERE acctstoptime IS NULL AND acctupdatetime < (NOW() - INTERVAL 5 MINUTE)`)
+	_, _ = db.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Stalled session' WHERE acctstoptime IS NULL AND acctupdatetime < (NOW() - INTERVAL '5 minutes')`)
 
 	// Mark nodes offline, record downtime for SLA tracking, and notify via Telegram
-	rows, err := db.Query(`SELECT id, name, public_ip FROM nodes WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+	rows, err := db.Query(`SELECT id, name, public_ip FROM nodes WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL '5 minutes')`)
 	if err == nil {
 		for rows.Next() {
 			var nodeID int64
@@ -241,12 +241,12 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 		}
 		rows.Close()
 	}
-	_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+	_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL '5 minutes')`)
 
 	// Data retention: prune old snapshots to prevent unbounded growth
 	// Keep last 7 days of node_usage_snapshots, last 24h of user_bandwidth_snapshots
-	_, _ = db.Exec(`DELETE FROM node_usage_snapshots WHERE created_at < NOW() - INTERVAL 7 DAY`)
-	_, _ = db.Exec(`DELETE FROM user_bandwidth_snapshots WHERE created_at < NOW() - INTERVAL 24 HOUR`)
+	_, _ = db.Exec(`DELETE FROM node_usage_snapshots WHERE created_at < NOW() - INTERVAL '7 days'`)
+	_, _ = db.Exec(`DELETE FROM user_bandwidth_snapshots WHERE created_at < NOW() - INTERVAL '24 hours'`)
 
 	// History retention: prune old radacct and wallet_transactions
 	// Runs only at midnight (00:00) to avoid unnecessary load
@@ -259,8 +259,8 @@ func workerTick(db *sql.DB, notifier *notify.Notifier, tickCount int) {
 				retentionDays = d
 			}
 		}
-		_, _ = db.Exec(`DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < NOW() - INTERVAL ? DAY`, retentionDays)
-		_, _ = db.Exec(`DELETE FROM wallet_transactions WHERE created_at < NOW() - INTERVAL ? DAY`, retentionDays)
+		_, _ = db.Exec(`DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < NOW() - INTERVAL '1 day' * $1`, retentionDays)
+		_, _ = db.Exec(`DELETE FROM wallet_transactions WHERE created_at < NOW() - INTERVAL '1 day' * $1`, retentionDays)
 		logger.Info("worker", "history retention: purged old records", map[string]any{"retention_days": retentionDays})
 	}
 
@@ -744,7 +744,7 @@ func main() {
 
 	// Start certificate rotation worker
 	certEventFn := func(eventType, severity, title, message string) {
-		_, _ = database.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES(?,?,?,?,?,?)`,
+		_, _ = database.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES($1,$2,$3,$4,$5,$6)`,
 			eventType, severity, title, message, "system", "")
 	}
 	certWorker := certrotation.New(database, certEventFn)
@@ -946,7 +946,7 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "domain_required"})
 				return
 			}
-			_, _ = database.Exec(`INSERT INTO panel_settings(setting_key,setting_value) VALUES('panel_domain',?) ON DUPLICATE KEY UPDATE setting_value=?`, in.Domain, in.Domain)
+			_, _ = database.Exec(`INSERT INTO panel_settings(setting_key,setting_value) VALUES($1,$2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`, in.Domain, in.Domain)
 
 			panelAddr := cfg.Addr
 			if panelAddr == "" {

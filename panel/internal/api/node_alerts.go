@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -87,7 +87,7 @@ func CheckNodeAlerts(db *sql.DB, notify func(string)) {
 // from the most recent usage snapshot.
 func getNodeConnectionCount(db *sql.DB, nodeID int64) int {
 	var count int
-	err := db.QueryRow(`SELECT COALESCE(online_users, 0) FROM node_usage_snapshots WHERE node_id=? ORDER BY id DESC LIMIT 1`, nodeID).Scan(&count)
+	err := db.QueryRow(`SELECT COALESCE(online_users, 0) FROM node_usage_snapshots WHERE node_id=$1 ORDER BY id DESC LIMIT 1`, nodeID).Scan(&count)
 	if err != nil {
 		return 0
 	}
@@ -169,7 +169,7 @@ func (s *Server) nodeAlerts(w http.ResponseWriter, r *http.Request) {
 
 	// Verify node exists
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "node_not_found"})
 		return
 	}
@@ -187,7 +187,7 @@ func (s *Server) nodeAlerts(w http.ResponseWriter, r *http.Request) {
 // getNodeAlerts returns the current alert thresholds for a node.
 func (s *Server) getNodeAlerts(w http.ResponseWriter, nodeID int64) {
 	var cpu, ram, disk, conn int
-	err := s.DB.QueryRow(`SELECT alert_cpu_threshold, alert_ram_threshold, alert_disk_threshold, COALESCE(alert_conn_threshold, 0) FROM nodes WHERE id=?`, nodeID).Scan(&cpu, &ram, &disk, &conn)
+	err := s.DB.QueryRow(`SELECT alert_cpu_threshold, alert_ram_threshold, alert_disk_threshold, COALESCE(alert_conn_threshold, 0) FROM nodes WHERE id=$1`, nodeID).Scan(&cpu, &ram, &disk, &conn)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -239,19 +239,19 @@ func (s *Server) setNodeAlerts(w http.ResponseWriter, r *http.Request, nodeID in
 	sets := []string{}
 	args := []any{}
 	if in.CPUThreshold != nil {
-		sets = append(sets, "alert_cpu_threshold = ?")
+		sets = append(sets, "alert_cpu_threshold = $1")
 		args = append(args, *in.CPUThreshold)
 	}
 	if in.RAMThreshold != nil {
-		sets = append(sets, "alert_ram_threshold = ?")
+		sets = append(sets, "alert_ram_threshold = $1")
 		args = append(args, *in.RAMThreshold)
 	}
 	if in.DiskThreshold != nil {
-		sets = append(sets, "alert_disk_threshold = ?")
+		sets = append(sets, "alert_disk_threshold = $1")
 		args = append(args, *in.DiskThreshold)
 	}
 	if in.ConnThreshold != nil {
-		sets = append(sets, "alert_conn_threshold = ?")
+		sets = append(sets, "alert_conn_threshold = $1")
 		args = append(args, *in.ConnThreshold)
 	}
 

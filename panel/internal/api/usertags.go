@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -158,7 +158,7 @@ func (s *Server) assignCustomerTags(w http.ResponseWriter, r *http.Request, cust
 
 	// INSERT IGNORE to avoid duplicates
 	for _, tagID := range in.TagIDs {
-		_, err := s.DB.Exec("INSERT IGNORE INTO customer_tags (customer_id, tag_id) VALUES (?, ?)", customerID, tagID)
+		_, err := s.DB.Exec("INSERT INTO customer_tags (customer_id, tag_id) VALUES ($1, $2) ON CONFLICT (customer_id, tag_id) DO NOTHING", customerID, tagID)
 		if err != nil {
 			log.Printf("[usertags] assign tag %d to customer %d failed: %v", tagID, customerID, err)
 		}
@@ -350,31 +350,31 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 
 	// Reseller scoping
 	if role == "reseller" {
-		where += " AND c.created_by = ?"
+		where += " AND c.created_by = $1"
 		args = append(args, actor)
 	}
 
 	// Search
 	search := strings.TrimSpace(params.Get("search"))
 	if search != "" {
-		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(c.email,'') LIKE ?)"
+		where += " AND (c.username LIKE $1 OR COALESCE(c.display_name,'') LIKE $2 OR COALESCE(c.email,'') LIKE $3)"
 		like := "%" + search + "%"
 		args = append(args, like, like, like)
 	}
 
 	// Filter: status (active/expired/disabled/suspended)
 	if status := strings.TrimSpace(params.Get("status")); status != "" {
-		where += " AND c.status = ?"
+		where += " AND c.status = $1"
 		args = append(args, status)
 	}
 
 	// Filter: plan (plan name or ID)
 	if planParam := strings.TrimSpace(params.Get("plan")); planParam != "" {
 		if pid, err := strconv.ParseInt(planParam, 10, 64); err == nil && pid > 0 {
-			where += " AND c.plan_id = ?"
+			where += " AND c.plan_id = $1"
 			args = append(args, pid)
 		} else {
-			where += " AND p.name = ?"
+			where += " AND p.name = $1"
 			args = append(args, planParam)
 		}
 	}
@@ -382,7 +382,7 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 	// Filter: node_id
 	if nodeIDStr := params.Get("node_id"); nodeIDStr != "" {
 		if nid, err := strconv.ParseInt(nodeIDStr, 10, 64); err == nil && nid > 0 {
-			where += " AND c.node_id = ?"
+			where += " AND c.node_id = $1"
 			args = append(args, nid)
 		}
 	}
@@ -390,7 +390,7 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 	// Filter: group_id
 	if groupIDStr := params.Get("group_id"); groupIDStr != "" {
 		if gid, err := strconv.ParseInt(groupIDStr, 10, 64); err == nil && gid > 0 {
-			where += " AND n.group_id = ?"
+			where += " AND n.group_id = $1"
 			args = append(args, gid)
 		}
 	}
@@ -398,13 +398,13 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 	// Filter: creation date range
 	if dateFrom := params.Get("date_from"); dateFrom != "" {
 		if _, err := time.Parse("2006-01-02", dateFrom); err == nil {
-			where += " AND c.created_at >= ?"
+			where += " AND c.created_at >= $1"
 			args = append(args, dateFrom)
 		}
 	}
 	if dateTo := params.Get("date_to"); dateTo != "" {
 		if _, err := time.Parse("2006-01-02", dateTo); err == nil {
-			where += " AND c.created_at <= ?"
+			where += " AND c.created_at <= $1"
 			args = append(args, dateTo+" 23:59:59")
 		}
 	}
@@ -414,14 +414,14 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 	if expiryFrom := params.Get("expiry_from"); expiryFrom != "" {
 		if _, err := time.Parse("2006-01-02", expiryFrom); err == nil {
 			needSubJoin = true
-			where += " AND sub.expires_at >= ?"
+			where += " AND sub.expires_at >= $1"
 			args = append(args, expiryFrom)
 		}
 	}
 	if expiryTo := params.Get("expiry_to"); expiryTo != "" {
 		if _, err := time.Parse("2006-01-02", expiryTo); err == nil {
 			needSubJoin = true
-			where += " AND sub.expires_at <= ?"
+			where += " AND sub.expires_at <= $1"
 			args = append(args, expiryTo+" 23:59:59")
 		}
 	}
@@ -432,14 +432,14 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 	if bwMin := params.Get("bandwidth_min_pct"); bwMin != "" {
 		if pct, err := strconv.ParseFloat(bwMin, 64); err == nil && pct >= 0 {
 			needUsageJoin = true
-			where += " AND (CASE WHEN p.data_gb > 0 THEN (COALESCE(ra.usage_bytes, 0) / (p.data_gb * 1073741824)) * 100 ELSE 0 END) >= ?"
+			where += " AND (CASE WHEN p.data_gb > 0 THEN (COALESCE(ra.usage_bytes, 0) / (p.data_gb * 1073741824)) * 100 ELSE 0 END) >= $1"
 			args = append(args, pct)
 		}
 	}
 	if bwMax := params.Get("bandwidth_max_pct"); bwMax != "" {
 		if pct, err := strconv.ParseFloat(bwMax, 64); err == nil && pct >= 0 {
 			needUsageJoin = true
-			where += " AND (CASE WHEN p.data_gb > 0 THEN (COALESCE(ra.usage_bytes, 0) / (p.data_gb * 1073741824)) * 100 ELSE 100 END) <= ?"
+			where += " AND (CASE WHEN p.data_gb > 0 THEN (COALESCE(ra.usage_bytes, 0) / (p.data_gb * 1073741824)) * 100 ELSE 100 END) <= $1"
 			args = append(args, pct)
 		}
 	}
@@ -485,7 +485,7 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 		for i, tid := range tagIDs {
 			placeholders[i] = strconv.FormatInt(tid, 10)
 		}
-		where += fmt.Sprintf(` AND c.id IN (SELECT customer_id FROM customer_tags WHERE tag_id IN (%s) GROUP BY customer_id HAVING COUNT(DISTINCT tag_id) = ?)`, strings.Join(placeholders, ","))
+		where += fmt.Sprintf(` AND c.id IN (SELECT customer_id FROM customer_tags WHERE tag_id IN (%s) GROUP BY customer_id HAVING COUNT(DISTINCT tag_id) = $1)`, strings.Join(placeholders, ","))
 		args = append(args, len(tagIDs))
 	}
 
@@ -505,7 +505,7 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 		FROM customers c%s
 		WHERE %s
 		ORDER BY c.created_at DESC
-		LIMIT ? OFFSET ?`, joins, where)
+		LIMIT $1 OFFSET $2`, joins, where)
 
 	dataArgs := append(args, limit, offset)
 	rows, err := s.DB.Query(dataQuery, dataArgs...)

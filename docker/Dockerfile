@@ -48,7 +48,7 @@ COPY --from=builder /koris /app/koris
 # Copy migrations (PostgreSQL default + MySQL legacy)
 COPY --from=builder /build/panel/migrations /app/migrations
 
-EXPOSE 2026 443 80
+EXPOSE 2026
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=10s \
     CMD wget --no-check-certificate -q --spider https://localhost:2026/api/health || exit 1

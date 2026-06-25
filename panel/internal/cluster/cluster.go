@@ -77,17 +77,17 @@ func (cm *ClusterManager) IsLeader() bool {
 	return cm.isLeader
 }
 
-// TryBecomeLeader attempts to acquire the MariaDB advisory lock.
+// TryBecomeLeader attempts to acquire the PostgreSQL advisory lock.
 // Returns true if this node successfully became the leader.
-// The lock is non-blocking (timeout=0).
+// The lock is non-blocking.
 func (cm *ClusterManager) TryBecomeLeader(ctx context.Context) (bool, error) {
-	var result int
-	err := cm.db.QueryRowContext(ctx, "SELECT GET_LOCK(?, 0)", LockName).Scan(&result)
+	var result bool
+	err := cm.db.QueryRowContext(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", LockName).Scan(&result)
 	if err != nil {
 		return false, err
 	}
 
-	acquired := result == 1
+	acquired := result
 	cm.mu.Lock()
 	cm.isLeader = acquired
 	cm.mu.Unlock()
@@ -107,7 +107,7 @@ func (cm *ClusterManager) TryBecomeLeader(ctx context.Context) (bool, error) {
 // ReleaseLeadership releases the advisory lock. After this call, IsLeader
 // returns false.
 func (cm *ClusterManager) ReleaseLeadership(ctx context.Context) error {
-	_, err := cm.db.ExecContext(ctx, "SELECT RELEASE_LOCK(?)", LockName)
+	_, err := cm.db.ExecContext(ctx, "SELECT pg_advisory_unlock(hashtext($1))", LockName)
 
 	cm.mu.Lock()
 	cm.isLeader = false
@@ -134,8 +134,8 @@ func (cm *ClusterManager) Heartbeat(ctx context.Context) error {
 
 	_, err := cm.db.ExecContext(ctx, `
 		INSERT INTO cluster_nodes (id, role, last_heartbeat, started_at)
-		VALUES (?, ?, NOW(), NOW())
-		ON DUPLICATE KEY UPDATE role=VALUES(role), last_heartbeat=NOW()
+		VALUES ($1, $2, NOW(), NOW())
+		ON CONFLICT (id) DO UPDATE SET role=EXCLUDED.role, last_heartbeat=NOW()
 	`, cm.nodeID, string(role))
 	if err != nil {
 		log.Printf("[cluster] heartbeat failed: %v", err)
@@ -198,7 +198,7 @@ func (cm *ClusterManager) checkTableExists() bool {
 	var count int
 	err := cm.db.QueryRow(`
 		SELECT COUNT(*) FROM information_schema.tables
-		WHERE table_schema = DATABASE() AND table_name = 'cluster_nodes'
+		WHERE table_schema = current_schema() AND table_name = 'cluster_nodes'
 	`).Scan(&count)
 	if err != nil {
 		return false
@@ -210,8 +210,8 @@ func (cm *ClusterManager) checkTableExists() bool {
 func (cm *ClusterManager) updateRole(ctx context.Context, role Role) {
 	_, err := cm.db.ExecContext(ctx, `
 		INSERT INTO cluster_nodes (id, role, last_heartbeat, started_at)
-		VALUES (?, ?, NOW(), NOW())
-		ON DUPLICATE KEY UPDATE role=VALUES(role), last_heartbeat=NOW()
+		VALUES ($1, $2, NOW(), NOW())
+		ON CONFLICT (id) DO UPDATE SET role=EXCLUDED.role, last_heartbeat=NOW()
 	`, cm.nodeID, string(role))
 	if err != nil {
 		log.Printf("[cluster] failed to update role: %v", err)

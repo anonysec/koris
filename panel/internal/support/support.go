@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 // Package support provides the ticket-based support system for KorisPanel.
 // It handles ticket CRUD, conversation threads, file attachments,
@@ -138,7 +138,7 @@ func (s *TicketService) Create(ctx context.Context, customerID int64, subject, c
 	// Insert ticket
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO tickets (customer_id, subject, category, priority, status)
-		VALUES (?, ?, ?, ?, 'open')`,
+		VALUES ($1, $2, $3, $4, 'open')`,
 		customerID, subject, category, priority,
 	)
 	if err != nil {
@@ -152,7 +152,7 @@ func (s *TicketService) Create(ctx context.Context, customerID int64, subject, c
 
 	// Fetch customer name for sender_name
 	var senderName string
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(username, '') FROM customers WHERE id = ?`, customerID).Scan(&senderName)
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(username, '') FROM customers WHERE id = $1`, customerID).Scan(&senderName)
 	if err != nil {
 		senderName = fmt.Sprintf("customer_%d", customerID)
 	}
@@ -160,7 +160,7 @@ func (s *TicketService) Create(ctx context.Context, customerID int64, subject, c
 	// Insert initial message
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, body, is_internal)
-		VALUES (?, 'customer', ?, ?, FALSE)`,
+		VALUES ($1, 'customer', $2, $3, FALSE)`,
 		ticketID, senderName, body,
 	)
 	if err != nil {
@@ -198,7 +198,7 @@ func (s *TicketService) Get(ctx context.Context, ticketID int64) (*Ticket, error
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, customer_id, subject, category, priority, status,
 		       assigned_to, satisfaction_rating, created_at, updated_at, resolved_at, closed_at
-		FROM tickets WHERE id = ?`, ticketID,
+		FROM tickets WHERE id = $1`, ticketID,
 	).Scan(
 		&t.ID, &t.CustomerID, &t.Subject, &t.Category, &t.Priority, &t.Status,
 		&assignedTo, &rating, &t.CreatedAt, &t.UpdatedAt, &resolvedAt, &closedAt,
@@ -235,23 +235,23 @@ func (s *TicketService) List(ctx context.Context, f ListFilter) ([]Ticket, int, 
 	args := []any{}
 
 	if f.Status != "" {
-		where += " AND status = ?"
+		where += " AND status = $1"
 		args = append(args, f.Status)
 	}
 	if f.Category != "" {
-		where += " AND category = ?"
+		where += " AND category = $1"
 		args = append(args, f.Category)
 	}
 	if f.Priority != "" {
-		where += " AND priority = ?"
+		where += " AND priority = $1"
 		args = append(args, f.Priority)
 	}
 	if f.CustomerID > 0 {
-		where += " AND customer_id = ?"
+		where += " AND customer_id = $1"
 		args = append(args, f.CustomerID)
 	}
 	if f.AssignedTo != "" {
-		where += " AND assigned_to = ?"
+		where += " AND assigned_to = $1"
 		args = append(args, f.AssignedTo)
 	}
 
@@ -267,7 +267,7 @@ func (s *TicketService) List(ctx context.Context, f ListFilter) ([]Ticket, int, 
 		SELECT id, customer_id, subject, category, priority, status,
 		       assigned_to, satisfaction_rating, created_at, updated_at, resolved_at, closed_at
 		FROM tickets %s
-		ORDER BY updated_at DESC LIMIT ? OFFSET ?`, where)
+		ORDER BY updated_at DESC LIMIT $1 OFFSET $2`, where)
 	args = append(args, f.Limit, f.Offset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -327,11 +327,11 @@ func (s *TicketService) UpdateStatus(ctx context.Context, ticketID int64, newSta
 	var query string
 	switch newStatus {
 	case "resolved":
-		query = `UPDATE tickets SET status = ?, resolved_at = NOW(), updated_at = NOW() WHERE id = ?`
+		query = `UPDATE tickets SET status = $1, resolved_at = NOW(), updated_at = NOW() WHERE id = $2`
 	case "closed":
-		query = `UPDATE tickets SET status = ?, closed_at = NOW(), updated_at = NOW() WHERE id = ?`
+		query = `UPDATE tickets SET status = $1, closed_at = NOW(), updated_at = NOW() WHERE id = $2`
 	default:
-		query = `UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ?`
+		query = `UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2`
 	}
 
 	result, err := s.db.ExecContext(ctx, query, newStatus, ticketID)
@@ -368,7 +368,7 @@ func (s *TicketService) Reply(ctx context.Context, ticketID int64, senderType, s
 	// Insert message
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, body, is_internal)
-		VALUES (?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5)`,
 		ticketID, senderType, senderName, body, isInternal,
 	)
 	if err != nil {
@@ -390,7 +390,7 @@ func (s *TicketService) Reply(ctx context.Context, ticketID int64, senderType, s
 			statusUpdate = "open"
 		}
 		_, err = tx.ExecContext(ctx, `
-			UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ? AND status != 'closed'`,
+			UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2 AND status != 'closed'`,
 			statusUpdate, ticketID,
 		)
 		if err != nil {
@@ -398,7 +398,7 @@ func (s *TicketService) Reply(ctx context.Context, ticketID int64, senderType, s
 		}
 	} else {
 		// Just update timestamp for internal notes
-		_, err = tx.ExecContext(ctx, `UPDATE tickets SET updated_at = NOW() WHERE id = ?`, ticketID)
+		_, err = tx.ExecContext(ctx, `UPDATE tickets SET updated_at = NOW() WHERE id = $1`, ticketID)
 		if err != nil {
 			return nil, fmt.Errorf("update ticket timestamp: %w", err)
 		}
@@ -431,7 +431,7 @@ func (s *TicketService) GetMessages(ctx context.Context, ticketID int64) ([]Mess
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, ticket_id, sender_type, sender_name, body, is_internal, created_at
 		FROM ticket_messages
-		WHERE ticket_id = ?
+		WHERE ticket_id = $1
 		ORDER BY created_at ASC`, ticketID,
 	)
 	if err != nil {
@@ -463,7 +463,7 @@ func (s *TicketService) Rate(ctx context.Context, ticketID int64, rating int) er
 
 	// Verify ticket is resolved or closed
 	var status string
-	err := s.db.QueryRowContext(ctx, `SELECT status FROM tickets WHERE id = ?`, ticketID).Scan(&status)
+	err := s.db.QueryRowContext(ctx, `SELECT status FROM tickets WHERE id = $1`, ticketID).Scan(&status)
 	if err != nil {
 		return fmt.Errorf("get ticket status: %w", err)
 	}
@@ -472,7 +472,7 @@ func (s *TicketService) Rate(ctx context.Context, ticketID int64, rating int) er
 	}
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE tickets SET satisfaction_rating = ? WHERE id = ?`, rating, ticketID,
+		UPDATE tickets SET satisfaction_rating = $1 WHERE id = $2`, rating, ticketID,
 	)
 	if err != nil {
 		return fmt.Errorf("update rating: %w", err)
@@ -494,7 +494,7 @@ func (s *TicketService) Rate(ctx context.Context, ticketID int64, rating int) er
 func (s *TicketService) AutoAssign(ctx context.Context, ticketID int64, category string) (string, error) {
 	// Get the customer for this ticket
 	var customerID int64
-	err := s.db.QueryRowContext(ctx, `SELECT customer_id FROM tickets WHERE id = ?`, ticketID).Scan(&customerID)
+	err := s.db.QueryRowContext(ctx, `SELECT customer_id FROM tickets WHERE id = $1`, ticketID).Scan(&customerID)
 	if err != nil {
 		return "", fmt.Errorf("get ticket customer: %w", err)
 	}
@@ -503,14 +503,14 @@ func (s *TicketService) AutoAssign(ctx context.Context, ticketID int64, category
 	var prevAdmin sql.NullString
 	err = s.db.QueryRowContext(ctx, `
 		SELECT assigned_to FROM tickets
-		WHERE customer_id = ? AND id != ? AND assigned_to IS NOT NULL AND assigned_to != ''
+		WHERE customer_id = $1 AND id != $2 AND assigned_to IS NOT NULL AND assigned_to != ''
 		ORDER BY updated_at DESC LIMIT 1`,
 		customerID, ticketID,
 	).Scan(&prevAdmin)
 	if err == nil && prevAdmin.Valid && prevAdmin.String != "" {
 		// Assign to previous handler
 		_, err = s.db.ExecContext(ctx, `
-			UPDATE tickets SET assigned_to = ?, updated_at = NOW() WHERE id = ?`,
+			UPDATE tickets SET assigned_to = $1, updated_at = NOW() WHERE id = $2`,
 			prevAdmin.String, ticketID,
 		)
 		if err != nil {
@@ -536,7 +536,7 @@ func (s *TicketService) AutoAssign(ctx context.Context, ticketID int64, category
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-		UPDATE tickets SET assigned_to = ?, updated_at = NOW() WHERE id = ?`,
+		UPDATE tickets SET assigned_to = $1, updated_at = NOW() WHERE id = $2`,
 		admin.String, ticketID,
 	)
 	if err != nil {

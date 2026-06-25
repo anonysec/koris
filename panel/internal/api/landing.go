@@ -72,7 +72,7 @@ func (s *Server) patchAdminLanding(w http.ResponseWriter, r *http.Request) {
 	var args []any
 
 	if in.Enabled != nil {
-		sets = append(sets, "enabled = ?")
+		sets = append(sets, "enabled = $1")
 		if *in.Enabled {
 			args = append(args, 1)
 		} else {
@@ -80,19 +80,19 @@ func (s *Server) patchAdminLanding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if in.Title != nil {
-		sets = append(sets, "title = ?")
+		sets = append(sets, "title = $1")
 		args = append(args, *in.Title)
 	}
 	if in.Description != nil {
-		sets = append(sets, "description = ?")
+		sets = append(sets, "description = $1")
 		args = append(args, *in.Description)
 	}
 	if in.LogoURL != nil {
-		sets = append(sets, "logo_url = ?")
+		sets = append(sets, "logo_url = $1")
 		args = append(args, *in.LogoURL)
 	}
 	if in.HeroContent != nil {
-		sets = append(sets, "hero_content = ?")
+		sets = append(sets, "hero_content = $1")
 		args = append(args, *in.HeroContent)
 	}
 
@@ -150,7 +150,7 @@ func (s *Server) serveLandingPage(w http.ResponseWriter, r *http.Request) {
 	}
 	var plans []PricingPlan
 
-	rows, err := s.DB.Query(`SELECT name, price, features FROM plans WHERE is_active = 1 ORDER BY price ASC`)
+	rows, err := s.DB.Query(`SELECT name, price, features FROM plans WHERE is_active = TRUE ORDER BY price ASC`)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {

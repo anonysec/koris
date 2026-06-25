@@ -18,10 +18,10 @@ func (b *BillingEngine) RunAutoRenewalCheck(ctx context.Context) error {
 		FROM customers c
 		JOIN subscriptions s ON s.customer_id = c.id AND s.status = 'active'
 		WHERE c.status = 'active'
-		  AND c.auto_renew = 1
+		  AND c.auto_renew = TRUE
 		  AND c.deleted_at IS NULL
 		  AND s.expires_at IS NOT NULL
-		  AND s.expires_at <= NOW() + INTERVAL 24 HOUR
+		  AND s.expires_at <= NOW() + INTERVAL '24 hours'
 		  AND s.expires_at > NOW()
 	`)
 	if err != nil {
@@ -82,7 +82,7 @@ func (b *BillingEngine) sendWarningsForWindow(ctx context.Context, hours int, la
 		WHERE c.status = 'active'
 		  AND c.deleted_at IS NULL
 		  AND s.expires_at IS NOT NULL
-		  AND s.expires_at <= NOW() + INTERVAL ? HOUR
+		  AND s.expires_at <= NOW() + INTERVAL '1 hour' * $1
 		  AND s.expires_at > NOW()
 	`, hours)
 	if err != nil {
@@ -113,9 +113,9 @@ func (b *BillingEngine) sendWarningsForWindow(ctx context.Context, hours int, la
 		var alreadySent int
 		err := b.db.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM events
-			WHERE related = ? AND type = 'expiry_warning'
-			  AND title LIKE ?
-			  AND created_at > NOW() - INTERVAL 1 DAY
+			WHERE related = $1 AND type = 'expiry_warning'
+			  AND title LIKE $2
+			  AND created_at > NOW() - INTERVAL '1 day'
 		`, c.Username, fmt.Sprintf("%%%s%%", label)).Scan(&alreadySent)
 		if err != nil {
 			log.Printf("[billing] check existing %s warning for %s: %v", label, c.Username, err)
@@ -134,7 +134,7 @@ func (b *BillingEngine) sendWarningsForWindow(ctx context.Context, hours int, la
 		// Record the event to prevent duplicate warnings
 		_, _ = b.db.ExecContext(ctx, `
 			INSERT INTO events (type, severity, title, message, actor, related)
-			VALUES ('expiry_warning', 'warning', ?, ?, 'system', ?)
+			VALUES ('expiry_warning', 'warning', $1, $2, 'system', $3)
 		`, fmt.Sprintf("%s expiry warning: %s", label, c.Username),
 			fmt.Sprintf("Subscription expires in %v", remaining),
 			c.Username)

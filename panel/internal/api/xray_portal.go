@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -29,7 +29,7 @@ func (s *Server) handleXraySubscription(w http.ResponseWriter, r *http.Request) 
 	// Get customer ID from username.
 	var customerID int64
 	err := s.DB.QueryRow(
-		`SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`,
+		`SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`,
 		username,
 	).Scan(&customerID)
 	if err == sql.ErrNoRows {
@@ -51,7 +51,7 @@ func (s *Server) handleXraySubscription(w http.ResponseWriter, r *http.Request) 
 		       n.public_ip, COALESCE(n.name, '')
 		FROM xray_inbounds xi
 		JOIN nodes n ON n.id = xi.node_id
-		WHERE xi.customer_id = ? AND xi.status = 'active'
+		WHERE xi.customer_id = $1 AND xi.status = 'active'
 		ORDER BY xi.id ASC`, customerID)
 	if err != nil {
 		log.Printf("[xray-portal] query inbounds for customer %d: %v", customerID, err)
@@ -142,7 +142,7 @@ func (s *Server) handleXrayLinks(w http.ResponseWriter, r *http.Request) {
 	// Get customer ID from username.
 	var customerID int64
 	err := s.DB.QueryRow(
-		`SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`,
+		`SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`,
 		username,
 	).Scan(&customerID)
 	if err == sql.ErrNoRows {
@@ -164,7 +164,7 @@ func (s *Server) handleXrayLinks(w http.ResponseWriter, r *http.Request) {
 		       n.public_ip, COALESCE(n.name, '')
 		FROM xray_inbounds xi
 		JOIN nodes n ON n.id = xi.node_id
-		WHERE xi.customer_id = ? AND xi.status = 'active'
+		WHERE xi.customer_id = $1 AND xi.status = 'active'
 		ORDER BY xi.id ASC`, customerID)
 	if err != nil {
 		log.Printf("[xray-portal] query inbounds for customer %d: %v", customerID, err)

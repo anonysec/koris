@@ -19,7 +19,7 @@ type HealthCheck interface {
 type DatabaseCheck struct{}
 
 func (c *DatabaseCheck) Name() string     { return "database_connectivity" }
-func (c *DatabaseCheck) Category() string  { return "database" }
+func (c *DatabaseCheck) Category() string { return "database" }
 
 func (c *DatabaseCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -50,10 +50,10 @@ func (c *DatabaseCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type NodeOnlineCheck struct{}
 
 func (c *NodeOnlineCheck) Name() string     { return "node_online_status" }
-func (c *NodeOnlineCheck) Category() string  { return "nodes" }
+func (c *NodeOnlineCheck) Category() string { return "nodes" }
 
 func (c *NodeOnlineCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
-	query := `SELECT COUNT(*) FROM nodes WHERE status NOT IN ('disabled') AND (id NOT IN (SELECT node_id FROM node_status WHERE updated_at > NOW() - INTERVAL 5 MINUTE))`
+	query := `SELECT COUNT(*) FROM nodes WHERE status NOT IN ('disabled') AND (id NOT IN (SELECT node_id FROM node_status WHERE updated_at > NOW() - INTERVAL '5 minutes'))`
 
 	var count int
 	err := db.QueryRowContext(ctx, query).Scan(&count)
@@ -87,7 +87,7 @@ func (c *NodeOnlineCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type VPNServiceCheck struct{}
 
 func (c *VPNServiceCheck) Name() string     { return "vpn_service_health" }
-func (c *VPNServiceCheck) Category() string  { return "vpn" }
+func (c *VPNServiceCheck) Category() string { return "vpn" }
 
 func (c *VPNServiceCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 	query := `SELECT openvpn_status, l2tp_status, ikev2_status FROM node_status`
@@ -141,7 +141,7 @@ func (c *VPNServiceCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type DiskUsageCheck struct{}
 
 func (c *DiskUsageCheck) Name() string     { return "disk_usage" }
-func (c *DiskUsageCheck) Category() string  { return "resources" }
+func (c *DiskUsageCheck) Category() string { return "resources" }
 
 func (c *DiskUsageCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 	query := `SELECT MAX(disk_percent) FROM node_status`
@@ -178,7 +178,7 @@ func (c *DiskUsageCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type MemoryUsageCheck struct{}
 
 func (c *MemoryUsageCheck) Name() string     { return "memory_usage" }
-func (c *MemoryUsageCheck) Category() string  { return "resources" }
+func (c *MemoryUsageCheck) Category() string { return "resources" }
 
 func (c *MemoryUsageCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 	query := `SELECT MAX(ram_percent) FROM node_status`
@@ -215,7 +215,7 @@ func (c *MemoryUsageCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type CPUUsageCheck struct{}
 
 func (c *CPUUsageCheck) Name() string     { return "cpu_usage" }
-func (c *CPUUsageCheck) Category() string  { return "resources" }
+func (c *CPUUsageCheck) Category() string { return "resources" }
 
 func (c *CPUUsageCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 	query := `SELECT MAX(cpu_percent) FROM node_status`
@@ -252,10 +252,10 @@ func (c *CPUUsageCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type StaleSessionCheck struct{}
 
 func (c *StaleSessionCheck) Name() string     { return "stale_sessions" }
-func (c *StaleSessionCheck) Category() string  { return "sessions" }
+func (c *StaleSessionCheck) Category() string { return "sessions" }
 
 func (c *StaleSessionCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
-	query := `SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND acctupdatetime < NOW() - INTERVAL 5 MINUTE`
+	query := `SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND acctupdatetime < NOW() - INTERVAL '5 minutes'`
 
 	var count int
 	err := db.QueryRowContext(ctx, query).Scan(&count)
@@ -289,7 +289,7 @@ func (c *StaleSessionCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 type ExpiredSubscriptionCheck struct{}
 
 func (c *ExpiredSubscriptionCheck) Name() string     { return "expired_subscriptions" }
-func (c *ExpiredSubscriptionCheck) Category() string  { return "subscriptions" }
+func (c *ExpiredSubscriptionCheck) Category() string { return "subscriptions" }
 
 func (c *ExpiredSubscriptionCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
 	query := `SELECT COUNT(*) FROM customers WHERE status='expired' AND deleted_at IS NULL`
@@ -325,10 +325,10 @@ func (c *ExpiredSubscriptionCheck) Run(ctx context.Context, db *sql.DB) CheckRes
 type DNSFailoverCheck struct{}
 
 func (c *DNSFailoverCheck) Name() string     { return "dns_failover_status" }
-func (c *DNSFailoverCheck) Category() string  { return "failover" }
+func (c *DNSFailoverCheck) Category() string { return "failover" }
 
 func (c *DNSFailoverCheck) Run(ctx context.Context, db *sql.DB) CheckResult {
-	query := `SELECT COUNT(*) FROM failover_events WHERE status IN ('pending','propagating','failed') AND created_at > NOW() - INTERVAL 1 HOUR`
+	query := `SELECT COUNT(*) FROM failover_events WHERE status IN ('pending','propagating','failed') AND created_at > NOW() - INTERVAL '1 hour'`
 
 	var count int
 	err := db.QueryRowContext(ctx, query).Scan(&count)

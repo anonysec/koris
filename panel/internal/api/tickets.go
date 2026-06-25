@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -123,7 +123,7 @@ func (s *Server) adminCreateTicket(w http.ResponseWriter, r *http.Request) {
 
 	// Verify customer exists
 	var username string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT username FROM customers WHERE id = ? AND deleted_at IS NULL LIMIT 1`, in.CustomerID).Scan(&username)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT username FROM customers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`, in.CustomerID).Scan(&username)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
@@ -206,7 +206,7 @@ func (s *Server) adminUpdateTicket(w http.ResponseWriter, r *http.Request, id in
 		switch in.Priority {
 		case "low", "normal", "medium", "high", "urgent":
 			// Update priority and recalculate SLA deadline
-			_, err := s.DB.ExecContext(r.Context(), `UPDATE tickets SET priority = ?, updated_at = NOW() WHERE id = ?`, in.Priority, id)
+			_, err := s.DB.ExecContext(r.Context(), `UPDATE tickets SET priority = $1, updated_at = NOW() WHERE id = $2`, in.Priority, id)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "priority_update_failed"})
 				return
@@ -230,7 +230,7 @@ func (s *Server) adminUpdateTicket(w http.ResponseWriter, r *http.Request, id in
 	if in.Category != "" {
 		switch in.Category {
 		case "billing", "technical", "general":
-			_, err := s.DB.ExecContext(r.Context(), `UPDATE tickets SET category = ?, updated_at = NOW() WHERE id = ?`, in.Category, id)
+			_, err := s.DB.ExecContext(r.Context(), `UPDATE tickets SET category = $1, updated_at = NOW() WHERE id = $2`, in.Category, id)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "category_update_failed"})
 				return
@@ -244,7 +244,7 @@ func (s *Server) adminUpdateTicket(w http.ResponseWriter, r *http.Request, id in
 
 	// Update assignment if provided
 	if in.AssignedTo != "" {
-		_, err := s.DB.ExecContext(r.Context(), `UPDATE tickets SET assigned_to = ?, updated_at = NOW() WHERE id = ?`, in.AssignedTo, id)
+		_, err := s.DB.ExecContext(r.Context(), `UPDATE tickets SET assigned_to = $1, updated_at = NOW() WHERE id = $2`, in.AssignedTo, id)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "assign_failed"})
 			return
@@ -332,7 +332,7 @@ func (s *Server) customerListTickets(w http.ResponseWriter, r *http.Request) {
 
 	// Get customer ID from username
 	var customerID int64
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
@@ -383,7 +383,7 @@ func (s *Server) customerCreateTicket(w http.ResponseWriter, r *http.Request) {
 
 	// Get customer ID
 	var customerID int64
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
@@ -505,7 +505,7 @@ func (s *Server) customerRateTicket(w http.ResponseWriter, r *http.Request, tick
 // belongs to the customer identified by username.
 func (s *Server) supportTicketBelongsToCustomer(r *http.Request, ticketID int64, username string) bool {
 	var customerID int64
-	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
 		return false
 	}
@@ -529,7 +529,7 @@ func truncate(s string, maxLen int) string {
 func (s *Server) setSLADeadline(ctx context.Context, ticketID int64, priority string) {
 	var minutes int
 	err := s.DB.QueryRowContext(ctx,
-		`SELECT response_minutes FROM sla_config WHERE priority = ?`, priority).Scan(&minutes)
+		`SELECT response_minutes FROM sla_config WHERE priority = $1`, priority).Scan(&minutes)
 	if err != nil {
 		// SLA config not found for this priority — skip silently
 		return
@@ -537,5 +537,5 @@ func (s *Server) setSLADeadline(ctx context.Context, ticketID int64, priority st
 
 	deadline := time.Now().UTC().Add(time.Duration(minutes) * time.Minute)
 	_, _ = s.DB.ExecContext(ctx,
-		`UPDATE tickets SET sla_deadline_at = ? WHERE id = ?`, deadline, ticketID)
+		`UPDATE tickets SET sla_deadline_at = $1 WHERE id = $2`, deadline, ticketID)
 }

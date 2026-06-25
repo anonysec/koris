@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -109,9 +109,9 @@ func (s *Server) calculateMonthSLA(nodeID int64, monthStart, monthEnd time.Time)
 	rows, err := s.DB.Query(`
 		SELECT id, started_at, ended_at, duration_seconds, COALESCE(reason, '')
 		FROM node_downtimes
-		WHERE node_id = ?
-		  AND started_at < ?
-		  AND (ended_at IS NULL OR ended_at > ?)
+		WHERE node_id = $1
+		  AND started_at < $1
+		  AND (ended_at IS NULL OR ended_at > $1)
 		ORDER BY started_at ASC`,
 		nodeID, monthEnd, monthStart,
 	)
@@ -295,7 +295,7 @@ func (s *Server) nodesSLASummary(w http.ResponseWriter, r *http.Request) {
 func RecordNodeDowntime(db *sql.DB, nodeID int64, reason string) {
 	// Only create a new downtime if there isn't already an open one
 	var openCount int
-	err := db.QueryRow(`SELECT COUNT(*) FROM node_downtimes WHERE node_id = ? AND ended_at IS NULL`, nodeID).Scan(&openCount)
+	err := db.QueryRow(`SELECT COUNT(*) FROM node_downtimes WHERE node_id = $1 AND ended_at IS NULL`, nodeID).Scan(&openCount)
 	if err != nil {
 		log.Printf("[sla] error checking open downtime node=%d: %v", nodeID, err)
 		return
@@ -305,7 +305,7 @@ func RecordNodeDowntime(db *sql.DB, nodeID int64, reason string) {
 	}
 
 	_, err = db.Exec(
-		`INSERT INTO node_downtimes(node_id, started_at, reason) VALUES(?, NOW(), ?)`,
+		`INSERT INTO node_downtimes(node_id, started_at, reason) VALUES($1, NOW(), $2)`,
 		nodeID, reason,
 	)
 	if err != nil {
@@ -317,7 +317,7 @@ func RecordNodeDowntime(db *sql.DB, nodeID int64, reason string) {
 // Called from the gRPC metrics stream handler when a node reconnects.
 func CloseNodeDowntime(db *sql.DB, nodeID int64) {
 	_, err := db.Exec(
-		`UPDATE node_downtimes SET ended_at = NOW(), duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW()) WHERE node_id = ? AND ended_at IS NULL`,
+		`UPDATE node_downtimes SET ended_at = NOW(), duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::INT WHERE node_id = $1 AND ended_at IS NULL`,
 		nodeID,
 	)
 	if err != nil {

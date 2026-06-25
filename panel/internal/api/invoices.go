@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -228,7 +228,7 @@ func (s *Server) refundInvoice(w http.ResponseWriter, r *http.Request, id int64)
 			COALESCE(pt.gateway_name, ''), COALESCE(pt.reference_id, '')
 		FROM invoices i
 		LEFT JOIN payment_transactions pt ON pt.id = i.transaction_id
-		WHERE i.id = ?`, id,
+		WHERE i.id = $1`, id,
 	).Scan(&invoiceNumber, &customerID, &transactionID, &total, &refundedAmount, &status, &currency, &gatewayName, &referenceID)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
@@ -283,7 +283,7 @@ func (s *Server) refundInvoice(w http.ResponseWriter, r *http.Request, id int64)
 
 	// Update invoice
 	_, err = s.DB.Exec(
-		`UPDATE invoices SET status = ?, refunded_amount = ? WHERE id = ?`,
+		`UPDATE invoices SET status = $1, refunded_amount = $2 WHERE id = $3`,
 		newStatus, newRefundedAmount, id,
 	)
 	if err != nil {
@@ -299,7 +299,7 @@ func (s *Server) refundInvoice(w http.ResponseWriter, r *http.Request, id int64)
 			txStatus = "refunded"
 		}
 		_, _ = s.DB.Exec(
-			`UPDATE payment_transactions SET status = ?, updated_at = NOW() WHERE id = ?`,
+			`UPDATE payment_transactions SET status = $1, updated_at = NOW() WHERE id = $2`,
 			txStatus, transactionID.Int64,
 		)
 	}
@@ -307,7 +307,7 @@ func (s *Server) refundInvoice(w http.ResponseWriter, r *http.Request, id int64)
 	// Debit customer wallet
 	if customerID.Valid {
 		var username string
-		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ? LIMIT 1`, customerID.Int64).Scan(&username)
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = $1 LIMIT 1`, customerID.Int64).Scan(&username)
 		if username != "" {
 			_ = s.applyWalletChange(username, -refundAmount, "debit",
 				fmt.Sprintf("Refund for invoice %s", invoiceNumber), "admin")
@@ -335,7 +335,7 @@ func (s *Server) listInvoicesCustomer(w http.ResponseWriter, r *http.Request) {
 
 	// Get customer ID
 	var customerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}
@@ -395,7 +395,7 @@ func (s *Server) getInvoiceCustomer(w http.ResponseWriter, r *http.Request, id i
 
 	// Get customer ID
 	var customerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}
@@ -464,7 +464,7 @@ func (s *Server) fetchInvoiceByID(id int64) (invoiceItem, error) {
 			i.amount, i.tax, i.total, i.currency, COALESCE(i.payment_method, ''), i.status, i.refunded_amount, i.created_at
 		FROM invoices i
 		LEFT JOIN customers c ON c.id = i.customer_id
-		WHERE i.id = ?`, id,
+		WHERE i.id = $1`, id,
 	).Scan(
 		&inv.ID, &inv.InvoiceNumber, &inv.CustomerID, &inv.Username, &inv.PlanName,
 		&inv.Amount, &inv.Tax, &inv.Total, &inv.Currency, &inv.PaymentMethod,

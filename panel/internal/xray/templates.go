@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package xray
 
@@ -54,7 +54,7 @@ func (s *XrayService) GetTemplate(ctx context.Context, id int64) (*XrayTemplate,
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, COALESCE(description,''), config_json, COALESCE(category,'general'),
 		       created_at, updated_at
-		FROM xray_templates WHERE id = ?`, id)
+		FROM xray_templates WHERE id = $1`, id)
 
 	var t XrayTemplate
 	var configRaw []byte
@@ -87,7 +87,7 @@ func (s *XrayService) CreateTemplate(ctx context.Context, tmpl *XrayTemplate) (i
 
 	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO xray_templates (name, description, config_json, category)
-		VALUES (?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4)`,
 		tmpl.Name, tmpl.Description, string(tmpl.ConfigJSON), tmpl.Category,
 	)
 	if err != nil {
@@ -120,8 +120,8 @@ func (s *XrayService) UpdateTemplate(ctx context.Context, id int64, tmpl *XrayTe
 
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE xray_templates
-		SET name = ?, description = ?, config_json = ?, category = ?
-		WHERE id = ?`,
+		SET name = $1, description = $2, config_json = $3, category = $4
+		WHERE id = $1`,
 		tmpl.Name, tmpl.Description, string(tmpl.ConfigJSON), tmpl.Category, id,
 	)
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *XrayService) UpdateTemplate(ctx context.Context, id int64, tmpl *XrayTe
 
 // DeleteTemplate removes a template by ID.
 func (s *XrayService) DeleteTemplate(ctx context.Context, id int64) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM xray_templates WHERE id = ?`, id)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM xray_templates WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete xray template: %w", err)
 	}

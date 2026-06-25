@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"bytes"
@@ -32,17 +32,17 @@ func (s *Server) handleCustomerExport(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 
 	if search := strings.TrimSpace(params.Get("search")); search != "" {
-		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(c.email,'') LIKE ?)"
+		where += " AND (c.username LIKE $1 OR COALESCE(c.display_name,'') LIKE $2 OR COALESCE(c.email,'') LIKE $3)"
 		like := "%" + search + "%"
 		args = append(args, like, like, like)
 	}
 	if status := strings.TrimSpace(params.Get("status")); status != "" {
-		where += " AND c.status = ?"
+		where += " AND c.status = $1"
 		args = append(args, status)
 	}
 	if planIDStr := params.Get("plan_id"); planIDStr != "" {
 		if pid, err := strconv.ParseInt(planIDStr, 10, 64); err == nil && pid > 0 {
-			where += " AND c.plan_id = ?"
+			where += " AND c.plan_id = $1"
 			args = append(args, pid)
 		}
 	}
@@ -302,7 +302,7 @@ func (s *Server) handleCustomerImport(w http.ResponseWriter, r *http.Request) {
 
 		// Check username uniqueness
 		var existingID int64
-		err = s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, row.username).Scan(&existingID)
+		err = s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, row.username).Scan(&existingID)
 		if err == nil {
 			// Username already exists — skip
 			skipped++
@@ -350,7 +350,7 @@ func (s *Server) handleCustomerImport(w http.ResponseWriter, r *http.Request) {
 
 		// Insert customer
 		res, err := s.DB.Exec(
-			`INSERT INTO customers(username, email, plan_id, preferred_node_id, status, sub_token, created_by) VALUES(?,?,?,?,?,?,?)`,
+			`INSERT INTO customers(username, email, plan_id, preferred_node_id, status, sub_token, created_by) VALUES($1,$2,$3,$4,$5,$6,$7)`,
 			row.username, nullString(row.email), planID, nodeID, status, auth.RandomToken(24), actor,
 		)
 		if err != nil {
@@ -362,13 +362,13 @@ func (s *Server) handleCustomerImport(w http.ResponseWriter, r *http.Request) {
 		customerID, _ := res.LastInsertId()
 
 		// Insert wallet
-		_, _ = s.DB.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES(?,?,0)`, customerID, row.username)
+		_, _ = s.DB.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES($1,$2,0)`, customerID, row.username)
 
 		// Insert radcheck password
-		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Cleartext-Password',':=',?)`, row.username, password)
+		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Cleartext-Password',':=',$2)`, row.username, password)
 
 		// Insert radcheck simultaneous-use
-		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Simultaneous-Use',':=','1')`, row.username)
+		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Simultaneous-Use',':=','1')`, row.username)
 
 		// Assign tags
 		if row.tags != "" {
@@ -379,7 +379,7 @@ func (s *Server) handleCustomerImport(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				if tagID, ok := tagIDMap[strings.ToLower(tn)]; ok {
-					_, _ = s.DB.Exec(`INSERT IGNORE INTO customer_tags(customer_id, tag_id) VALUES(?,?)`, customerID, tagID)
+					_, _ = s.DB.Exec(`INSERT INTO customer_tags(customer_id, tag_id) VALUES($1,$2) ON CONFLICT (customer_id, tag_id) DO NOTHING`, customerID, tagID)
 				}
 			}
 		}
@@ -560,7 +560,7 @@ func validateImportRow(row importRowData) string {
 // loadPlanNameMap returns a map of lowercase plan name -> plan ID for active plans.
 func (s *Server) loadPlanNameMap() map[string]int64 {
 	m := make(map[string]int64)
-	rows, err := s.DB.Query(`SELECT id, name FROM plans WHERE is_active=1`)
+	rows, err := s.DB.Query(`SELECT id, name FROM plans WHERE is_active=TRUE`)
 	if err != nil {
 		return m
 	}

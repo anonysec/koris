@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -159,7 +159,7 @@ func (s *Server) createSegment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := s.DB.Exec(`INSERT INTO user_segments(name, description, rules_json) VALUES(?,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO user_segments(name, description, rules_json) VALUES($1,$2,$3)`,
 		in.Name, in.Description, string(in.Rules))
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -173,7 +173,7 @@ func (s *Server) createSegment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteSegment(w http.ResponseWriter, r *http.Request, id int64) {
-	res, err := s.DB.Exec(`DELETE FROM user_segments WHERE id=?`, id)
+	res, err := s.DB.Exec(`DELETE FROM user_segments WHERE id=$1`, id)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -193,7 +193,7 @@ func (s *Server) deleteSegment(w http.ResponseWriter, r *http.Request, id int64)
 func (s *Server) segmentCustomers(w http.ResponseWriter, _ *http.Request, id int64) {
 	// Load segment rules
 	var rulesJSON string
-	err := s.DB.QueryRow(`SELECT rules_json FROM user_segments WHERE id=?`, id).Scan(&rulesJSON)
+	err := s.DB.QueryRow(`SELECT rules_json FROM user_segments WHERE id=$1`, id).Scan(&rulesJSON)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -243,7 +243,7 @@ func (s *Server) segmentCustomers(w http.ResponseWriter, _ *http.Request, id int
 func (s *Server) refreshSegment(w http.ResponseWriter, r *http.Request, id int64) {
 	// Load segment rules
 	var rulesJSON string
-	err := s.DB.QueryRow(`SELECT rules_json FROM user_segments WHERE id=?`, id).Scan(&rulesJSON)
+	err := s.DB.QueryRow(`SELECT rules_json FROM user_segments WHERE id=$1`, id).Scan(&rulesJSON)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -268,7 +268,7 @@ func (s *Server) refreshSegment(w http.ResponseWriter, r *http.Request, id int64
 		return
 	}
 
-	_, err = s.DB.Exec(`UPDATE user_segments SET customer_count=? WHERE id=?`, count, id)
+	_, err = s.DB.Exec(`UPDATE user_segments SET customer_count=$1 WHERE id=$2`, count, id)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return

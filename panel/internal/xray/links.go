@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package xray
 
@@ -222,7 +222,7 @@ func (s *XrayService) GenerateCustomerConfigs(ctx context.Context, customerUUID 
 	var nodeName string
 
 	err = s.db.QueryRowContext(ctx,
-		`SELECT public_ip, domain, name FROM nodes WHERE id = ?`, nodeID,
+		`SELECT public_ip, domain, name FROM nodes WHERE id = $1`, nodeID,
 	).Scan(&publicIP, &domain, &nodeName)
 	if err != nil {
 		return nil, fmt.Errorf("query node %d: %w", nodeID, err)

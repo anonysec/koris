@@ -16,7 +16,7 @@ func (s *Server) publicPlans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.DB.Query(`SELECT id, name, price, data_gb, speed_mbps, duration_days, features FROM plans WHERE is_active = 1 ORDER BY price ASC`)
+	rows, err := s.DB.Query(`SELECT id, name, price, data_gb, speed_mbps, duration_days, features FROM plans WHERE is_active = TRUE ORDER BY price ASC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return

@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -125,7 +125,7 @@ func CheckOverdueTickets(db *sql.DB, notify func(string)) {
 		}
 
 		// Mark as alerted to prevent repeated notifications
-		_, err := db.Exec(`UPDATE tickets SET sla_alerted_at = NOW() WHERE id = ?`, ticketID)
+		_, err := db.Exec(`UPDATE tickets SET sla_alerted_at = NOW() WHERE id = $1`, ticketID)
 		if err != nil {
 			log.Printf("[sla] failed to mark ticket #%d as alerted: %v", ticketID, err)
 			continue
@@ -227,7 +227,7 @@ func (s *Server) setSLASettings(w http.ResponseWriter, r *http.Request) {
 
 	for key, val := range updates {
 		_, err := s.DB.Exec(
-			`INSERT INTO panel_settings(setting_key, setting_value) VALUES(?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+			`INSERT INTO panel_settings(setting_key, setting_value) VALUES($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
 			key, strconv.Itoa(val),
 		)
 		if err != nil {

@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 // Package teleproxy provides Telegram MTProto proxy management for KorisPanel.
 // It handles proxy lifecycle, link generation, secret rotation, and plan assignment.
@@ -80,7 +80,7 @@ func (s *ProxyService) Create(ctx context.Context, nodeID int64, port int, tag s
 
 	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO telegram_proxies (node_id, port, secret, tag, status)
-		VALUES (?, ?, ?, ?, 'stopped')`,
+		VALUES ($1, $2, $3, $4, 'stopped')`,
 		nodeID, port, secret, tag,
 	)
 	if err != nil {
@@ -126,7 +126,7 @@ func (s *ProxyService) Get(ctx context.Context, proxyID int64) (*Proxy, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, node_id, port, secret, tag, status, share_link, tg_link,
 		       connections_count, last_health_check, plan_ids, created_at
-		FROM telegram_proxies WHERE id = ?`, proxyID)
+		FROM telegram_proxies WHERE id = $1`, proxyID)
 
 	proxy, err := s.scanProxy(row)
 	if err != nil {
@@ -137,7 +137,7 @@ func (s *ProxyService) Get(ctx context.Context, proxyID int64) (*Proxy, error) {
 
 // Delete removes a proxy by ID.
 func (s *ProxyService) Delete(ctx context.Context, proxyID int64) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM telegram_proxies WHERE id = ?`, proxyID)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM telegram_proxies WHERE id = $1`, proxyID)
 	if err != nil {
 		return fmt.Errorf("delete proxy %d: %w", proxyID, err)
 	}
@@ -158,7 +158,7 @@ func (s *ProxyService) UpdateStatus(ctx context.Context, proxyID int64, status s
 	}
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE telegram_proxies SET status = ? WHERE id = ?`, status, proxyID)
+		UPDATE telegram_proxies SET status = $1 WHERE id = $2`, status, proxyID)
 	if err != nil {
 		return fmt.Errorf("update proxy status: %w", err)
 	}
@@ -189,7 +189,7 @@ func (s *ProxyService) RotateSecret(ctx context.Context, proxyID int64) (string,
 	}
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE telegram_proxies SET secret = ?, share_link = NULL, tg_link = NULL WHERE id = ?`,
+		UPDATE telegram_proxies SET secret = $1, share_link = NULL, tg_link = NULL WHERE id = $2`,
 		newSecret, proxyID)
 	if err != nil {
 		return "", fmt.Errorf("rotate secret: %w", err)
@@ -213,7 +213,7 @@ func (s *ProxyService) AssignToPlans(ctx context.Context, proxyID int64, planIDs
 	}
 
 	result, err := s.db.ExecContext(ctx, `
-		UPDATE telegram_proxies SET plan_ids = ? WHERE id = ?`, string(planJSON), proxyID)
+		UPDATE telegram_proxies SET plan_ids = $1 WHERE id = $2`, string(planJSON), proxyID)
 	if err != nil {
 		return fmt.Errorf("assign plans: %w", err)
 	}
@@ -234,7 +234,7 @@ func (s *ProxyService) GetForCustomer(ctx context.Context, customerPlanID int64)
 		       connections_count, last_health_check, plan_ids, created_at
 		FROM telegram_proxies
 		WHERE status = 'active'
-		  AND (plan_ids IS NULL OR JSON_CONTAINS(plan_ids, CAST(? AS JSON)))
+		  AND (plan_ids IS NULL OR JSON_CONTAINS(plan_ids, CAST($1 AS JSON)))
 		ORDER BY created_at DESC`, customerPlanID)
 	if err != nil {
 		return nil, fmt.Errorf("get proxies for plan %d: %w", customerPlanID, err)
@@ -247,7 +247,7 @@ func (s *ProxyService) GetForCustomer(ctx context.Context, customerPlanID int64)
 // UpdateLinks persists generated share links for a proxy.
 func (s *ProxyService) UpdateLinks(ctx context.Context, proxyID int64, shareLink, tgLink string) error {
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE telegram_proxies SET share_link = ?, tg_link = ? WHERE id = ?`,
+		UPDATE telegram_proxies SET share_link = $1, tg_link = $2 WHERE id = $3`,
 		shareLink, tgLink, proxyID)
 	if err != nil {
 		return fmt.Errorf("update links: %w", err)
@@ -260,8 +260,8 @@ func (s *ProxyService) UpdateHealthCheck(ctx context.Context, proxyID int64, con
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE telegram_proxies
-		SET last_health_check = ?, connections_count = ?
-		WHERE id = ?`, now, connections, proxyID)
+		SET last_health_check = $1, connections_count = $2
+		WHERE id = $1`, now, connections, proxyID)
 	if err != nil {
 		return fmt.Errorf("update health check: %w", err)
 	}
@@ -393,12 +393,12 @@ func CheckHealth(db *sql.DB) {
 
 		if err != nil {
 			// Connection failed — mark as error
-			db.Exec(`UPDATE telegram_proxies SET status = 'error', last_health_check = ? WHERE id = ?`, now, p.ProxyID)
+			db.Exec(`UPDATE telegram_proxies SET status = 'error', last_health_check = $1 WHERE id = $2`, now, p.ProxyID)
 			log.Printf("[teleproxy] health check failed for proxy %d (%s): %v", p.ProxyID, addr, err)
 		} else {
 			conn.Close()
 			// Connection succeeded — mark as active and record health check
-			db.Exec(`UPDATE telegram_proxies SET status = 'active', last_health_check = ? WHERE id = ?`, now, p.ProxyID)
+			db.Exec(`UPDATE telegram_proxies SET status = 'active', last_health_check = $1 WHERE id = $2`, now, p.ProxyID)
 		}
 	}
 }

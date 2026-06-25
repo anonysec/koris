@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -76,7 +76,7 @@ func (q *QuotaEnforcer) getMaxDataBytes(ctx context.Context, username string) (i
 
 	var maxDataStr string
 	err := db.QueryRowContext(ctx,
-		`SELECT value FROM radcheck WHERE username = ? AND attribute = 'Max-Data' ORDER BY id DESC LIMIT 1`,
+		`SELECT value FROM radcheck WHERE username = $1 AND attribute = 'Max-Data' ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&maxDataStr)
 	if err != nil {
@@ -97,7 +97,7 @@ func (q *QuotaEnforcer) getCumulativeUsage(ctx context.Context, userID int64) (i
 
 	var total int64
 	err := db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(rx_bytes + tx_bytes), 0) FROM user_traffic_log WHERE user_id = ?`,
+		`SELECT COALESCE(SUM(rx_bytes + tx_bytes), 0) FROM user_traffic_log WHERE user_id = $1`,
 		userID,
 	).Scan(&total)
 	if err != nil {
@@ -119,7 +119,7 @@ func (q *QuotaEnforcer) disableUserOnNodes(ctx context.Context, username string)
 	db := q.store.DB()
 
 	_, err := db.ExecContext(ctx,
-		`UPDATE customers SET status = 'limited' WHERE username = ? AND status NOT IN ('disabled', 'expired', 'limited') AND deleted_at IS NULL`,
+		`UPDATE customers SET status = 'limited' WHERE username = $1 AND status NOT IN ('disabled', 'expired', 'limited') AND deleted_at IS NULL`,
 		username,
 	)
 	if err != nil {

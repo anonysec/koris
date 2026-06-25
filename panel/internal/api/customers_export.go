@@ -40,21 +40,21 @@ func (s *Server) adminCustomersExport(w http.ResponseWriter, r *http.Request) {
 
 	// Filter: search
 	if search := strings.TrimSpace(params.Get("search")); search != "" {
-		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(c.email,'') LIKE ?)"
+		where += " AND (c.username LIKE $1 OR COALESCE(c.display_name,'') LIKE $2 OR COALESCE(c.email,'') LIKE $3)"
 		like := "%" + search + "%"
 		args = append(args, like, like, like)
 	}
 
 	// Filter: status
 	if status := strings.TrimSpace(params.Get("status")); status != "" {
-		where += " AND c.status = ?"
+		where += " AND c.status = $1"
 		args = append(args, status)
 	}
 
 	// Filter: plan_id
 	if planIDStr := params.Get("plan_id"); planIDStr != "" {
 		if pid, err := strconv.ParseInt(planIDStr, 10, 64); err == nil && pid > 0 {
-			where += " AND c.plan_id = ?"
+			where += " AND c.plan_id = $1"
 			args = append(args, pid)
 		}
 	}

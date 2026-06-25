@@ -123,7 +123,7 @@ func (w *Worker) CheckExpiring() ([]ExpiringCert, error) {
 		SELECT id, name, cert_path, expires_at, COALESCE(fingerprint, '')
 		FROM vpn_certificates
 		WHERE expires_at IS NOT NULL
-		  AND expires_at < NOW() + INTERVAL 30 DAY
+		  AND expires_at < NOW() + INTERVAL '30 days'
 		  AND (status IS NULL OR status != 'revoked')
 	`)
 	if err != nil {
@@ -202,7 +202,7 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 
 	// Update database
 	_, err = w.db.Exec(
-		`UPDATE vpn_certificates SET expires_at = ?, fingerprint = ? WHERE id = ?`,
+		`UPDATE vpn_certificates SET expires_at = $1, fingerprint = $2 WHERE id = $3`,
 		newExpiry, newFingerprint, cert.ID,
 	)
 	if err != nil {

@@ -1,4 +1,4 @@
-package noderegistry
+﻿package noderegistry
 
 import (
 	"context"
@@ -98,7 +98,7 @@ func (r *DBRegistry) Create(ctx context.Context, input *NodeInput) (int64, error
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx,
 		`INSERT INTO knode_connections (name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'offline', $9, $10)`,
 		input.Name, input.Address, input.Port, apiKeyEnc, input.ClientCertPEM, clientKeyEnc, input.CACertPEM, input.Enabled, now, now,
 	)
 	if err != nil {
@@ -143,8 +143,8 @@ func (r *DBRegistry) Update(ctx context.Context, id int64, input *NodeInput) err
 
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE knode_connections SET name = ?, address = ?, grpc_port = ?, api_key_enc = ?, client_cert = ?, client_key_enc = ?, ca_cert = ?, enabled = ?, updated_at = ?
-		 WHERE id = ?`,
+		`UPDATE knode_connections SET name = $2, address = $3, grpc_port = $4, api_key_enc = $5, client_cert = $6, client_key_enc = $7, ca_cert = $8, enabled = $9, updated_at = $10
+		 WHERE id = $1`,
 		input.Name, input.Address, input.Port, apiKeyEnc, input.ClientCertPEM, clientKeyEnc, input.CACertPEM, input.Enabled, now, id,
 	)
 	if err != nil {
@@ -166,7 +166,7 @@ func (r *DBRegistry) Update(ctx context.Context, id int64, input *NodeInput) err
 
 // Delete removes a node record and all associated credentials from the database.
 func (r *DBRegistry) Delete(ctx context.Context, id int64) error {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM knode_connections WHERE id = ?`, id)
+	result, err := r.db.ExecContext(ctx, `DELETE FROM knode_connections WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("[noderegistry] Delete failed for id=%d: %v", id, err)
 		return fmt.Errorf("delete node: %w", err)
@@ -188,7 +188,7 @@ func (r *DBRegistry) Delete(ctx context.Context, id int64) error {
 func (r *DBRegistry) Get(ctx context.Context, id int64) (*NodeRecord, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, last_seen_at, owner_worker, created_at, updated_at
-		 FROM knode_connections WHERE id = ?`, id)
+		 FROM knode_connections WHERE id = $1`, id)
 
 	rec, err := scanNodeRecord(row)
 	if err != nil {
@@ -204,7 +204,7 @@ func (r *DBRegistry) Get(ctx context.Context, id int64) (*NodeRecord, error) {
 func (r *DBRegistry) ListEnabled(ctx context.Context) ([]*NodeRecord, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, last_seen_at, owner_worker, created_at, updated_at
-		 FROM knode_connections WHERE enabled = ?`, true)
+		 FROM knode_connections WHERE enabled = $1`, true)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled nodes: %w", err)
 	}
@@ -228,7 +228,7 @@ func (r *DBRegistry) ListEnabled(ctx context.Context) ([]*NodeRecord, error) {
 func (r *DBRegistry) UpdateStatus(ctx context.Context, id int64, status string) error {
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE knode_connections SET status = ?, last_seen_at = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE knode_connections SET status = $1, last_seen_at = $2, updated_at = $3 WHERE id = $4`,
 		status, now, now, id)
 	if err != nil {
 		return fmt.Errorf("update status for id=%d: %w", id, err)

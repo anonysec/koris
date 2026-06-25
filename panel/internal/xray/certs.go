@@ -133,7 +133,7 @@ func (s *XrayService) GetCertStatus(ctx context.Context, nodeID int64) (*CertSta
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT cert_mode, domain, expires_at, auto_renew, last_renewed
-		FROM xray_cert_status WHERE node_id = ?`, nodeID,
+		FROM xray_cert_status WHERE node_id = $1`, nodeID,
 	).Scan(&mode, &domain, &expiresAt, &autoRenew, &lastRenewed)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("no TLS certificate configured for node %d", nodeID)
@@ -207,11 +207,11 @@ func (s *XrayService) saveCertStatus(ctx context.Context, nodeID int64, certCfg 
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO xray_cert_status (node_id, cert_mode, domain, auto_renew)
-		VALUES (?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			cert_mode = VALUES(cert_mode),
-			domain = VALUES(domain),
-			auto_renew = VALUES(auto_renew),
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (node_id) DO UPDATE SET
+			cert_mode = EXCLUDED.cert_mode,
+			domain = EXCLUDED.domain,
+			auto_renew = EXCLUDED.auto_renew,
 			updated_at = CURRENT_TIMESTAMP`,
 		nodeID, string(certCfg.Mode), certCfg.Domain, autoRenew,
 	)

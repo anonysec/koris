@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -145,7 +145,7 @@ func (s *Server) runNodeMigration(migrationID string, sourceNodeID, destNodeID i
 			COALESCE(server_name, ''), COALESCE(public_key, ''), COALESCE(short_id, ''),
 			COALESCE(private_key, ''), COALESCE(path, ''), COALESCE(service_name, ''), core_name
 		FROM xray_inbounds
-		WHERE node_id = ? AND status = 'active'`, sourceNodeID)
+		WHERE node_id = $1 AND status = 'active'`, sourceNodeID)
 	if err != nil {
 		log.Printf("[migrate] failed to query inbounds for node %d: %v", sourceNodeID, err)
 		updateMigration(0, 0, 0, "failed", "db_query_failed")
@@ -227,7 +227,7 @@ func (s *Server) migrateInbound(inboundID, customerID int64, uuid, protocol, tra
 	log.Printf("[migrate] xray_remove for inbound %d on source node %d (dispatched via gRPC)", inboundID, sourceNodeID)
 
 	// Update xray_inbounds to point to the destination node
-	_, err := s.DB.Exec(`UPDATE xray_inbounds SET node_id = ? WHERE id = ?`, destNodeID, inboundID)
+	_, err := s.DB.Exec(`UPDATE xray_inbounds SET node_id = $1 WHERE id = $2`, destNodeID, inboundID)
 	if err != nil {
 		return fmt.Errorf("update inbound node_id: %w", err)
 	}
@@ -235,7 +235,7 @@ func (s *Server) migrateInbound(inboundID, customerID int64, uuid, protocol, tra
 	// Update customer subscription records if preferred_node_id exists
 	// The customers table may have a node_id or preferred node — update it for migrated users
 	_, _ = s.DB.Exec(
-		`UPDATE customers SET node_id = ? WHERE id = ? AND node_id = ?`,
+		`UPDATE customers SET node_id = $1 WHERE id = $2 AND node_id = $3`,
 		destNodeID, customerID, sourceNodeID,
 	)
 

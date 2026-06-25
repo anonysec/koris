@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -34,19 +34,19 @@ func (s *Server) setConnectionLimit(w http.ResponseWriter, r *http.Request, id i
 
 	if in.Limit == 0 {
 		// Remove the Simultaneous-Use attribute (unlimited sessions)
-		_, err = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Simultaneous-Use'`, username)
+		_, err = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Simultaneous-Use'`, username)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
 	} else {
 		// Delete existing and insert new value
-		_, err = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Simultaneous-Use'`, username)
+		_, err = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Simultaneous-Use'`, username)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
-		_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Simultaneous-Use',':=',?)`, username, strconv.Itoa(in.Limit))
+		_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Simultaneous-Use',':=',$2)`, username, strconv.Itoa(in.Limit))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return

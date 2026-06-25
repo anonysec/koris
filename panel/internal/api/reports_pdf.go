@@ -93,26 +93,26 @@ func (s *Server) buildRevenueReportData(period reports.ReportPeriod) (reports.Re
 	var groupBy, dateFormat, interval string
 	switch period {
 	case reports.PeriodWeekly:
-		groupBy = "YEARWEEK(wt.created_at)"
-		dateFormat = "%Y-W%u"
-		interval = "6 MONTH"
+		groupBy = "TO_CHAR(wt.created_at, 'IYYY-\"W\"IW')"
+		dateFormat = "IYYY-\"W\"IW"
+		interval = "6 months"
 	case reports.PeriodMonthly:
-		groupBy = "DATE_FORMAT(wt.created_at, '%Y-%m')"
-		dateFormat = "%Y-%m"
-		interval = "12 MONTH"
+		groupBy = "TO_CHAR(wt.created_at, 'YYYY-MM')"
+		dateFormat = "YYYY-MM"
+		interval = "12 months"
 	default:
 		groupBy = "DATE(wt.created_at)"
-		dateFormat = "%Y-%m-%d"
-		interval = "90 DAY"
+		dateFormat = "YYYY-MM-DD"
+		interval = "90 days"
 	}
 
 	// Revenue grouped by period
 	query := fmt.Sprintf(`
-		SELECT DATE_FORMAT(wt.created_at, '%s') as period_label,
+		SELECT TO_CHAR(wt.created_at, '%s') as period_label,
 		       COALESCE(SUM(CASE WHEN wt.type = 'credit' THEN wt.amount ELSE 0 END), 0) as revenue,
 		       COUNT(*) as tx_count
 		FROM wallet_transactions wt
-		WHERE wt.created_at >= NOW() - INTERVAL %s
+		WHERE wt.created_at >= NOW() - INTERVAL '%s'
 		GROUP BY %s
 		ORDER BY period_label DESC
 		LIMIT 50`, dateFormat, interval, groupBy)
@@ -142,10 +142,10 @@ func (s *Server) buildRevenueReportData(period reports.ReportPeriod) (reports.Re
 
 	// Add new subscriptions count per period
 	subQuery := fmt.Sprintf(`
-		SELECT DATE_FORMAT(created_at, '%s') as period_label, COUNT(*) as sub_count
+		SELECT TO_CHAR(created_at, '%s') as period_label, COUNT(*) as sub_count
 		FROM subscriptions
-		WHERE created_at >= NOW() - INTERVAL %s
-		GROUP BY %s`, dateFormat, interval, fmt.Sprintf("DATE_FORMAT(created_at, '%s')", dateFormat))
+		WHERE created_at >= NOW() - INTERVAL '%s'
+		GROUP BY %s`, dateFormat, interval, fmt.Sprintf("TO_CHAR(created_at, '%s')", dateFormat))
 
 	subRows, err := s.DB.Query(subQuery)
 	if err == nil {
@@ -172,11 +172,11 @@ func (s *Server) buildRevenueReportData(period reports.ReportPeriod) (reports.Re
 	s.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0), COUNT(*) FROM wallet_transactions WHERE type = 'credit'`).Scan(&totalRevenue, &totalTx)
 
 	var mrr float64
-	s.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM wallet_transactions WHERE type = 'credit' AND created_at >= NOW() - INTERVAL 30 DAY`).Scan(&mrr)
+	s.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0) FROM wallet_transactions WHERE type = 'credit' AND created_at >= NOW() - INTERVAL '30 days'`).Scan(&mrr)
 
 	avgDaily := float64(0)
 	if totalTx > 0 {
-		s.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0) / GREATEST(DATEDIFF(NOW(), MIN(created_at)), 1) FROM wallet_transactions WHERE type = 'credit'`).Scan(&avgDaily)
+		s.DB.QueryRow(`SELECT COALESCE(SUM(amount), 0) / GREATEST(EXTRACT(DAY FROM (NOW() - MIN(created_at))), 1) FROM wallet_transactions WHERE type = 'credit'`).Scan(&avgDaily)
 	}
 
 	data.Summary = map[string]string{
@@ -200,24 +200,24 @@ func (s *Server) buildUsersReportData(period reports.ReportPeriod) (reports.Repo
 	var groupBy, dateFormat, interval string
 	switch period {
 	case reports.PeriodWeekly:
-		groupBy = "YEARWEEK(c.created_at)"
-		dateFormat = "%Y-W%u"
-		interval = "6 MONTH"
+		groupBy = "TO_CHAR(c.created_at, 'IYYY-\"W\"IW')"
+		dateFormat = "IYYY-\"W\"IW"
+		interval = "6 months"
 	case reports.PeriodMonthly:
-		groupBy = "DATE_FORMAT(c.created_at, '%Y-%m')"
-		dateFormat = "%Y-%m"
-		interval = "12 MONTH"
+		groupBy = "TO_CHAR(c.created_at, 'YYYY-MM')"
+		dateFormat = "YYYY-MM"
+		interval = "12 months"
 	default:
 		groupBy = "DATE(c.created_at)"
-		dateFormat = "%Y-%m-%d"
-		interval = "90 DAY"
+		dateFormat = "YYYY-MM-DD"
+		interval = "90 days"
 	}
 
 	// New users per period
 	query := fmt.Sprintf(`
-		SELECT DATE_FORMAT(c.created_at, '%s') as period_label, COUNT(*) as new_users
+		SELECT TO_CHAR(c.created_at, '%s') as period_label, COUNT(*) as new_users
 		FROM customers c
-		WHERE c.deleted_at IS NULL AND c.created_at >= NOW() - INTERVAL %s
+		WHERE c.deleted_at IS NULL AND c.created_at >= NOW() - INTERVAL '%s'
 		GROUP BY %s
 		ORDER BY period_label DESC
 		LIMIT 50`, dateFormat, interval, groupBy)
@@ -254,7 +254,7 @@ func (s *Server) buildUsersReportData(period reports.ReportPeriod) (reports.Repo
 	if totalUsers > 0 {
 		// Growth rate: new users in last 30 days / total users
 		var newLast30 int
-		s.DB.QueryRow(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL 30 DAY`).Scan(&newLast30)
+		s.DB.QueryRow(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '30 days'`).Scan(&newLast30)
 		growthRate = float64(newLast30) / float64(totalUsers) * 100
 	}
 
@@ -279,25 +279,25 @@ func (s *Server) buildBandwidthReportData(period reports.ReportPeriod) (reports.
 	var groupBy, dateFormat, interval string
 	switch period {
 	case reports.PeriodWeekly:
-		groupBy = "YEARWEEK(s.created_at)"
-		dateFormat = "%Y-W%u"
-		interval = "6 MONTH"
+		groupBy = "TO_CHAR(s.created_at, 'IYYY-\"W\"IW')"
+		dateFormat = "IYYY-\"W\"IW"
+		interval = "6 months"
 	case reports.PeriodMonthly:
-		groupBy = "DATE_FORMAT(s.created_at, '%Y-%m')"
-		dateFormat = "%Y-%m"
-		interval = "12 MONTH"
+		groupBy = "TO_CHAR(s.created_at, 'YYYY-MM')"
+		dateFormat = "YYYY-MM"
+		interval = "12 months"
 	default:
 		groupBy = "DATE(s.created_at)"
-		dateFormat = "%Y-%m-%d"
-		interval = "90 DAY"
+		dateFormat = "YYYY-MM-DD"
+		interval = "90 days"
 	}
 
 	query := fmt.Sprintf(`
-		SELECT DATE_FORMAT(s.created_at, '%s') as period_label,
+		SELECT TO_CHAR(s.created_at, '%s') as period_label,
 		       COALESCE(SUM(s.tx_bytes), 0) as upload,
 		       COALESCE(SUM(s.rx_bytes), 0) as download
 		FROM node_usage_snapshots s
-		WHERE s.created_at >= NOW() - INTERVAL %s
+		WHERE s.created_at >= NOW() - INTERVAL '%s'
 		GROUP BY %s
 		ORDER BY period_label DESC
 		LIMIT 50`, dateFormat, interval, groupBy)

@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -122,7 +122,7 @@ func (s *Server) handleAnyConnectCreate(w http.ResponseWriter, r *http.Request) 
 
 	// Insert into anyconnect_nodes
 	result, err := s.DB.Exec(
-		`INSERT INTO anyconnect_nodes (node_id, port, status) VALUES (?, ?, 'pending')`,
+		`INSERT INTO anyconnect_nodes (node_id, port, status) VALUES ($1, $2, 'pending')`,
 		in.NodeID, in.Port,
 	)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Server) handleAnyConnectCreate(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAnyConnectDelete(w http.ResponseWriter, r *http.Request, id int64) {
 	// Get node_id from the record
 	var nodeID int64
-	err := s.DB.QueryRow(`SELECT node_id FROM anyconnect_nodes WHERE id = ?`, id).Scan(&nodeID)
+	err := s.DB.QueryRow(`SELECT node_id FROM anyconnect_nodes WHERE id = $1`, id).Scan(&nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -158,7 +158,7 @@ func (s *Server) handleAnyConnectDelete(w http.ResponseWriter, r *http.Request, 
 	log.Printf("[anyconnect] anyconnect_disable for node %d (dispatched via gRPC)", nodeID)
 
 	// Delete from anyconnect_nodes
-	_, err = s.DB.Exec(`DELETE FROM anyconnect_nodes WHERE id = ?`, id)
+	_, err = s.DB.Exec(`DELETE FROM anyconnect_nodes WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("[anyconnect] delete failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -190,14 +190,14 @@ func (s *Server) handleAnyConnectCert(w http.ResponseWriter, r *http.Request, id
 
 	// Get node_id from the record
 	var nodeID int64
-	err := s.DB.QueryRow(`SELECT node_id FROM anyconnect_nodes WHERE id = ?`, id).Scan(&nodeID)
+	err := s.DB.QueryRow(`SELECT node_id FROM anyconnect_nodes WHERE id = $1`, id).Scan(&nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
 
 	// Update cert_path in anyconnect_nodes (store a reference indicating cert is managed)
-	_, err = s.DB.Exec(`UPDATE anyconnect_nodes SET cert_path = '/etc/ocserv/server-cert.pem' WHERE id = ?`, id)
+	_, err = s.DB.Exec(`UPDATE anyconnect_nodes SET cert_path = '/etc/ocserv/server-cert.pem' WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("[anyconnect] update cert_path failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -227,13 +227,13 @@ func (s *Server) handleAnyConnectProfile(w http.ResponseWriter, r *http.Request)
 
 	// Get customer's preferred node
 	var nodeID int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&nodeID)
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&nodeID)
 
 	// Resolve node host (domain or IP)
 	var host string
 	if nodeID > 0 {
 		var domain, publicIP string
-		_ = s.DB.QueryRow(`SELECT COALESCE(domain,''), public_ip FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&domain, &publicIP)
+		_ = s.DB.QueryRow(`SELECT COALESCE(domain,''), public_ip FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&domain, &publicIP)
 		host = strings.TrimSpace(domain)
 		if host == "" {
 			host = strings.TrimSpace(publicIP)
@@ -258,7 +258,7 @@ func (s *Server) handleAnyConnectProfile(w http.ResponseWriter, r *http.Request)
 	// Get AnyConnect port for the node
 	port := 443
 	if nodeID > 0 {
-		_ = s.DB.QueryRow(`SELECT port FROM anyconnect_nodes WHERE node_id=? LIMIT 1`, nodeID).Scan(&port)
+		_ = s.DB.QueryRow(`SELECT port FROM anyconnect_nodes WHERE node_id=$1 LIMIT 1`, nodeID).Scan(&port)
 	}
 
 	// Generate the AnyConnect XML profile

@@ -1,4 +1,4 @@
-package auth
+﻿package auth
 
 import (
 	"crypto/hmac"
@@ -54,7 +54,7 @@ func (s Service) CreateOwner(username, password string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec(`INSERT INTO admins(username,password_hash,role) VALUES(?,?, 'owner')`, username, h)
+	_, err = s.DB.Exec(`INSERT INTO admins(username,password_hash,role) VALUES($1,$2, 'owner')`, username, h)
 	return err
 }
 
@@ -62,7 +62,7 @@ func (s Service) LoginAdmin(username, password string) (bool, error) {
 	username = strings.TrimSpace(username)
 	var hash string
 	var active int
-	err := s.DB.QueryRow(`SELECT password_hash,is_active FROM admins WHERE username=? LIMIT 1`, username).Scan(&hash, &active)
+	err := s.DB.QueryRow(`SELECT password_hash,is_active FROM admins WHERE username=$1 LIMIT 1`, username).Scan(&hash, &active)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}

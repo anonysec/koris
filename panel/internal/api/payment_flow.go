@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -65,7 +65,7 @@ func (s *Server) handlePaymentInitiate(w http.ResponseWriter, r *http.Request) {
 
 	// Check gateway is active in the database
 	var isActive int
-	err := s.DB.QueryRow(`SELECT is_active FROM payment_gateways WHERE name = ? LIMIT 1`, in.GatewayName).Scan(&isActive)
+	err := s.DB.QueryRow(`SELECT is_active FROM payment_gateways WHERE name = $1 LIMIT 1`, in.GatewayName).Scan(&isActive)
 	if err != nil || isActive != 1 {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "gateway_not_active"})
 		return
@@ -73,7 +73,7 @@ func (s *Server) handlePaymentInitiate(w http.ResponseWriter, r *http.Request) {
 
 	// Get customer ID
 	var customerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}
@@ -91,7 +91,7 @@ func (s *Server) handlePaymentInitiate(w http.ResponseWriter, r *http.Request) {
 
 	// Insert pending transaction
 	_, err = s.DB.Exec(
-		`INSERT INTO payment_transactions (customer_id, gateway_name, reference_id, amount, currency, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
+		`INSERT INTO payment_transactions (customer_id, gateway_name, reference_id, amount, currency, status) VALUES ($1, $2, $3, $4, $5, 'pending')`,
 		customerID, in.GatewayName, reference, in.Amount, in.Currency,
 	)
 	if err != nil {
@@ -191,7 +191,7 @@ func (s *Server) handleGatewayCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Store raw callback data
 	_, _ = s.DB.Exec(
-		`UPDATE payment_transactions SET callback_data = ? WHERE gateway_name = ? AND reference_id = ?`,
+		`UPDATE payment_transactions SET callback_data = $1 WHERE gateway_name = $2 AND reference_id = $3`,
 		callbackData, gatewayName, reference,
 	)
 
@@ -216,7 +216,7 @@ func (s *Server) completePaymentTransaction(w http.ResponseWriter, r *http.Reque
 	var txAmount float64
 	var currency string
 	err := s.DB.QueryRow(
-		`SELECT id, customer_id, amount, currency FROM payment_transactions WHERE gateway_name = ? AND reference_id = ? AND status = 'pending' LIMIT 1`,
+		`SELECT id, customer_id, amount, currency FROM payment_transactions WHERE gateway_name = $1 AND reference_id = $2 AND status = 'pending' LIMIT 1`,
 		gatewayName, reference,
 	).Scan(&txID, &customerID, &txAmount, &currency)
 	if err != nil {
@@ -232,7 +232,7 @@ func (s *Server) completePaymentTransaction(w http.ResponseWriter, r *http.Reque
 
 	// Update transaction status to completed
 	_, err = s.DB.Exec(
-		`UPDATE payment_transactions SET status = 'completed', updated_at = NOW() WHERE id = ?`,
+		`UPDATE payment_transactions SET status = 'completed', updated_at = NOW() WHERE id = $1`,
 		txID,
 	)
 	if err != nil {
@@ -243,7 +243,7 @@ func (s *Server) completePaymentTransaction(w http.ResponseWriter, r *http.Reque
 
 	// Credit the customer's wallet
 	_, err = s.DB.Exec(
-		`UPDATE customers SET wallet_balance = COALESCE(wallet_balance, 0) + ? WHERE id = ?`,
+		`UPDATE customers SET wallet_balance = COALESCE(wallet_balance, 0) + $1 WHERE id = $2`,
 		txAmount, customerID,
 	)
 	if err != nil {
@@ -252,16 +252,16 @@ func (s *Server) completePaymentTransaction(w http.ResponseWriter, r *http.Reque
 
 	// Also update the wallets table if it exists (legacy support)
 	var username string
-	_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ? LIMIT 1`, customerID).Scan(&username)
+	_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = $1 LIMIT 1`, customerID).Scan(&username)
 	if username != "" {
 		_, _ = s.DB.Exec(
-			`INSERT INTO wallets(customer_id, username, credit) VALUES(?, ?, ?) ON DUPLICATE KEY UPDATE credit = credit + VALUES(credit), customer_id = COALESCE(VALUES(customer_id), customer_id)`,
+			`INSERT INTO wallets(customer_id, username, credit) VALUES($1, $2, $3) ON CONFLICT (username) DO UPDATE SET credit = wallets.credit + EXCLUDED.credit, customer_id = COALESCE(EXCLUDED.customer_id, wallets.customer_id)`,
 			customerID, username, txAmount,
 		)
 
 		// Record wallet transaction
 		_, _ = s.DB.Exec(
-			`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor, reference_type, reference_id) VALUES(?, ?, ?, 'credit', ?, 'gateway', 'payment_transaction', ?)`,
+			`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor, reference_type, reference_id) VALUES($1, $2, $3, 'credit', $4, 'gateway', 'payment_transaction', $5)`,
 			customerID, username, txAmount, fmt.Sprintf("Payment via %s", gatewayName), txID,
 		)
 	}
@@ -274,7 +274,7 @@ func (s *Server) completePaymentTransaction(w http.ResponseWriter, r *http.Reque
 	}
 
 	_, err = s.DB.Exec(
-		`INSERT INTO invoices (invoice_number, customer_id, transaction_id, amount, tax, total, currency, payment_method, status) VALUES (?, ?, ?, ?, 0, ?, ?, ?, 'paid')`,
+		`INSERT INTO invoices (invoice_number, customer_id, transaction_id, amount, tax, total, currency, payment_method, status) VALUES ($1, $2, $3, $4, 0, $5, $6, $7, 'paid')`,
 		invoiceNumber, customerID, txID, txAmount, txAmount, currency, gatewayName,
 	)
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *Server) completePaymentTransaction(w http.ResponseWriter, r *http.Reque
 // markTransactionFailed updates a payment transaction to failed status.
 func (s *Server) markTransactionFailed(gatewayName, reference, callbackData string) {
 	_, err := s.DB.Exec(
-		`UPDATE payment_transactions SET status = 'failed', callback_data = COALESCE(?, callback_data), updated_at = NOW() WHERE gateway_name = ? AND reference_id = ? AND status = 'pending'`,
+		`UPDATE payment_transactions SET status = 'failed', callback_data = COALESCE($1, callback_data), updated_at = NOW() WHERE gateway_name = $2 AND reference_id = $3 AND status = 'pending'`,
 		callbackData, gatewayName, reference,
 	)
 	if err != nil {
