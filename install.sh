@@ -193,6 +193,8 @@ ENV
   # Copy docker-compose and env to working directory
   cd "${INSTALL_DIR}"
   cp "${CONFIG_DIR}/panel.env" docker/panel.env
+  # Docker Compose reads .env at project root for variable interpolation
+  ln -sf docker/panel.env .env
 
   # Build and start
   log "Building Docker images (this may take a few minutes)..."

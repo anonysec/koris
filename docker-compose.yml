@@ -1,3 +1,5 @@
+name: koris
+
 services:
   panel:
     container_name: koris
