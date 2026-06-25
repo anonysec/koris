@@ -218,7 +218,10 @@ ENV
 
   # Install knode alongside if requested
   if [[ "${WITH_KNODE}" == "yes" ]]; then
-    install_knode_docker
+    read -rp "$(echo -e "${CYAN}Install knode agent on this server? [y/N]: ${NC}")" install_knode </dev/tty
+    if [[ "${install_knode}" =~ ^[yY] ]]; then
+      install_knode_docker
+    fi
   fi
 
   show_result "${setup_key}"
@@ -298,7 +301,12 @@ install_native() {
 
   # Install knode
   if [[ "${WITH_KNODE}" == "yes" ]]; then
-    build_knode
+    read -rp "$(echo -e "${CYAN}Install knode agent on this server? [y/N]: ${NC}")" install_knode </dev/tty
+    if [[ "${install_knode}" =~ ^[yY] ]]; then
+      build_knode
+    else
+      WITH_KNODE="no"
+    fi
   fi
 
   # Generate secrets
