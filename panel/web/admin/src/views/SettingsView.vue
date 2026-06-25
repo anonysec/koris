@@ -4,6 +4,7 @@ import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useTheme, availableThemes } from '@koris/composables/useTheme'
+import { useSettingsStore } from '@/stores/settings'
 import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 import type { Locale } from '@koris/composables/useI18n'
 import KTabs from '@koris/ui/KTabs.vue'
@@ -13,6 +14,12 @@ import KSelect from '@koris/ui/KSelect.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import BackupView from '@/views/BackupView.vue'
+import SettingsDatabaseSection from '@/components/settings/SettingsDatabaseSection.vue'
+import SettingsTLSSection from '@/components/settings/SettingsTLSSection.vue'
+import SettingsWorkersSection from '@/components/settings/SettingsWorkersSection.vue'
+import SettingsAlertsSection from '@/components/settings/SettingsAlertsSection.vue'
+import SettingsGrpcSection from '@/components/settings/SettingsGrpcSection.vue'
+import SettingsPanelInfoSection from '@/components/settings/SettingsPanelInfoSection.vue'
 
 const props = defineProps<{ tab?: string }>()
 
@@ -23,8 +30,11 @@ const toast = useToast()
 const activeTab = ref(props.tab || 'panel-settings')
 const saving = ref(false)
 
+const settingsStore = useSettingsStore()
+
 const tabs = computed(() => [
   { key: 'panel-settings', label: t('settings.panel_settings') },
+  { key: 'system', label: t('settings.system') },
   { key: 'data-warnings', label: t('settings.data_warnings') },
   { key: 'app-links', label: t('settings.app_links') },
   { key: 'telegram', label: t('settings.telegram') },
@@ -445,7 +455,7 @@ async function handleImportFile(event: Event): Promise<void> {
 
 
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus(), settingsStore.loadSettings()])
 })
 </script>
 
@@ -536,6 +546,18 @@ onMounted(async () => {
               {{ t('settings.save') }}
             </KButton>
           </form>
+        </div>
+      </template>
+
+      <!-- System: DB, TLS, Workers, Alerts, gRPC, Info -->
+      <template #system>
+        <div class="settings-panel system-sections">
+          <SettingsPanelInfoSection />
+          <SettingsDatabaseSection />
+          <SettingsTLSSection />
+          <SettingsWorkersSection />
+          <SettingsAlertsSection />
+          <SettingsGrpcSection />
         </div>
       </template>
 
@@ -778,6 +800,7 @@ onMounted(async () => {
 .settings-view { display: flex; flex-direction: column; gap: var(--space-5); }
 
 .settings-panel { padding: var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.system-sections { gap: var(--space-5); }
 .section-title { margin: 0; font-size: var(--text-base); font-weight: var(--font-semibold); }
 .subsection-title { margin: 0; font-size: var(--text-sm); font-weight: var(--font-semibold); }
 

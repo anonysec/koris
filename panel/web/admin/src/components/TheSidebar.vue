@@ -2,7 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import { useTheme } from '@koris/composables/useTheme'
-import { useEdition } from '@/composables/useEdition'
+import { useEditionStore } from '@/stores/edition'
 import type { Locale } from '@koris/composables/useI18n'
 
 export interface Props {
@@ -29,7 +29,7 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const { isDark } = useTheme()
-const { isFull, fetchEdition } = useEdition()
+const { isFull, fetchEdition } = useEditionStore()
 
 onMounted(fetchEdition)
 
@@ -132,15 +132,14 @@ const navGroups = computed<NavGroup[]>(() => {
       label: t('nav.tickets'),
       icon: 'tickets',
     })
+  }
+
+  // Metrics always visible for admins
+  if (!isReseller) {
     manageItems.push({
-      route: 'telegram-proxies',
-      label: t('nav.telegram_proxies'),
-      icon: 'telegram',
-    })
-    manageItems.push({
-      route: 'xray',
-      label: t('nav.xray'),
-      icon: 'xray',
+      route: 'metrics',
+      label: t('nav.metrics'),
+      icon: 'metrics',
     })
   }
 
@@ -169,6 +168,9 @@ const navGroups = computed<NavGroup[]>(() => {
 function isActive(route: string): boolean {
   if (route === 'users') {
     return ['users', 'user-detail', 'customers', 'customer-detail', 'resellers'].includes(props.currentRoute)
+  }
+  if (route === 'nodes') {
+    return ['nodes', 'node-detail', 'node-compare'].includes(props.currentRoute)
   }
   if (route === 'tickets') {
     return ['tickets', 'ticket-detail'].includes(props.currentRoute)
@@ -291,6 +293,11 @@ function handleChangeLang(event: Event) {
         <!-- Xray icon (lightning/bolt) -->
         <svg v-else-if="item.icon === 'xray'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+        <!-- Metrics icon (chart) -->
+        <svg v-else-if="item.icon === 'metrics'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3v18h18" />
+          <path d="M7 14l4-4 4 4 5-5" />
         </svg>
 
         <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
