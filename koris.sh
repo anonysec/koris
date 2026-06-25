@@ -107,7 +107,11 @@ cmd_update() {
     local new=$(get_version)
     [[ "$old" == "$new" ]] && { info "Already up to date (v${new})."; return; }
     info "Updating v${old} -> v${new}..."
-    bash "$INSTALL_DIR/deploy.sh"
+    if is_docker; then
+        docker compose up -d --build
+    else
+        bash "$INSTALL_DIR/deploy.sh"
+    fi
     # Update self
     cp "$INSTALL_DIR/koris.sh" /usr/local/bin/koris 2>/dev/null; chmod +x /usr/local/bin/koris 2>/dev/null
     info "Done: v${new}"

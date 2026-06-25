@@ -621,21 +621,22 @@ show_result() {
   echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
   echo ""
   if [[ "${INSTALL_MODE}" == "docker" ]]; then
-    echo -e "  ${CYAN}Logs:${NC}      cd ${INSTALL_DIR} && docker compose logs -f panel"
-    echo -e "  ${CYAN}Restart:${NC}   cd ${INSTALL_DIR} && docker compose restart"
-    echo -e "  ${CYAN}Stop:${NC}      cd ${INSTALL_DIR} && docker compose down"
-    echo -e "  ${CYAN}Update:${NC}    cd ${INSTALL_DIR} && git pull && docker compose up -d --build"
+    echo -e "  ${CYAN}Logs:${NC}      koris logs"
+    echo -e "  ${CYAN}Restart:${NC}   koris restart"
+    echo -e "  ${CYAN}Stop:${NC}      koris stop"
+    echo -e "  ${CYAN}Update:${NC}    koris update"
+    echo -e "  ${CYAN}Status:${NC}    koris status"
   else
     local svc="koris"
     [[ "${EDITION}" == "lite" ]] && svc="korislite"
-    echo -e "  ${CYAN}Logs:${NC}      journalctl -u ${svc} -f"
-    echo -e "  ${CYAN}Restart:${NC}   systemctl restart ${svc}"
-    echo -e "  ${CYAN}Stop:${NC}      systemctl stop ${svc}"
-    echo -e "  ${CYAN}SSL:${NC}       certbot --nginx -d ${DOMAIN:-your-domain.com}"
+    echo -e "  ${CYAN}Logs:${NC}      koris logs"
+    echo -e "  ${CYAN}Restart:${NC}   koris restart"
+    echo -e "  ${CYAN}Stop:${NC}      koris stop"
+    echo -e "  ${CYAN}Update:${NC}    koris update"
   fi
   echo ""
   echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo -e "  ${CYAN}Uninstall:${NC}   bash install.sh --uninstall"
+  echo -e "  ${CYAN}Uninstall:${NC}   koris uninstall"
   echo ""
 }
 

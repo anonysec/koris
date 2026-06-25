@@ -76,10 +76,14 @@ func Load() Config {
 
 	dbDSN := getenv("PANEL_DB_DSN", "")
 	if dbDSN == "" {
+		// Check PANEL_PG_DSN for PostgreSQL/TimescaleDB backend
+		dbDSN = getenv("PANEL_PG_DSN", "")
+	}
+	if dbDSN == "" {
 		if !devMode {
-			log.Fatalf("FATAL: PANEL_DB_DSN is required in production. Set PANEL_DEV_MODE=true for development.")
+			log.Fatalf("FATAL: PANEL_DB_DSN or PANEL_PG_DSN is required in production. Set PANEL_DEV_MODE=true for development.")
 		}
-		log.Println("[SECURITY WARNING] PANEL_DB_DSN is not set. Using insecure default credentials. Set PANEL_DB_DSN in production!")
+		log.Println("[SECURITY WARNING] PANEL_DB_DSN/PANEL_PG_DSN is not set. Using insecure default credentials.")
 		dbDSN = "radius:RadiusDb2026@tcp(127.0.0.1:3306)/radius?parseTime=true&multiStatements=true&charset=utf8mb4,utf8"
 	}
 
