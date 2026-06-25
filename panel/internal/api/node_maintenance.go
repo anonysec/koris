@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -47,7 +47,7 @@ func (s *Server) nodeMaintenance(w http.ResponseWriter, r *http.Request, nodeID 
 
 	// Get node name for notifications
 	var nodeName string
-	err := s.DB.QueryRow(`SELECT name FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&nodeName)
+	err := s.DB.QueryRow(`SELECT name FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&nodeName)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "node_not_found"})
 		return
@@ -98,7 +98,7 @@ func (s *Server) nodeMaintenance(w http.ResponseWriter, r *http.Request, nodeID 
 func (s *Server) enableMaintenance(nodeID int64, nodeName, reason, estimatedDuration string, notifyUsers bool, actor string) error {
 	// Update node status
 	_, err := s.DB.Exec(
-		`UPDATE nodes SET maintenance_mode=TRUE, status='maintenance' WHERE id=?`,
+		`UPDATE nodes SET maintenance_mode=TRUE, status='maintenance' WHERE id=$1`,
 		nodeID,
 	)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *Server) enableMaintenance(nodeID int64, nodeName, reason, estimatedDura
 
 	// Record downtime entry for SLA tracking (task 3.8)
 	_, err = s.DB.Exec(
-		`INSERT INTO node_downtimes(node_id, started_at, reason) VALUES(?, NOW(), ?)`,
+		`INSERT INTO node_downtimes(node_id, started_at, reason) VALUES($1, NOW(), $2)`,
 		nodeID, reason,
 	)
 	if err != nil {
@@ -157,7 +157,7 @@ func (s *Server) enableMaintenance(nodeID int64, nodeName, reason, estimatedDura
 func (s *Server) disableMaintenance(nodeID int64, nodeName string, notifyUsers bool, actor string) error {
 	// Update node status
 	_, err := s.DB.Exec(
-		`UPDATE nodes SET maintenance_mode=FALSE, status='online' WHERE id=?`,
+		`UPDATE nodes SET maintenance_mode=FALSE, status='online' WHERE id=$1`,
 		nodeID,
 	)
 	if err != nil {
@@ -167,7 +167,7 @@ func (s *Server) disableMaintenance(nodeID int64, nodeName string, notifyUsers b
 	// Re-enable cores via gRPC (resume accepting connections)
 	if s.CoreMgr != nil {
 		ctx := context.Background()
-		rows, qErr := s.DB.Query(`SELECT core_name, COALESCE(port, 0) FROM node_cores WHERE node_id = ? AND status = 'installed'`, nodeID)
+		rows, qErr := s.DB.Query(`SELECT core_name, COALESCE(port, 0) FROM node_cores WHERE node_id = $1 AND status = 'installed'`, nodeID)
 		if qErr == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -185,7 +185,7 @@ func (s *Server) disableMaintenance(nodeID int64, nodeName string, notifyUsers b
 
 	// Close the most recent open downtime entry for this node (for SLA tracking)
 	_, err = s.DB.Exec(
-		`UPDATE node_downtimes SET ended_at=NOW(), duration_seconds=TIMESTAMPDIFF(SECOND, started_at, NOW()) WHERE node_id=? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+		`UPDATE node_downtimes SET ended_at=NOW(), duration_seconds=EXTRACT(EPOCH FROM (NOW() - started_at))::INT WHERE node_id=$1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
 		nodeID,
 	)
 	if err != nil {

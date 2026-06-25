@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"archive/tar"
@@ -138,7 +138,7 @@ func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var filename string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT filename FROM backups WHERE id=?`, id).Scan(&filename)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT filename FROM backups WHERE id=$1`, id).Scan(&filename)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "backup not found"})
 		return
@@ -370,7 +370,7 @@ func (s *Server) backupPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var filename string
-	err := s.DB.QueryRowContext(r.Context(), `SELECT filename FROM backups WHERE id=?`, id).Scan(&filename)
+	err := s.DB.QueryRowContext(r.Context(), `SELECT filename FROM backups WHERE id=$1`, id).Scan(&filename)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "backup not found"})
 		return

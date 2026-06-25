@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ func (s *Server) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	settings := map[string]string{}
 	for _, k := range keys {
 		var v string
-		if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = ?`, k).Scan(&v); err == nil {
+		if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, k).Scan(&v); err == nil {
 			settings[k] = v
 		}
 	}
@@ -68,7 +68,7 @@ func (s *Server) handleAdminNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	for key, val := range pairs {
 		_, err := s.DB.Exec(
-			`INSERT INTO panel_settings(setting_key, setting_value) VALUES(?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+			`INSERT INTO panel_settings(setting_key, setting_value) VALUES($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
 			key, val,
 		)
 		if err != nil {

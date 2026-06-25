@@ -1,4 +1,4 @@
-package backup
+﻿package backup
 
 import (
 	"archive/tar"
@@ -107,7 +107,7 @@ func (s *Service) createPreRestoreBackup(ctx context.Context) error {
 	}
 
 	_, _ = s.db.ExecContext(ctx,
-		`INSERT INTO backups (filename, status, type, started_at, completed_at) VALUES (?, 'completed', 'pre_restore', NOW(), NOW())`,
+		`INSERT INTO backups (filename, status, type, started_at, completed_at) VALUES ($1, 'completed', 'pre_restore', NOW(), NOW())`,
 		filename)
 
 	return nil
@@ -278,7 +278,7 @@ func (s *Service) dispatchConfigRestores(ctx context.Context, archivePath string
 
 		// Find node ID by name
 		var nodeID int64
-		err = s.db.QueryRowContext(ctx, `SELECT id FROM nodes WHERE name=? AND status IN ('online','stale')`, nodeName).Scan(&nodeID)
+		err = s.db.QueryRowContext(ctx, `SELECT id FROM nodes WHERE name=$1 AND status IN ('online','stale')`, nodeName).Scan(&nodeID)
 		if err != nil {
 			log.Printf("[backup] node %s not found or offline, skipping config restore", nodeName)
 			continue

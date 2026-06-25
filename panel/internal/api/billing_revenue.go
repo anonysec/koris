@@ -57,11 +57,11 @@ func (s *Server) adminBillingRevenue(w http.ResponseWriter, r *http.Request) {
 	var groupExpr, dateExpr string
 	switch period {
 	case "weekly":
-		groupExpr = "YEARWEEK(created_at, 1)"
-		dateExpr = "DATE_FORMAT(MIN(created_at), '%Y-%m-%d')"
+		groupExpr = "TO_CHAR(created_at, 'IYYY-IW')"
+		dateExpr = "TO_CHAR(MIN(created_at), 'YYYY-MM-DD')"
 	case "monthly":
-		groupExpr = "DATE_FORMAT(created_at, '%Y-%m')"
-		dateExpr = "DATE_FORMAT(created_at, '%Y-%m')"
+		groupExpr = "TO_CHAR(created_at, 'YYYY-MM')"
+		dateExpr = "TO_CHAR(created_at, 'YYYY-MM')"
 	default: // daily
 		groupExpr = "DATE(created_at)"
 		dateExpr = "DATE(created_at)"
@@ -73,7 +73,7 @@ func (s *Server) adminBillingRevenue(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(SUM(ABS(amount)), 0) AS total_amount,
 		       COUNT(*) AS tx_count
 		FROM wallet_transactions
-		WHERE created_at >= ? AND created_at <= ?
+		WHERE created_at >= $1 AND created_at <= $2
 		  AND type IN ('purchase', 'topup', 'refund', 'debit')
 		GROUP BY ` + groupExpr + `
 		ORDER BY period_date ASC`
@@ -106,7 +106,7 @@ func (s *Server) adminBillingRevenue(w http.ResponseWriter, r *http.Request) {
 	typeRows, err := s.DB.Query(`
 		SELECT type, COALESCE(SUM(amount), 0) AS total
 		FROM wallet_transactions
-		WHERE created_at >= ? AND created_at <= ?
+		WHERE created_at >= $1 AND created_at <= $2
 		  AND type IN ('purchase', 'topup', 'refund', 'debit')
 		GROUP BY type`, fromDate.Format("2006-01-02 15:04:05"), toDate.Format("2006-01-02 15:04:05"))
 

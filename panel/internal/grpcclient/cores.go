@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -286,8 +286,8 @@ func (cm *CoreManager) upsertCoreStatus(ctx context.Context, nodeID int64, coreT
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO node_services (node_id, service, status, updated_at)
-		VALUES (?, ?, ?, NOW())
-		ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = NOW()`,
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (node_id, service) DO UPDATE SET status = EXCLUDED.status, updated_at = NOW()`,
 		nodeID, coreType, status,
 	)
 	return err
@@ -314,7 +314,7 @@ func (cm *CoreManager) SyncCoreStatuses(ctx context.Context, nodeID int64) error
 	}
 
 	rows, err := db.QueryContext(ctx,
-		`SELECT service FROM node_services WHERE node_id = ?`, nodeID)
+		`SELECT service FROM node_services WHERE node_id = $1`, nodeID)
 	if err != nil {
 		return fmt.Errorf("query existing services: %w", err)
 	}
@@ -327,7 +327,7 @@ func (cm *CoreManager) SyncCoreStatuses(ctx context.Context, nodeID int64) error
 		}
 		if !reportedTypes[svc] {
 			_, _ = db.ExecContext(ctx,
-				`UPDATE node_services SET status = 'unknown', updated_at = NOW() WHERE node_id = ? AND service = ?`,
+				`UPDATE node_services SET status = 'unknown', updated_at = NOW() WHERE node_id = $1 AND service = $2`,
 				nodeID, svc)
 		}
 	}

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func (fo *FailoverOrchestrator) TriggerFailover(ctx context.Context, domainID in
 	var dnsRecordID sql.NullString
 	err := fo.db.QueryRowContext(ctx, `
 		SELECT id, domain, current_node_id, dns_provider_id, dns_record_id, ttl, is_active, last_failover_at
-		FROM failover_domains WHERE id = ?`, domainID).Scan(
+		FROM failover_domains WHERE id = $1`, domainID).Scan(
 		&domain.ID, &domain.Domain, &domain.CurrentNodeID, &providerID, &dnsRecordID,
 		&domain.TTL, &domain.IsActive, &lastFailover,
 	)
@@ -76,7 +76,7 @@ func (fo *FailoverOrchestrator) TriggerFailover(ctx context.Context, domainID in
 	// Requirement 3.3: Check no concurrent failover pending/propagating for this domain
 	var concurrentCount int
 	err = fo.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM failover_events WHERE domain_id = ? AND status IN ('pending','propagating')`, domainID).Scan(&concurrentCount)
+		`SELECT COUNT(*) FROM failover_events WHERE domain_id = $1 AND status IN ('pending','propagating')`, domainID).Scan(&concurrentCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check concurrent failovers: %w", err)
 	}
@@ -88,7 +88,7 @@ func (fo *FailoverOrchestrator) TriggerFailover(ctx context.Context, domainID in
 	fromNodeID := domain.CurrentNodeID
 	res, err := fo.db.ExecContext(ctx,
 		`INSERT INTO failover_events(domain_id, from_node_id, to_node_id, reason, status, triggered_by)
-		 VALUES(?, ?, ?, ?, 'pending', ?)`,
+		 VALUES($1, $2, $3, $4, 'pending', $5)`,
 		domainID, fromNodeID, toNodeID, reason, triggeredBy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create failover event: %w", err)
@@ -117,7 +117,7 @@ func (fo *FailoverOrchestrator) TriggerFailover(ctx context.Context, domainID in
 		event.Status = "failed"
 		event.ErrorMessage = &errMsg
 		_, _ = fo.db.ExecContext(ctx,
-			`UPDATE failover_events SET status = 'failed', error_message = ? WHERE id = ?`,
+			`UPDATE failover_events SET status = 'failed', error_message = $1 WHERE id = $2`,
 			errMsg, eventID)
 
 		// Send notification on failure
@@ -128,10 +128,10 @@ func (fo *FailoverOrchestrator) TriggerFailover(ctx context.Context, domainID in
 	// Step 7: On DNS success: update event to "propagating", update domain's current_node_id and last_failover_at
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	_, _ = fo.db.ExecContext(ctx,
-		`UPDATE failover_events SET status = 'propagating', dns_propagation_started_at = ? WHERE id = ?`,
+		`UPDATE failover_events SET status = 'propagating', dns_propagation_started_at = $1 WHERE id = $2`,
 		now, eventID)
 	_, _ = fo.db.ExecContext(ctx,
-		`UPDATE failover_domains SET current_node_id = ?, last_failover_at = ? WHERE id = ?`,
+		`UPDATE failover_domains SET current_node_id = $1, last_failover_at = $2 WHERE id = $3`,
 		toNodeID, now, domainID)
 
 	event.Status = "propagating"
@@ -142,8 +142,8 @@ func (fo *FailoverOrchestrator) TriggerFailover(ctx context.Context, domainID in
 
 	// Step 10: Send Telegram notification
 	var fromNodeName, toNodeName string
-	_ = fo.db.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id = ?`, fromNodeID).Scan(&fromNodeName)
-	_ = fo.db.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id = ?`, toNodeID).Scan(&toNodeName)
+	_ = fo.db.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id = $1`, fromNodeID).Scan(&fromNodeName)
+	_ = fo.db.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id = $1`, toNodeID).Scan(&toNodeName)
 
 	fo.notifier.Send(fmt.Sprintf("🔄 *DNS Failover Started*\nDomain: `%s`\nFrom: %s → To: %s\nReason: %s\nTriggered by: %s",
 		domain.Domain, fromNodeName, toNodeName, reason, triggeredBy))
@@ -170,7 +170,7 @@ func (fo *FailoverOrchestrator) CheckPropagation(eventID int64, domain string, e
 				// Requirement 4.3/4.4: Mark event "failed" on timeout but keep DNS pointing to new IP
 				errMsg := "propagation timeout: DNS did not resolve to expected IP within timeout period"
 				_, _ = fo.db.Exec(
-					`UPDATE failover_events SET status = 'failed', error_message = ? WHERE id = ?`,
+					`UPDATE failover_events SET status = 'failed', error_message = $1 WHERE id = $2`,
 					errMsg, eventID)
 
 				fo.notifier.Send(fmt.Sprintf("⚠️ *DNS Propagation Timeout*\nDomain: `%s`\nExpected IP: %s\nDNS record was updated but propagation was not confirmed within %s.",
@@ -191,7 +191,7 @@ func (fo *FailoverOrchestrator) CheckPropagation(eventID int64, domain string, e
 				// Requirement 4.2: Mark event "completed" and record completion timestamp
 				now := time.Now().UTC().Format("2006-01-02 15:04:05")
 				_, _ = fo.db.Exec(
-					`UPDATE failover_events SET status = 'completed', dns_propagation_completed_at = ? WHERE id = ?`,
+					`UPDATE failover_events SET status = 'completed', dns_propagation_completed_at = $1 WHERE id = $2`,
 					now, eventID)
 
 				fo.notifier.Send(fmt.Sprintf("✅ *DNS Failover Completed*\nDomain: `%s`\nNow resolves to: %s",
@@ -211,7 +211,7 @@ func (fo *FailoverOrchestrator) Rollback(ctx context.Context, eventID int64) (*F
 	var errMsg sql.NullString
 	err := fo.db.QueryRowContext(ctx,
 		`SELECT id, domain_id, from_node_id, to_node_id, reason, status, triggered_by, error_message
-		 FROM failover_events WHERE id = ?`, eventID).Scan(
+		 FROM failover_events WHERE id = $1`, eventID).Scan(
 		&originalEvent.ID, &originalEvent.DomainID, &originalEvent.FromNodeID,
 		&originalEvent.ToNodeID, &originalEvent.Reason, &originalEvent.Status,
 		&originalEvent.TriggeredBy, &errMsg,
@@ -242,7 +242,7 @@ func (fo *FailoverOrchestrator) Rollback(ctx context.Context, eventID int64) (*F
 
 	// Mark the original event as rolled_back
 	_, _ = fo.db.ExecContext(ctx,
-		`UPDATE failover_events SET status = 'rolled_back' WHERE id = ?`, eventID)
+		`UPDATE failover_events SET status = 'rolled_back' WHERE id = $1`, eventID)
 
 	// Trigger a new failover back to the from_node with reason "rollback"
 	return fo.TriggerFailover(ctx, originalEvent.DomainID, rollbackToNodeID, "rollback", originalEvent.TriggeredBy)
@@ -259,7 +259,7 @@ func (fo *FailoverOrchestrator) isNodeOnline(ctx context.Context, nodeID int64) 
 		`SELECT n.status, n.public_ip, ns.updated_at
 		 FROM nodes n
 		 LEFT JOIN node_status ns ON ns.node_id = n.id
-		 WHERE n.id = ?`, nodeID).Scan(&status, &publicIP, &lastSeenAt)
+		 WHERE n.id = $1`, nodeID).Scan(&status, &publicIP, &lastSeenAt)
 	if err == sql.ErrNoRows {
 		return false, "", fmt.Errorf("node not found: %d", nodeID)
 	}
@@ -291,7 +291,7 @@ func (fo *FailoverOrchestrator) buildDNSUpdater(ctx context.Context, providerID 
 
 	var providerType, tokenEncrypted, zoneID string
 	err := fo.db.QueryRow(
-		`SELECT type, COALESCE(api_token_encrypted,''), COALESCE(zone_id,'') FROM dns_providers WHERE id = ? AND is_active = 1`,
+		`SELECT type, COALESCE(api_token_encrypted,''), COALESCE(zone_id,'') FROM dns_providers WHERE id = $1 AND is_active = TRUE`,
 		*providerID).Scan(&providerType, &tokenEncrypted, &zoneID)
 	if err != nil {
 		log.Printf("[failover] failed to load DNS provider %d: %v", *providerID, err)

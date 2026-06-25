@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"bytes"
@@ -713,7 +713,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	auth.SetSession(w, auth.AdminCookieName, in.Username, s.Config.SessionSecret, s.Config.SecureCookies)
 	role := "admin"
-	_ = s.DB.QueryRow(`SELECT role FROM admins WHERE username=? LIMIT 1`, in.Username).Scan(&role)
+	_ = s.DB.QueryRow(`SELECT role FROM admins WHERE username=$1 LIMIT 1`, in.Username).Scan(&role)
 	writeJSON(w, map[string]any{"ok": true, "username": in.Username, "role": role})
 }
 
@@ -725,7 +725,7 @@ func (s *Server) adminMe(w http.ResponseWriter, r *http.Request) {
 	username, role, ok := s.currentAdmin(r)
 	credit := 0.00
 	if ok {
-		_ = s.DB.QueryRow(`SELECT COALESCE(credit, 0) FROM admins WHERE username=?`, username).Scan(&credit)
+		_ = s.DB.QueryRow(`SELECT COALESCE(credit, 0) FROM admins WHERE username=$1`, username).Scan(&credit)
 	}
 	writeJSON(w, map[string]any{"ok": true, "authenticated": ok, "username": username, "role": role, "credit": credit})
 }
@@ -755,7 +755,7 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	in.Username = strings.TrimSpace(in.Username)
 	var pw string
-	err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, in.Username).Scan(&pw)
+	err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, in.Username).Scan(&pw)
 	if err != nil {
 		// Perform dummy comparison to prevent timing-based user enumeration
 		subtle.ConstantTimeCompare([]byte("dummy-value-padding"), []byte(in.Password))
@@ -766,8 +766,8 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
 		return
 	}
-	_, _ = s.DB.Exec(`INSERT IGNORE INTO customers(username,sub_token) VALUES(?,?)`, in.Username, auth.RandomToken(24))
-	_, _ = s.DB.Exec(`INSERT IGNORE INTO wallets(username,credit) VALUES(?,0)`, in.Username)
+	_, _ = s.DB.Exec(`INSERT INTO customers(username,sub_token) VALUES($1,$2) ON CONFLICT (username) DO NOTHING`, in.Username, auth.RandomToken(24))
+	_, _ = s.DB.Exec(`INSERT INTO wallets(username,credit) VALUES($1,0) ON CONFLICT (username) DO NOTHING`, in.Username)
 	auth.SetSession(w, auth.CustomerCookieName, in.Username, s.Config.SessionSecret, s.Config.SecureCookies)
 	writeJSON(w, map[string]any{"ok": true, "username": in.Username})
 }
@@ -798,7 +798,7 @@ func (s *Server) dashboardStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) dashboardStatsPayload() map[string]any {
 	var rx, tx float64
-	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ns.rx_bps),0), COALESCE(SUM(ns.tx_bps),0) FROM node_status ns JOIN nodes n ON n.id=ns.node_id WHERE n.status <> 'disabled' AND ns.updated_at >= NOW() - INTERVAL 5 MINUTE`).Scan(&rx, &tx)
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ns.rx_bps),0), COALESCE(SUM(ns.tx_bps),0) FROM node_status ns JOIN nodes n ON n.id=ns.node_id WHERE n.status <> 'disabled' AND ns.updated_at >= NOW() - INTERVAL '5 minutes'`).Scan(&rx, &tx)
 
 	// Total data usage from radacct (all sessions, including closed ones)
 	var totalInput, totalOutput int64
@@ -806,20 +806,20 @@ func (s *Server) dashboardStatsPayload() map[string]any {
 
 	// Today's data usage
 	var todayInput, todayOutput int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct WHERE acctstarttime >= CURDATE()`).Scan(&todayInput, &todayOutput)
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct WHERE acctstarttime >= CURRENT_DATE`).Scan(&todayInput, &todayOutput)
 
 	return map[string]any{
 		"ok":                 true,
 		"customers":          s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL`),
 		"active_customers":   s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND status='active'`),
-		"plans":              s.count(`SELECT COUNT(*) FROM plans WHERE is_active=1`),
+		"plans":              s.count(`SELECT COUNT(*) FROM plans WHERE is_active=TRUE`),
 		"nodes":              s.count(`SELECT COUNT(*) FROM nodes WHERE status IN('online','stale')`),
 		"online_users":       s.count(`SELECT COUNT(DISTINCT username) FROM radacct WHERE acctstoptime IS NULL`),
 		"active_sessions":    s.count(`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL`),
 		"open_tickets":       s.count(`SELECT COUNT(*) FROM tickets WHERE deleted_at IS NULL AND status='open'`),
 		"pending_payments":   s.count(`SELECT COUNT(*) FROM payments WHERE status='pending'`),
 		"approved_payments":  s.sum(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved'`),
-		"unseen_events":      s.count(`SELECT COUNT(*) FROM events WHERE seen=0`),
+		"unseen_events":      s.count(`SELECT COUNT(*) FROM events WHERE seen=FALSE`),
 		"total_rx_bps":       rx,
 		"total_tx_bps":       tx,
 		"total_input_bytes":  totalInput,
@@ -864,7 +864,7 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 
 	// Reseller scoping
 	if role == "reseller" {
-		where += " AND c.created_by = ?"
+		where += " AND c.created_by = $1"
 		args = append(args, actor)
 	}
 
@@ -874,21 +874,21 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		search = strings.TrimSpace(params.Get("q"))
 	}
 	if search != "" {
-		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(c.email,'') LIKE ? OR COALESCE(c.notes,'') LIKE ? OR COALESCE(p.name,'') LIKE ? OR CAST(c.id AS CHAR) LIKE ?)"
+		where += " AND (c.username LIKE $1 OR COALESCE(c.display_name,'') LIKE $2 OR COALESCE(c.email,'') LIKE $3 OR COALESCE(c.notes,'') LIKE $4 OR COALESCE(p.name,'') LIKE $5 OR CAST(c.id AS CHAR) LIKE $6)"
 		like := "%" + search + "%"
 		args = append(args, like, like, like, like, like, like)
 	}
 
 	// Filter: status
 	if status := strings.TrimSpace(params.Get("status")); status != "" {
-		where += " AND c.status = ?"
+		where += " AND c.status = $1"
 		args = append(args, status)
 	}
 
 	// Filter: plan_id
 	if planIDStr := params.Get("plan_id"); planIDStr != "" {
 		if pid, err := strconv.ParseInt(planIDStr, 10, 64); err == nil && pid > 0 {
-			where += " AND c.plan_id = ?"
+			where += " AND c.plan_id = $1"
 			args = append(args, pid)
 		}
 	}
@@ -896,13 +896,13 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 	// Filter: created_after / created_before
 	if ca := params.Get("created_after"); ca != "" {
 		if _, err := time.Parse("2006-01-02", ca); err == nil {
-			where += " AND c.created_at >= ?"
+			where += " AND c.created_at >= $1"
 			args = append(args, ca)
 		}
 	}
 	if cb := params.Get("created_before"); cb != "" {
 		if _, err := time.Parse("2006-01-02", cb); err == nil {
-			where += " AND c.created_at <= ?"
+			where += " AND c.created_at <= $1"
 			args = append(args, cb+" 23:59:59")
 		}
 	}
@@ -912,14 +912,14 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 	if ea := params.Get("expires_after"); ea != "" {
 		if _, err := time.Parse("2006-01-02", ea); err == nil {
 			needSubJoin = true
-			where += " AND sub.expires_at >= ?"
+			where += " AND sub.expires_at >= $1"
 			args = append(args, ea)
 		}
 	}
 	if eb := params.Get("expires_before"); eb != "" {
 		if _, err := time.Parse("2006-01-02", eb); err == nil {
 			needSubJoin = true
-			where += " AND sub.expires_at <= ?"
+			where += " AND sub.expires_at <= $1"
 			args = append(args, eb+" 23:59:59")
 		}
 	}
@@ -966,7 +966,7 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN admins a ON a.username=c.created_by AND a.role='reseller'%s%s
 		WHERE %s
 		ORDER BY %s
-		LIMIT ? OFFSET ?`, subJoin, usageJoin, where, orderBy)
+		LIMIT $1 OFFSET $2`, subJoin, usageJoin, where, orderBy)
 
 	dataArgs := append(args, limit, offset)
 	rows, err := s.DB.Query(dataQuery, dataArgs...)
@@ -1126,7 +1126,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	var templateRadiusReplies []radiusAttr
 	if in.TemplateID != nil {
 		var tmpl UserTemplate
-		row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = ?`, *in.TemplateID)
+		row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = $1`, *in.TemplateID)
 		var err error
 		tmpl, err = scanTemplate(row)
 		if err != nil {
@@ -1191,7 +1191,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		var planDays int
 		var planPrice float64
 		var planBillingType string
-		if err := s.DB.QueryRow(`SELECT data_gb,speed_mbps,duration_days,price,COALESCE(billing_type,'quota') FROM plans WHERE id=? AND is_active=1 LIMIT 1`, *in.PlanID).Scan(&planDataGB, &planSpeedMbps, &planDays, &planPrice, &planBillingType); err == nil {
+		if err := s.DB.QueryRow(`SELECT data_gb,speed_mbps,duration_days,price,COALESCE(billing_type,'quota') FROM plans WHERE id=$1 AND is_active=TRUE LIMIT 1`, *in.PlanID).Scan(&planDataGB, &planSpeedMbps, &planDays, &planPrice, &planBillingType); err == nil {
 			// Resellers can only assign quota plans, not pay-as-you-go
 			if role == "reseller" && planBillingType == "payg" {
 				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "reseller_quota_only"})
@@ -1200,9 +1200,9 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 			// Resellers can only use plans from their allowed list
 			if role == "reseller" {
 				var resellerID int64
-				_ = s.DB.QueryRow(`SELECT id FROM admins WHERE username=?`, actor).Scan(&resellerID)
+				_ = s.DB.QueryRow(`SELECT id FROM admins WHERE username=$1`, actor).Scan(&resellerID)
 				var allowed int
-				_ = s.DB.QueryRow(`SELECT COUNT(*) FROM reseller_allowed_plans WHERE reseller_id=? AND plan_id=?`, resellerID, *in.PlanID).Scan(&allowed)
+				_ = s.DB.QueryRow(`SELECT COUNT(*) FROM reseller_allowed_plans WHERE reseller_id=$1 AND plan_id=$2`, resellerID, *in.PlanID).Scan(&allowed)
 				if allowed == 0 {
 					writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "plan_not_allowed"})
 					return
@@ -1219,17 +1219,17 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 			}
 			if role == "reseller" && planPrice > 0 {
 				var resellerCredit float64
-				_ = s.DB.QueryRow(`SELECT credit FROM admins WHERE username=?`, actor).Scan(&resellerCredit)
+				_ = s.DB.QueryRow(`SELECT credit FROM admins WHERE username=$1`, actor).Scan(&resellerCredit)
 				if resellerCredit < planPrice {
 					writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "insufficient_reseller_credit", "credit": resellerCredit, "required": planPrice})
 					return
 				}
-				_, err := s.DB.Exec(`UPDATE admins SET credit = credit - ? WHERE username=?`, planPrice, actor)
+				_, err := s.DB.Exec(`UPDATE admins SET credit = credit - $1 WHERE username=$2`, planPrice, actor)
 				if err != nil {
 					writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 					return
 				}
-				_, _ = s.DB.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES(?,?, 'deduction', ?, ?)`, actor, -planPrice, "Created customer "+in.Username, actor)
+				_, _ = s.DB.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES($1,$2, 'deduction', $3, $4)`, actor, -planPrice, "Created customer "+in.Username, actor)
 			}
 		}
 	}
@@ -1249,21 +1249,21 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		avatarVal = randomEmoji(s.reservedEmojis())
 	}
 
-	res, err := tx.Exec(`INSERT INTO customers(username,display_name,plan_id,sub_token,created_by,avatar) VALUES(?,?,?,?,?,?)`, in.Username, in.DisplayName, in.PlanID, auth.RandomToken(24), actor, avatarVal)
+	res, err := tx.Exec(`INSERT INTO customers(username,display_name,plan_id,sub_token,created_by,avatar) VALUES($1,$2,$3,$4,$5,$6)`, in.Username, in.DisplayName, in.PlanID, auth.RandomToken(24), actor, avatarVal)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	customerID, _ := res.LastInsertId()
-	if _, err = tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,0)`, customerID, in.Username); err != nil {
+	if _, err = tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,0)`, customerID, in.Username); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Cleartext-Password',':=',?)`, in.Username, in.Password); err != nil {
+	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Cleartext-Password',':=',$2)`, in.Username, in.Password); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Simultaneous-Use',':=',?)`, in.Username, strconv.Itoa(func() int {
+	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Simultaneous-Use',':=',$2)`, in.Username, strconv.Itoa(func() int {
 		if in.IPLimit != nil && *in.IPLimit > 0 {
 			return *in.IPLimit
 		}
@@ -1272,17 +1272,17 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, in.Username)
+	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, in.Username)
 	if dataGB > 0 {
 		bytes := int64(math.Round(dataGB * 1024 * 1024 * 1024))
-		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Max-Data',':=',?)`, in.Username, bytes); err != nil {
+		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, in.Username, bytes); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 	}
-	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, in.Username)
+	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, in.Username)
 	if speedMbps > 0 {
-		if _, err = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,'Mikrotik-Rate-Limit',':=',?)`, in.Username, speedLimitValue(speedMbps)); err != nil {
+		if _, err = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,'Mikrotik-Rate-Limit',':=',$2)`, in.Username, speedLimitValue(speedMbps)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -1292,7 +1292,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		if attr.Attribute == "Cleartext-Password" || attr.Attribute == "Simultaneous-Use" || attr.Attribute == "Max-Data" {
 			continue // These are managed by explicit fields above
 		}
-		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,?,?,?)`, in.Username, attr.Attribute, attr.Op, attr.Value); err != nil {
+		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,$2,$3,$4)`, in.Username, attr.Attribute, attr.Op, attr.Value); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -1302,7 +1302,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		if attr.Attribute == "Mikrotik-Rate-Limit" {
 			continue // Managed by speed_mbps field above
 		}
-		if _, err = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,?,?,?)`, in.Username, attr.Attribute, attr.Op, attr.Value); err != nil {
+		if _, err = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,$2,$3,$4)`, in.Username, attr.Attribute, attr.Op, attr.Value); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -1310,13 +1310,13 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	if days > 0 {
 		if in.ActivateOnConnect {
 			// First-connection activation: don't set expires_at yet; auth script will set it on first VPN connect
-			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,activate_on_connect) VALUES(?,?,?,1)`, customerID, in.Username, in.PlanID); err != nil {
+			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,activate_on_connect) VALUES($1,$2,$3,1)`, customerID, in.Username, in.PlanID); err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
 		} else {
 			expires := time.Now().AddDate(0, 0, days)
-			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES(?,?,?,?)`, customerID, in.Username, in.PlanID, expires); err != nil {
+			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES($1,$2,$3,$4)`, customerID, in.Username, in.PlanID, expires); err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
@@ -1416,7 +1416,7 @@ func (s *Server) archiveCustomer(w http.ResponseWriter, r *http.Request, id int6
 	actor, _, _ := s.currentAdmin(r)
 	var username string
 	var deletedAt sql.NullTime
-	if err := s.DB.QueryRow(`SELECT username,deleted_at FROM customers WHERE id=? LIMIT 1`, id).Scan(&username, &deletedAt); err == sql.ErrNoRows {
+	if err := s.DB.QueryRow(`SELECT username,deleted_at FROM customers WHERE id=$1 LIMIT 1`, id).Scan(&username, &deletedAt); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	} else if err != nil {
@@ -1442,16 +1442,16 @@ func (s *Server) archiveCustomer(w http.ResponseWriter, r *http.Request, id int6
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO deleted_archive(type,name,archive_key,payload,created_by) VALUES('customer',?,?,?,?)`, username, strconv.FormatInt(id, 10), string(payloadBytes), actor); err != nil {
+	if _, err := tx.Exec(`INSERT INTO deleted_archive(type,name,archive_key,payload,created_by) VALUES('customer',$1,$2,$3,$4)`, username, strconv.FormatInt(id, 10), string(payloadBytes), actor); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if _, err := tx.Exec(`UPDATE customers SET status='deleted',deleted_at=NOW() WHERE id=? AND deleted_at IS NULL`, id); err != nil {
+	if _, err := tx.Exec(`UPDATE customers SET status='deleted',deleted_at=NOW() WHERE id=$1 AND deleted_at IS NULL`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=?`, username)
-	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=?`, username)
+	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1`, username)
+	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=$1`, username)
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1465,7 +1465,7 @@ func (s *Server) archiveCustomer(w http.ResponseWriter, r *http.Request, id int6
 
 func (s *Server) restoreCustomer(w http.ResponseWriter, r *http.Request, id int64) {
 	var username string
-	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? LIMIT 1`, id).Scan(&username); err == sql.ErrNoRows {
+	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=$1 LIMIT 1`, id).Scan(&username); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	} else if err != nil {
@@ -1474,7 +1474,7 @@ func (s *Server) restoreCustomer(w http.ResponseWriter, r *http.Request, id int6
 	}
 	var archiveID int64
 	var payload string
-	_ = s.DB.QueryRow(`SELECT id,COALESCE(payload,'') FROM deleted_archive WHERE type='customer' AND archive_key=? ORDER BY id DESC LIMIT 1`, strconv.FormatInt(id, 10)).Scan(&archiveID, &payload)
+	_ = s.DB.QueryRow(`SELECT id,COALESCE(payload,'') FROM deleted_archive WHERE type='customer' AND archive_key=$1 ORDER BY id DESC LIMIT 1`, strconv.FormatInt(id, 10)).Scan(&archiveID, &payload)
 	var archived struct {
 		RadCheck []RadiusCheck `json:"radcheck"`
 		RadReply []RadiusCheck `json:"radreply"`
@@ -1488,20 +1488,20 @@ func (s *Server) restoreCustomer(w http.ResponseWriter, r *http.Request, id int6
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE customers SET status='active',deleted_at=NULL WHERE id=?`, id); err != nil {
+	if _, err := tx.Exec(`UPDATE customers SET status='active',deleted_at=NULL WHERE id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=?`, username)
-	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=?`, username)
+	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1`, username)
+	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=$1`, username)
 	for _, row := range archived.RadCheck {
-		_, _ = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,?,?,?)`, username, row.Attribute, row.Op, row.Value)
+		_, _ = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,$2,$3,$4)`, username, row.Attribute, row.Op, row.Value)
 	}
 	for _, row := range archived.RadReply {
-		_, _ = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,?,?,?)`, username, row.Attribute, row.Op, row.Value)
+		_, _ = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,$2,$3,$4)`, username, row.Attribute, row.Op, row.Value)
 	}
 	if archiveID > 0 {
-		_, _ = tx.Exec(`UPDATE deleted_archive SET restored_at=NOW() WHERE id=?`, archiveID)
+		_, _ = tx.Exec(`UPDATE deleted_archive SET restored_at=NOW() WHERE id=$1`, archiveID)
 	}
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -1523,7 +1523,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		WHERE c.id=? AND c.deleted_at IS NULL LIMIT 1`, id).Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created, &c.Notes, &c.SubToken, &c.Avatar, &c.CreatedBy)
+		WHERE c.id=$1 AND c.deleted_at IS NULL LIMIT 1`, id).Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created, &c.Notes, &c.SubToken, &c.Avatar, &c.CreatedBy)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -1539,7 +1539,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 		c.CreatedAt = created.Time.Format(time.RFC3339)
 	}
 
-	rows, err := s.DB.Query(`SELECT id,username,attribute,op,value FROM radcheck WHERE username=? ORDER BY id ASC`, c.Username)
+	rows, err := s.DB.Query(`SELECT id,username,attribute,op,value FROM radcheck WHERE username=$1 ORDER BY id ASC`, c.Username)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -1552,7 +1552,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 			}
 		}
 	}
-	replyRows, err := s.DB.Query(`SELECT id,username,attribute,op,value FROM radreply WHERE username=? ORDER BY id ASC`, c.Username)
+	replyRows, err := s.DB.Query(`SELECT id,username,attribute,op,value FROM radreply WHERE username=$1 ORDER BY id ASC`, c.Username)
 	if err == nil {
 		defer replyRows.Close()
 		for replyRows.Next() {
@@ -1569,7 +1569,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 	if err := s.DB.QueryRow(`SELECT s.id,COALESCE(p.name,''),s.status,s.started_at,s.expires_at
 		FROM subscriptions s
 		LEFT JOIN plans p ON p.id=s.plan_id
-		WHERE s.username=? ORDER BY s.id DESC LIMIT 1`, c.Username).Scan(&subID, &subPlan, &subStatus, &started, &expires); err == nil {
+		WHERE s.username=$1 ORDER BY s.id DESC LIMIT 1`, c.Username).Scan(&subID, &subPlan, &subStatus, &started, &expires); err == nil {
 		sub := map[string]any{"id": subID, "plan": subPlan, "status": subStatus}
 		if started.Valid {
 			sub["started_at"] = started.Time.Format(time.RFC3339)
@@ -1583,7 +1583,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 	subRows, err := s.DB.Query(`SELECT s.id,s.username,COALESCE(p.name,''),s.status,s.started_at,s.expires_at,s.paid_amount,COALESCE(s.discount_code,'')
 		FROM subscriptions s
 		LEFT JOIN plans p ON p.id=s.plan_id
-		WHERE s.username=? ORDER BY s.id DESC LIMIT 100`, c.Username)
+		WHERE s.username=$1 ORDER BY s.id DESC LIMIT 100`, c.Username)
 	if err == nil {
 		defer subRows.Close()
 		for subRows.Next() {
@@ -1601,7 +1601,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 		}
 	}
 
-	txRows, err := s.DB.Query(`SELECT id,username,amount,type,description,actor,COALESCE(reference_type,''),reference_id,created_at FROM wallet_transactions WHERE username=? ORDER BY id DESC LIMIT 100`, c.Username)
+	txRows, err := s.DB.Query(`SELECT id,username,amount,type,description,actor,COALESCE(reference_type,''),reference_id,created_at FROM wallet_transactions WHERE username=$1 ORDER BY id DESC LIMIT 100`, c.Username)
 	if err == nil {
 		defer txRows.Close()
 		for txRows.Next() {
@@ -1622,7 +1622,7 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 
 	// Include billing_mode for reseller-created users
 	var billingMode sql.NullString
-	_ = s.DB.QueryRow(`SELECT billing_mode FROM customers WHERE id=?`, id).Scan(&billingMode)
+	_ = s.DB.QueryRow(`SELECT billing_mode FROM customers WHERE id=$1`, id).Scan(&billingMode)
 
 	resp := map[string]any{"ok": true, "customer": c}
 	if billingMode.Valid {
@@ -1673,7 +1673,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 	args := []any{}
 	if in.DisplayName != nil {
 		displayName := strings.TrimSpace(*in.DisplayName)
-		sets = append(sets, "display_name=?")
+		sets = append(sets, "display_name=$1")
 		args = append(args, displayName)
 	}
 	if in.Status != nil {
@@ -1682,11 +1682,11 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_status"})
 			return
 		}
-		sets = append(sets, "status=?")
+		sets = append(sets, "status=$1")
 		args = append(args, status)
 	}
 	if in.PlanID != nil {
-		sets = append(sets, "plan_id=?")
+		sets = append(sets, "plan_id=$1")
 		if *in.PlanID == 0 {
 			args = append(args, nil)
 		} else {
@@ -1694,11 +1694,11 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		}
 	}
 	if in.Notes != nil {
-		sets = append(sets, "notes=?")
+		sets = append(sets, "notes=$1")
 		args = append(args, strings.TrimSpace(*in.Notes))
 	}
 	if in.Avatar != nil {
-		sets = append(sets, "avatar=?")
+		sets = append(sets, "avatar=$1")
 		if *in.Avatar == "" {
 			args = append(args, nil)
 		} else {
@@ -1711,7 +1711,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_mode"})
 			return
 		}
-		sets = append(sets, "billing_mode=?")
+		sets = append(sets, "billing_mode=$1")
 		if bm == "" {
 			args = append(args, nil) // inherit from reseller
 		} else {
@@ -1720,7 +1720,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 	}
 	if len(sets) > 0 {
 		args = append(args, id)
-		if _, err := s.DB.Exec(`UPDATE customers SET `+strings.Join(sets, ",")+` WHERE id=? AND deleted_at IS NULL`, args...); err != nil {
+		if _, err := s.DB.Exec(`UPDATE customers SET `+strings.Join(sets, ",")+` WHERE id=$1 AND deleted_at IS NULL`, args...); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -1731,7 +1731,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			return
 		}
 		if *in.DataGB == 0 {
-			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, username)
+			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 		} else {
 			bytes := int64(math.Round(*in.DataGB * 1024 * 1024 * 1024))
 			if err := s.upsertRadCheck(username, "Max-Data", strconv.FormatInt(bytes, 10)); err != nil {
@@ -1746,7 +1746,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			return
 		}
 		if *in.SpeedMbps == 0 {
-			_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, username)
+			_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, username)
 		} else if err := s.upsertRadReply(username, "Mikrotik-Rate-Limit", speedLimitValue(*in.SpeedMbps)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -1758,11 +1758,11 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			planID = *in.PlanID
 		}
 		expires := time.Now().AddDate(0, 0, *in.Days)
-		_, _ = s.DB.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES(?,?,?,?)`, id, username, planID, expires)
+		_, _ = s.DB.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES($1,$2,$3,$4)`, id, username, planID, expires)
 	}
 	if in.IPLimit != nil {
 		if *in.IPLimit <= 0 {
-			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Simultaneous-Use'`, username)
+			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Simultaneous-Use'`, username)
 		} else {
 			_ = s.upsertRadCheck(username, "Simultaneous-Use", strconv.Itoa(*in.IPLimit))
 		}
@@ -1772,7 +1772,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		// Only disconnect if status is actually changing (avoid unnecessary disconnection
 		// when updating other fields on an already-disabled/limited customer)
 		var currentStatus string
-		_ = s.DB.QueryRow(`SELECT status FROM customers WHERE id=? LIMIT 1`, id).Scan(&currentStatus)
+		_ = s.DB.QueryRow(`SELECT status FROM customers WHERE id=$1 LIMIT 1`, id).Scan(&currentStatus)
 		if currentStatus != *in.Status {
 			s.disconnectCustomerSessions(username)
 		}
@@ -1805,7 +1805,7 @@ func (s *Server) setCustomerStatus(w http.ResponseWriter, id int64, status strin
 		return
 	}
 
-	if _, err := s.DB.Exec(`UPDATE customers SET status=? WHERE id=? AND deleted_at IS NULL`, status, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE customers SET status=$1 WHERE id=$2 AND deleted_at IS NULL`, status, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -1847,14 +1847,14 @@ func (s *Server) resetCustomerPassword(w http.ResponseWriter, r *http.Request, i
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	res, err := s.DB.Exec(`UPDATE radcheck SET value=? WHERE username=? AND attribute IN('Cleartext-Password','User-Password')`, in.Password, username)
+	res, err := s.DB.Exec(`UPDATE radcheck SET value=$1 WHERE username=$2 AND attribute IN('Cleartext-Password','User-Password')`, in.Password, username)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	affected, _ := res.RowsAffected()
 	if affected == 0 {
-		_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Cleartext-Password',':=',?)`, username, in.Password)
+		_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Cleartext-Password',':=',$2)`, username, in.Password)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -1883,7 +1883,7 @@ func (s *Server) resetCustomerTraffic(w http.ResponseWriter, r *http.Request, id
 	}
 
 	// Reset traffic by archiving old radacct records (set stop time) so usage counters restart
-	result, err := s.DB.Exec(`UPDATE radacct SET acctstoptime=COALESCE(acctstoptime, NOW()), acctterminatecause=COALESCE(acctterminatecause, 'Admin-Reset') WHERE username=?`, username)
+	result, err := s.DB.Exec(`UPDATE radacct SET acctstoptime=COALESCE(acctstoptime, NOW()), acctterminatecause=COALESCE(acctterminatecause, 'Admin-Reset') WHERE username=$1`, username)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1891,7 +1891,7 @@ func (s *Server) resetCustomerTraffic(w http.ResponseWriter, r *http.Request, id
 	affected, _ := result.RowsAffected()
 
 	// If customer was in 'limited' status, re-enable them
-	_, _ = s.DB.Exec(`UPDATE customers SET status='active' WHERE username=? AND status='limited' AND deleted_at IS NULL`, username)
+	_, _ = s.DB.Exec(`UPDATE customers SET status='active' WHERE username=$1 AND status='limited' AND deleted_at IS NULL`, username)
 
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "customer.traffic_reset", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username, "sessions_reset": affected}, clientIP(r))
@@ -1931,7 +1931,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 	}
 
 	var username, createdBy string
-	if err := s.DB.QueryRow(`SELECT username, COALESCE(created_by,'') FROM customers WHERE id=? AND deleted_at IS NULL LIMIT 1`, id).Scan(&username, &createdBy); err == sql.ErrNoRows {
+	if err := s.DB.QueryRow(`SELECT username, COALESCE(created_by,'') FROM customers WHERE id=$1 AND deleted_at IS NULL LIMIT 1`, id).Scan(&username, &createdBy); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	} else if err != nil {
@@ -1948,7 +1948,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 
 	var plan Plan
 	var active int
-	if err := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, in.PlanID).Scan(&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active, &plan.SortOrder, new(sql.NullTime)); err == sql.ErrNoRows {
+	if err := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=$1 LIMIT 1`, in.PlanID).Scan(&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active, &plan.SortOrder, new(sql.NullTime)); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
 		return
 	} else if err != nil {
@@ -1976,7 +1976,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 
 	if role == "reseller" {
 		var resellerCredit float64
-		if err := tx.QueryRow(`SELECT COALESCE(credit,0) FROM admins WHERE username=? FOR UPDATE`, actor).Scan(&resellerCredit); err != nil && err != sql.ErrNoRows {
+		if err := tx.QueryRow(`SELECT COALESCE(credit,0) FROM admins WHERE username=$1 FOR UPDATE`, actor).Scan(&resellerCredit); err != nil && err != sql.ErrNoRows {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -1986,7 +1986,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 		}
 	} else {
 		var walletCredit float64
-		if err := tx.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=? FOR UPDATE`, username).Scan(&walletCredit); err != nil && err != sql.ErrNoRows {
+		if err := tx.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=$1 FOR UPDATE`, username).Scan(&walletCredit); err != nil && err != sql.ErrNoRows {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -1996,21 +1996,21 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 		}
 	}
 
-	if _, err := tx.Exec(`UPDATE customers SET plan_id=?,status='active' WHERE id=? AND deleted_at IS NULL`, plan.ID, id); err != nil {
+	if _, err := tx.Exec(`UPDATE customers SET plan_id=$1,status='active' WHERE id=$2 AND deleted_at IS NULL`, plan.ID, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, username)
+	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Max-Data',':=',?)`, username, bytes); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, bytes); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 	}
-	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, username)
+	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, username)
 	if plan.SpeedMbps > 0 {
-		if _, err := tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,'Mikrotik-Rate-Limit',':=',?)`, username, speedLimitValue(plan.SpeedMbps)); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,'Mikrotik-Rate-Limit',':=',$2)`, username, speedLimitValue(plan.SpeedMbps)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -2020,7 +2020,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 	if plan.DurationDays > 0 {
 		expires = time.Now().AddDate(0, 0, plan.DurationDays)
 	}
-	if _, err := tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at,paid_amount) VALUES(?,?,?,?,?)`, id, username, plan.ID, expires, plan.Price); err != nil {
+	if _, err := tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at,paid_amount) VALUES($1,$2,$3,$4,$5)`, id, username, plan.ID, expires, plan.Price); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -2028,35 +2028,35 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 	if plan.Price > 0 {
 		desc := "plan activated: " + plan.Name
 		if role == "reseller" {
-			_, err = tx.Exec(`UPDATE admins SET credit = credit - ? WHERE username=?`, plan.Price, actor)
+			_, err = tx.Exec(`UPDATE admins SET credit = credit - $1 WHERE username=$2`, plan.Price, actor)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
-			_, _ = tx.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES(?,?, 'deduction', ?, ?)`, actor, -plan.Price, "Renewed plan for "+username, actor)
-			paymentRes, err := tx.Exec(`INSERT INTO payments(customer_id,username,amount,method,status,admin_note) VALUES(?,?,?,'reseller','approved',?)`, id, username, plan.Price, desc+" (reseller: "+actor+")")
+			_, _ = tx.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES($1,$2, 'deduction', $3, $4)`, actor, -plan.Price, "Renewed plan for "+username, actor)
+			paymentRes, err := tx.Exec(`INSERT INTO payments(customer_id,username,amount,method,status,admin_note) VALUES($1,$2,$3,'reseller','approved',$4)`, id, username, plan.Price, desc+" (reseller: "+actor+")")
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
 			paymentID, _ := paymentRes.LastInsertId()
-			if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,?)`, id, username, 0.0, "purchase", desc+" (reseller paid)", actor, "payment", paymentID); err != nil {
+			if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, username, 0.0, "purchase", desc+" (reseller paid)", actor, "payment", paymentID); err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
 		} else {
-			paymentRes, err := tx.Exec(`INSERT INTO payments(customer_id,username,amount,method,status,admin_note) VALUES(?,?,?,'wallet','approved',?)`, id, username, plan.Price, desc)
+			paymentRes, err := tx.Exec(`INSERT INTO payments(customer_id,username,amount,method,status,admin_note) VALUES($1,$2,$3,'wallet','approved',$4)`, id, username, plan.Price, desc)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
 			paymentID, _ := paymentRes.LastInsertId()
-			_, err = tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit=credit+VALUES(credit), customer_id=COALESCE(VALUES(customer_id),customer_id)`, id, username, -plan.Price)
+			_, err = tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit=wallets.credit+EXCLUDED.credit, customer_id=COALESCE(EXCLUDED.customer_id,wallets.customer_id)`, id, username, -plan.Price)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
-			if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,?)`, id, username, -plan.Price, "purchase", desc, "admin", "payment", paymentID); err != nil {
+			if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, username, -plan.Price, "purchase", desc, "admin", "payment", paymentID); err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
@@ -2093,7 +2093,7 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 
 	// Get customer info
 	var username string
-	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? AND deleted_at IS NULL`, id).Scan(&username); err != nil {
+	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&username); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
@@ -2107,7 +2107,7 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 	err := s.DB.QueryRow(`
 		SELECT s.id, s.plan_id, COALESCE(s.paid_amount, 0), s.started_at, s.expires_at
 		FROM subscriptions s
-		WHERE s.customer_id = ? AND s.status = 'active'
+		WHERE s.customer_id = $1 AND s.status = 'active'
 		ORDER BY s.id DESC LIMIT 1`, id).Scan(&subID, &currentPlanID, &paidAmount, &startDate, &expiresAt)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "no_active_subscription"})
@@ -2117,11 +2117,11 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 	// Get current plan details for refund calculation
 	var currentDataGB float64
 	var currentDurationDays int
-	s.DB.QueryRow(`SELECT COALESCE(data_gb, 0), COALESCE(duration_days, 0) FROM plans WHERE id=?`, currentPlanID).Scan(&currentDataGB, &currentDurationDays)
+	s.DB.QueryRow(`SELECT COALESCE(data_gb, 0), COALESCE(duration_days, 0) FROM plans WHERE id=$1`, currentPlanID).Scan(&currentDataGB, &currentDurationDays)
 
 	// Get customer's current data usage since subscription started
 	var totalUsageBytes int64
-	s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) FROM radacct WHERE username=? AND acctstarttime >= ?`, username, startDate).Scan(&totalUsageBytes)
+	s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) FROM radacct WHERE username=$1 AND acctstarttime >= $2`, username, startDate).Scan(&totalUsageBytes)
 	usedGB := float64(totalUsageBytes) / (1024 * 1024 * 1024)
 
 	// Calculate pro-rated refund
@@ -2130,7 +2130,7 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 	// Get the new plan
 	var newPlan Plan
 	var active int
-	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=?`, in.PlanID).Scan(
+	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=$1`, in.PlanID).Scan(
 		&newPlan.ID, &newPlan.Name, &newPlan.DataGB, &newPlan.SpeedMbps, &newPlan.DurationDays, &newPlan.Price, &active); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
 		return
@@ -2149,14 +2149,14 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 	defer tx.Rollback()
 
 	// 1. Cancel current subscription
-	if _, err := tx.Exec(`UPDATE subscriptions SET status='cancelled' WHERE id=?`, subID); err != nil {
+	if _, err := tx.Exec(`UPDATE subscriptions SET status='cancelled' WHERE id=$1`, subID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 
 	// 2. Credit refund to wallet
 	if refundAmount > 0 {
-		if _, err := tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit = credit + VALUES(credit)`, id, username, refundAmount); err != nil {
+		if _, err := tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit = wallets.credit + EXCLUDED.credit`, id, username, refundAmount); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -2165,7 +2165,7 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 		if paidAmount > 0 {
 			refundPct = (refundAmount / paidAmount) * 100
 		}
-		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES(?,?,?,?,?,?)`,
+		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES($1,$2,$3,$4,$5,$6)`,
 			id, username, refundAmount, "refund", fmt.Sprintf("Pro-rated refund for plan switch (%.1f%% unused)", refundPct), actor); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -2237,23 +2237,23 @@ func calculateProRatedRefund(paidAmount, dataGB float64, durationDays int, usedG
 func (s *Server) applyPlanDirectly(customerID int64, username string, planID int64, r *http.Request) {
 	var plan Plan
 	var active int
-	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=?`, planID).Scan(
+	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=$1`, planID).Scan(
 		&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active); err != nil {
 		return
 	}
 
 	// Update customer's plan
-	_, _ = s.DB.Exec(`UPDATE customers SET plan_id=?, status='active' WHERE id=? AND deleted_at IS NULL`, planID, customerID)
+	_, _ = s.DB.Exec(`UPDATE customers SET plan_id=$1, status='active' WHERE id=$2 AND deleted_at IS NULL`, planID, customerID)
 
 	// Update RADIUS attributes
-	_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, username)
+	_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Max-Data',':=',?)`, username, bytes)
+		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Max-Data',':=',$2)`, username, bytes)
 	}
-	_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, username)
+	_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, username)
 	if plan.SpeedMbps > 0 {
-		_, _ = s.DB.Exec(`INSERT INTO radreply(username, attribute, op, value) VALUES(?,'Mikrotik-Rate-Limit',':=',?)`, username, speedLimitValue(plan.SpeedMbps))
+		_, _ = s.DB.Exec(`INSERT INTO radreply(username, attribute, op, value) VALUES($1,'Mikrotik-Rate-Limit',':=',$2)`, username, speedLimitValue(plan.SpeedMbps))
 	}
 
 	// Create new subscription (paid_amount=0 since refund was already credited)
@@ -2261,10 +2261,10 @@ func (s *Server) applyPlanDirectly(customerID int64, username string, planID int
 	if plan.DurationDays > 0 {
 		expires = time.Now().AddDate(0, 0, plan.DurationDays)
 	}
-	_, _ = s.DB.Exec(`INSERT INTO subscriptions(customer_id, username, plan_id, expires_at, paid_amount) VALUES(?,?,?,?,0)`, customerID, username, planID, expires)
+	_, _ = s.DB.Exec(`INSERT INTO subscriptions(customer_id, username, plan_id, expires_at, paid_amount) VALUES($1,$2,$3,$4,0)`, customerID, username, planID, expires)
 
 	// Reset traffic counters for new plan
-	_, _ = s.DB.Exec(`UPDATE radacct SET acctinputoctets=0, acctoutputoctets=0 WHERE username=? AND acctstoptime IS NULL`, username)
+	_, _ = s.DB.Exec(`UPDATE radacct SET acctinputoctets=0, acctoutputoctets=0 WHERE username=$1 AND acctstoptime IS NULL`, username)
 
 	// Auto-provision WireGuard
 	s.autoProvisionWireGuardPeer(customerID)
@@ -2348,7 +2348,7 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
 		return
 	}
-	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.AllowPasswordless), boolInt(in.IsActive), in.SortOrder)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -2364,7 +2364,7 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getPlan(w http.ResponseWriter, id int64) {
-	row := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, id)
+	row := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE id=$1 LIMIT 1`, id)
 	plan, err := scanPlan(row)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
@@ -2399,7 +2399,7 @@ func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request, id int64) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
 		return
 	}
-	if _, err := s.DB.Exec(`UPDATE plans SET name=?,data_gb=?,speed_mbps=?,duration_days=?,price=?,billing_type=?,price_per_gb=?,price_per_day=?,disconnect_on_zero=?,allow_passwordless=?,is_active=?,sort_order=? WHERE id=?`,
+	if _, err := s.DB.Exec(`UPDATE plans SET name=$1,data_gb=$2,speed_mbps=$3,duration_days=$4,price=$5,billing_type=$6,price_per_gb=$7,price_per_day=$8,disconnect_on_zero=$9,allow_passwordless=$10,is_active=$11,sort_order=$12 WHERE id=$13`,
 		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.AllowPasswordless), boolInt(in.IsActive), in.SortOrder, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -2413,7 +2413,7 @@ func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request, id int64) {
 }
 
 func (s *Server) archivePlan(w http.ResponseWriter, r *http.Request, id int64) {
-	if _, err := s.DB.Exec(`UPDATE plans SET is_active=0 WHERE id=?`, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE plans SET is_active=0 WHERE id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -2427,12 +2427,12 @@ func (s *Server) archivePlan(w http.ResponseWriter, r *http.Request, id int64) {
 
 func (s *Server) customerUsername(id int64) (string, error) {
 	var username string
-	err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? AND deleted_at IS NULL LIMIT 1`, id).Scan(&username)
+	err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=$1 AND deleted_at IS NULL LIMIT 1`, id).Scan(&username)
 	return username, err
 }
 
 func (s *Server) upsertRadCheck(username, attribute, value string) error {
-	res, err := s.DB.Exec(`UPDATE radcheck SET value=? WHERE username=? AND attribute=?`, value, username, attribute)
+	res, err := s.DB.Exec(`UPDATE radcheck SET value=$1 WHERE username=$2 AND attribute=$3`, value, username, attribute)
 	if err != nil {
 		return err
 	}
@@ -2440,12 +2440,12 @@ func (s *Server) upsertRadCheck(username, attribute, value string) error {
 	if affected > 0 {
 		return nil
 	}
-	_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,?,':=',?)`, username, attribute, value)
+	_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,$2,':=',$3)`, username, attribute, value)
 	return err
 }
 
 func (s *Server) upsertRadReply(username, attribute, value string) error {
-	res, err := s.DB.Exec(`UPDATE radreply SET value=? WHERE username=? AND attribute=?`, value, username, attribute)
+	res, err := s.DB.Exec(`UPDATE radreply SET value=$1 WHERE username=$2 AND attribute=$3`, value, username, attribute)
 	if err != nil {
 		return err
 	}
@@ -2453,7 +2453,7 @@ func (s *Server) upsertRadReply(username, attribute, value string) error {
 	if affected > 0 {
 		return nil
 	}
-	_, err = s.DB.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,?,':=',?)`, username, attribute, value)
+	_, err = s.DB.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,$2,':=',$3)`, username, attribute, value)
 	return err
 }
 
@@ -2673,7 +2673,7 @@ func (s *Server) listNodes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getNode(w http.ResponseWriter, id int64) {
 	s.markStaleNodes()
-	node, err := s.scanNode(s.DB.QueryRow(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes WHERE id=? LIMIT 1`, id))
+	node, err := s.scanNode(s.DB.QueryRow(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes WHERE id=$1 LIMIT 1`, id))
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -2704,7 +2704,7 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := "kn_" + auth.RandomToken(24)
-	res, err := s.DB.Exec(`INSERT INTO nodes(name,public_ip,domain,api_token_hash,status) VALUES(?,?,?,?, 'offline')`, in.Name, in.PublicIP, nullString(in.Domain), hashToken(token))
+	res, err := s.DB.Exec(`INSERT INTO nodes(name,public_ip,domain,api_token_hash,status) VALUES($1,$2,$3,$4, 'offline')`, in.Name, in.PublicIP, nullString(in.Domain), hashToken(token))
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -2726,7 +2726,7 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 		{"cisco_ipsec", 500, "10.11.0.0/20", `{"ike_version":"ikev1","auth_method":"xauth_psk","psk":"","dns1":"8.8.8.8","dns2":"8.8.4.4","dpd_interval":30,"dpd_timeout":150}`},
 	}
 	for _, dc := range defaultConfigs {
-		_, _ = s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json) VALUES(?, ?, 0, ?, ?, ?)`,
+		_, _ = s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json) VALUES($1, $2, 0, $3, $4, $5)`,
 			id, dc.protocol, dc.port, dc.network, dc.extra)
 	}
 
@@ -2787,12 +2787,12 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 	}
 
 	if proxyConfigJSON != nil {
-		if _, err := s.DB.Exec(`UPDATE nodes SET name=?,public_ip=?,domain=?,proxy_config=? WHERE id=?`, in.Name, in.PublicIP, nullString(in.Domain), *proxyConfigJSON, id); err != nil {
+		if _, err := s.DB.Exec(`UPDATE nodes SET name=$1,public_ip=$2,domain=$3,proxy_config=$4 WHERE id=$5`, in.Name, in.PublicIP, nullString(in.Domain), *proxyConfigJSON, id); err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 	} else {
-		if _, err := s.DB.Exec(`UPDATE nodes SET name=?,public_ip=?,domain=? WHERE id=?`, in.Name, in.PublicIP, nullString(in.Domain), id); err != nil {
+		if _, err := s.DB.Exec(`UPDATE nodes SET name=$1,public_ip=$2,domain=$3 WHERE id=$4`, in.Name, in.PublicIP, nullString(in.Domain), id); err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -2806,7 +2806,7 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 		} else {
 			quotaVal = *in.BandwidthQuotaGB
 		}
-		if _, err := s.DB.Exec(`UPDATE nodes SET bandwidth_quota_gb = ? WHERE id = ?`, quotaVal, id); err != nil {
+		if _, err := s.DB.Exec(`UPDATE nodes SET bandwidth_quota_gb = $1 WHERE id = $2`, quotaVal, id); err != nil {
 			log.Printf("[bandwidth] failed to update quota for node %d: %v", id, err)
 		}
 	}
@@ -2827,7 +2827,7 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 
 func (s *Server) rotateNodeToken(w http.ResponseWriter, r *http.Request, id int64) {
 	token := "kn_" + auth.RandomToken(24)
-	if _, err := s.DB.Exec(`UPDATE nodes SET api_token_hash=? WHERE id=?`, hashToken(token), id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE nodes SET api_token_hash=$1 WHERE id=$2`, hashToken(token), id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -2844,7 +2844,7 @@ func (s *Server) rotateNodeToken(w http.ResponseWriter, r *http.Request, id int6
 }
 
 func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
-	if _, err := s.DB.Exec(`UPDATE nodes SET status=? WHERE id=?`, status, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE nodes SET status=$1 WHERE id=$2`, status, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -2853,13 +2853,13 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 	if status == "disabled" {
 		// Get node's NAS IP for RADIUS disconnect
 		var nasIP string
-		_ = s.DB.QueryRow(`SELECT public_ip FROM nodes WHERE id=?`, id).Scan(&nasIP)
+		_ = s.DB.QueryRow(`SELECT public_ip FROM nodes WHERE id=$1`, id).Scan(&nasIP)
 		if nasIP == "" {
 			nasIP = "127.0.0.1"
 		}
 
 		// Disconnect all active RADIUS sessions originating from this node
-		rows, err := s.DB.Query(`SELECT radacctid, username, acctsessionid FROM radacct WHERE acctstoptime IS NULL AND nasipaddress=?`, nasIP)
+		rows, err := s.DB.Query(`SELECT radacctid, username, acctsessionid FROM radacct WHERE acctstoptime IS NULL AND nasipaddress=$1`, nasIP)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -2867,7 +2867,7 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 				var username, sessionID string
 				if rows.Scan(&radID, &username, &sessionID) == nil {
 					// Close the session in radacct
-					_, _ = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Admin-Node-Disabled' WHERE radacctid=?`, radID)
+					_, _ = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Admin-Node-Disabled' WHERE radacctid=$1`, radID)
 					// Send CoA disconnect (best effort)
 					go func(u, sid, ip string) {
 						attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", u, sid)
@@ -2880,7 +2880,7 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 		}
 
 		// Revoke WireGuard peers on this node
-		_, _ = s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE node_id=? AND status='active'`, id)
+		_, _ = s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE node_id=$1 AND status='active'`, id)
 
 		log.Printf("[node] disabled node %d, disconnected sessions and revoked WG peers", id)
 	}
@@ -2897,29 +2897,29 @@ func (s *Server) deleteNode(w http.ResponseWriter, id int64) {
 	defer tx.Rollback()
 
 	// Clean up all related tables within a transaction (explicit queries, no concatenation)
-	if _, err := tx.Exec(`DELETE FROM node_vpn_configs WHERE node_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM node_vpn_configs WHERE node_id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_vpn_configs: %v", err)})
 		return
 	}
 	// node_tasks table will be dropped in migration 071; skip cleanup for now
-	if _, err := tx.Exec(`DELETE FROM node_status WHERE node_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM node_status WHERE node_id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_status: %v", err)})
 		return
 	}
-	if _, err := tx.Exec(`DELETE FROM node_services WHERE node_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM node_services WHERE node_id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_services: %v", err)})
 		return
 	}
-	if _, err := tx.Exec(`DELETE FROM node_usage_snapshots WHERE node_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM node_usage_snapshots WHERE node_id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_usage_snapshots: %v", err)})
 		return
 	}
-	if _, err := tx.Exec(`DELETE FROM node_diagnostics WHERE node_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM node_diagnostics WHERE node_id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_diagnostics: %v", err)})
 		return
 	}
 
-	if _, err := tx.Exec(`DELETE FROM nodes WHERE id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM nodes WHERE id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -2960,7 +2960,7 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 	var quotaGB sql.NullInt64
 	var usedBytes int64
 	var resetAt sql.NullTime
-	if err := s.DB.QueryRow(`SELECT bandwidth_quota_gb, bandwidth_used_bytes, bandwidth_reset_at FROM nodes WHERE id=?`, n.ID).Scan(&quotaGB, &usedBytes, &resetAt); err == nil {
+	if err := s.DB.QueryRow(`SELECT bandwidth_quota_gb, bandwidth_used_bytes, bandwidth_reset_at FROM nodes WHERE id=$1`, n.ID).Scan(&quotaGB, &usedBytes, &resetAt); err == nil {
 		if quotaGB.Valid {
 			n.BandwidthQuotaGB = &quotaGB.Int64
 		}
@@ -2971,11 +2971,11 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 	}
 
 	var updated sql.NullTime
-	_ = s.DB.QueryRow(`SELECT cpu_percent,ram_percent,disk_percent,rx_bps,tx_bps,openvpn_status,l2tp_status,ikev2_status,updated_at FROM node_status WHERE node_id=?`, n.ID).Scan(&n.StatusMetrics.CPUPercent, &n.StatusMetrics.RAMPercent, &n.StatusMetrics.DiskPercent, &n.StatusMetrics.RxBps, &n.StatusMetrics.TxBps, &n.StatusMetrics.OpenVPN, &n.StatusMetrics.L2TP, &n.StatusMetrics.IKEv2, &updated)
+	_ = s.DB.QueryRow(`SELECT cpu_percent,ram_percent,disk_percent,rx_bps,tx_bps,openvpn_status,l2tp_status,ikev2_status,updated_at FROM node_status WHERE node_id=$1`, n.ID).Scan(&n.StatusMetrics.CPUPercent, &n.StatusMetrics.RAMPercent, &n.StatusMetrics.DiskPercent, &n.StatusMetrics.RxBps, &n.StatusMetrics.TxBps, &n.StatusMetrics.OpenVPN, &n.StatusMetrics.L2TP, &n.StatusMetrics.IKEv2, &updated)
 	if updated.Valid {
 		n.StatusMetrics.UpdatedAt = updated.Time.Format(time.RFC3339)
 	}
-	rows, err := s.DB.Query(`SELECT service,status,updated_at FROM node_services WHERE node_id=? ORDER BY service`, n.ID)
+	rows, err := s.DB.Query(`SELECT service,status,updated_at FROM node_services WHERE node_id=$1 ORDER BY service`, n.ID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -2994,7 +2994,7 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 		}
 	}
 
-	hRows, err := s.DB.Query(`SELECT id, node_id, rx_bytes, tx_bytes, online_users, created_at FROM node_usage_snapshots WHERE node_id=? ORDER BY id DESC LIMIT 15`, n.ID)
+	hRows, err := s.DB.Query(`SELECT id, node_id, rx_bytes, tx_bytes, online_users, created_at FROM node_usage_snapshots WHERE node_id=$1 ORDER BY id DESC LIMIT 15`, n.ID)
 	if err == nil {
 		defer hRows.Close()
 		for hRows.Next() {
@@ -3008,7 +3008,7 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 	}
 
 	var diag DiagnosticsReport
-	err = s.DB.QueryRow(`SELECT agent_version, uptime_seconds, go_version, goroutines, mem_alloc_bytes FROM node_diagnostics WHERE node_id=?`, n.ID).Scan(
+	err = s.DB.QueryRow(`SELECT agent_version, uptime_seconds, go_version, goroutines, mem_alloc_bytes FROM node_diagnostics WHERE node_id=$1`, n.ID).Scan(
 		&diag.AgentVersion, &diag.UptimeSeconds, &diag.GoVersion, &diag.Goroutines, &diag.MemAllocBytes)
 	if err == nil {
 		n.Diagnostics = &diag
@@ -3025,7 +3025,7 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 }
 
 func (s *Server) markStaleNodes() {
-	_, _ = s.DB.Exec(`UPDATE nodes SET status='stale' WHERE status='online' AND last_seen_at < (NOW() - INTERVAL 2 MINUTE)`)
+	_, _ = s.DB.Exec(`UPDATE nodes SET status='stale' WHERE status='online' AND last_seen_at < (NOW() - INTERVAL '2 minutes')`)
 }
 
 func hashToken(token string) string {
@@ -3102,8 +3102,8 @@ func (s *Server) vpnSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, err := s.DB.Exec(`INSERT INTO vpn_core_settings(id,openvpn_port,openvpn_protocol,openvpn_network,l2tp_network,ikev2_network,ipsec_psk,dns_1,dns_2)
-			VALUES(1,?,?,?,?,?,?,?,?)
-			ON DUPLICATE KEY UPDATE openvpn_port=VALUES(openvpn_port),openvpn_protocol=VALUES(openvpn_protocol),openvpn_network=VALUES(openvpn_network),l2tp_network=VALUES(l2tp_network),ikev2_network=VALUES(ikev2_network),ipsec_psk=VALUES(ipsec_psk),dns_1=VALUES(dns_1),dns_2=VALUES(dns_2)`, in.OpenVPNPort, in.OpenVPNProtocol, in.OpenVPNNetwork, in.L2TPNetwork, in.IKEv2Network, nullString(in.IPSecPSK), in.DNS1, in.DNS2)
+			VALUES(1,$1,$2,$3,$4,$5,$6,$7,$8)
+			ON CONFLICT (id) DO UPDATE SET openvpn_port=EXCLUDED.openvpn_port,openvpn_protocol=EXCLUDED.openvpn_protocol,openvpn_network=EXCLUDED.openvpn_network,l2tp_network=EXCLUDED.l2tp_network,ikev2_network=EXCLUDED.ikev2_network,ipsec_psk=EXCLUDED.ipsec_psk,dns_1=EXCLUDED.dns_1,dns_2=EXCLUDED.dns_2`, in.OpenVPNPort, in.OpenVPNProtocol, in.OpenVPNNetwork, in.L2TPNetwork, in.IKEv2Network, nullString(in.IPSecPSK), in.DNS1, in.DNS2)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -3131,7 +3131,7 @@ func (s *Server) readVPNSettings(r *http.Request) (VPNSettings, error) {
 	var updated sql.NullTime
 	err := s.DB.QueryRow(`SELECT id,openvpn_port,openvpn_protocol,openvpn_network,l2tp_network,ikev2_network,COALESCE(ipsec_psk,''),dns_1,dns_2,updated_at FROM vpn_core_settings WHERE id=1`).Scan(&v.ID, &v.OpenVPNPort, &v.OpenVPNProtocol, &v.OpenVPNNetwork, &v.L2TPNetwork, &v.IKEv2Network, &v.IPSecPSK, &v.DNS1, &v.DNS2, &updated)
 	if err == sql.ErrNoRows {
-		_, _ = s.DB.Exec(`INSERT IGNORE INTO vpn_core_settings(id) VALUES(1)`)
+		_, _ = s.DB.Exec(`INSERT INTO vpn_core_settings(id) VALUES(1) ON CONFLICT (id) DO NOTHING`)
 		err = s.DB.QueryRow(`SELECT id,openvpn_port,openvpn_protocol,openvpn_network,l2tp_network,ikev2_network,COALESCE(ipsec_psk,''),dns_1,dns_2,updated_at FROM vpn_core_settings WHERE id=1`).Scan(&v.ID, &v.OpenVPNPort, &v.OpenVPNProtocol, &v.OpenVPNNetwork, &v.L2TPNetwork, &v.IKEv2Network, &v.IPSecPSK, &v.DNS1, &v.DNS2, &updated)
 	}
 	if err != nil {
@@ -3224,7 +3224,7 @@ func (s *Server) authNode(r *http.Request) (int64, bool) {
 	if s.initStmts() {
 		err = s.stmts.nodeAuth.QueryRow(hashToken(token)).Scan(&id, &status)
 	} else {
-		err = s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`, hashToken(token)).Scan(&id, &status)
+		err = s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=$1 LIMIT 1`, hashToken(token)).Scan(&id, &status)
 	}
 	if err != nil || status == "disabled" {
 		return 0, false
@@ -3351,9 +3351,9 @@ func (s *Server) listPaymentMethods(w http.ResponseWriter, activeOnly bool) {
 	var rows *sql.Rows
 	var err error
 	if activeOnly {
-		rows, err = s.DB.Query(`SELECT id,name,type,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.instructions')),''),is_active,sort_order,created_at FROM payment_methods WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
+		rows, err = s.DB.Query(`SELECT id,name,type,COALESCE(config_json->>'instructions',''),is_active,sort_order,created_at FROM payment_methods WHERE is_active=TRUE ORDER BY sort_order ASC, id DESC`)
 	} else {
-		rows, err = s.DB.Query(`SELECT id,name,type,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.instructions')),''),is_active,sort_order,created_at FROM payment_methods ORDER BY is_active DESC, sort_order ASC, id DESC`)
+		rows, err = s.DB.Query(`SELECT id,name,type,COALESCE(config_json->>'instructions',''),is_active,sort_order,created_at FROM payment_methods ORDER BY is_active DESC, sort_order ASC, id DESC`)
 	}
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -3387,7 +3387,7 @@ func (s *Server) createPaymentMethod(w http.ResponseWriter, r *http.Request) {
 	if in.Type == "" {
 		in.Type = "manual"
 	}
-	res, err := s.DB.Exec(`INSERT INTO payment_methods(name,type,config_json,is_active,sort_order) VALUES(?,?,JSON_OBJECT('instructions', ?),?,?)`, in.Name, in.Type, in.Instructions, boolInt(in.IsActive), in.SortOrder)
+	res, err := s.DB.Exec(`INSERT INTO payment_methods(name,type,config_json,is_active,sort_order) VALUES($1,$2,JSON_OBJECT('instructions', $3),$4,$5)`, in.Name, in.Type, in.Instructions, boolInt(in.IsActive), in.SortOrder)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -3413,7 +3413,7 @@ func (s *Server) updatePaymentMethod(w http.ResponseWriter, r *http.Request, id 
 	if in.Type == "" {
 		in.Type = "manual"
 	}
-	if _, err := s.DB.Exec(`UPDATE payment_methods SET name=?,type=?,config_json=JSON_OBJECT('instructions', ?),is_active=?,sort_order=? WHERE id=?`, in.Name, in.Type, in.Instructions, boolInt(in.IsActive), in.SortOrder, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE payment_methods SET name=$1,type=$2,config_json=JSON_OBJECT('instructions', $3),is_active=$4,sort_order=$5 WHERE id=$6`, in.Name, in.Type, in.Instructions, boolInt(in.IsActive), in.SortOrder, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -3423,7 +3423,7 @@ func (s *Server) updatePaymentMethod(w http.ResponseWriter, r *http.Request, id 
 }
 
 func (s *Server) deactivatePaymentMethod(w http.ResponseWriter, r *http.Request, id int64) {
-	if _, err := s.DB.Exec(`UPDATE payment_methods SET is_active=0 WHERE id=?`, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE payment_methods SET is_active=0 WHERE id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -3546,11 +3546,11 @@ func (s *Server) listTickets(w http.ResponseWriter, r *http.Request, username st
 	where := "t.deleted_at IS NULL"
 	args := []any{}
 	if username != "" {
-		where += " AND t.username=?"
+		where += " AND t.username=$1"
 		args = append(args, username)
 	}
 	if status := strings.TrimSpace(r.URL.Query().Get("status")); status != "" {
-		where += " AND t.status=?"
+		where += " AND t.status=$1"
 		args = append(args, status)
 	}
 	rows, err := s.DB.Query(`SELECT t.id,t.customer_id,t.username,t.subject,t.status,t.priority,t.created_at,t.updated_at,t.closed_at FROM tickets t WHERE `+where+` ORDER BY t.updated_at DESC,t.id DESC LIMIT 500`, args...)
@@ -3601,20 +3601,20 @@ func (s *Server) createTicket(w http.ResponseWriter, r *http.Request, senderType
 		return
 	}
 	var customerID sql.NullInt64
-	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, in.Username).Scan(&customerID)
+	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, in.Username).Scan(&customerID)
 	tx, err := s.DB.Begin()
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec(`INSERT INTO tickets(customer_id,username,subject,priority,status) VALUES(?,?,?,?, 'open')`, nullableInt(customerID), in.Username, in.Subject, in.Priority)
+	res, err := tx.Exec(`INSERT INTO tickets(customer_id,username,subject,priority,status) VALUES($1,$2,$3,$4, 'open')`, nullableInt(customerID), in.Username, in.Subject, in.Priority)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	id, _ := res.LastInsertId()
-	if _, err := tx.Exec(`INSERT INTO ticket_messages(ticket_id,sender_type,sender_name,message) VALUES(?,?,?,?)`, id, senderType, actor, in.Message); err != nil {
+	if _, err := tx.Exec(`INSERT INTO ticket_messages(ticket_id,sender_type,sender_name,message) VALUES($1,$2,$3,$4)`, id, senderType, actor, in.Message); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -3647,7 +3647,7 @@ func (s *Server) getTicket(w http.ResponseWriter, r *http.Request, id int64, use
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
-	ticket, err := scanTicket(s.DB.QueryRow(`SELECT id,customer_id,username,subject,status,priority,created_at,updated_at,closed_at FROM tickets WHERE id=? AND deleted_at IS NULL LIMIT 1`, id))
+	ticket, err := scanTicket(s.DB.QueryRow(`SELECT id,customer_id,username,subject,status,priority,created_at,updated_at,closed_at FROM tickets WHERE id=$1 AND deleted_at IS NULL LIMIT 1`, id))
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -3685,16 +3685,16 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request, id int64, s
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "message_required"})
 		return
 	}
-	if _, err := s.DB.Exec(`INSERT INTO ticket_messages(ticket_id,sender_type,sender_name,message) VALUES(?,?,?,?)`, id, senderType, sender, in.Message); err != nil {
+	if _, err := s.DB.Exec(`INSERT INTO ticket_messages(ticket_id,sender_type,sender_name,message) VALUES($1,$2,$3,$4)`, id, senderType, sender, in.Message); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	_, _ = s.DB.Exec(`UPDATE tickets SET status='open',updated_at=NOW() WHERE id=?`, id)
+	_, _ = s.DB.Exec(`UPDATE tickets SET status='open',updated_at=NOW() WHERE id=$1`, id)
 	s.logAudit(sender, "ticket.replied", "ticket", strconv.FormatInt(id, 10), nil, nil, clientIP(r))
 	ticketUser := username
 	if ticketUser == "" {
 		var tu string
-		_ = s.DB.QueryRow(`SELECT username FROM tickets WHERE id=? LIMIT 1`, id).Scan(&tu)
+		_ = s.DB.QueryRow(`SELECT username FROM tickets WHERE id=$1 LIMIT 1`, id).Scan(&tu)
 		ticketUser = tu
 	}
 	s.createEvent("ticket", "info", fmt.Sprintf("Ticket #%d replied", id), fmt.Sprintf("%s replied to ticket #%d", sender, id), sender, ticketUser)
@@ -3710,7 +3710,7 @@ func (s *Server) setTicketStatus(w http.ResponseWriter, r *http.Request, id int6
 	if status == "closed" {
 		closedExpr = "NOW()"
 	}
-	if _, err := s.DB.Exec(`UPDATE tickets SET status=?,closed_at=`+closedExpr+`,updated_at=NOW() WHERE id=? AND deleted_at IS NULL`, status, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE tickets SET status=$1,closed_at=`+closedExpr+`,updated_at=NOW() WHERE id=$1 AND deleted_at IS NULL`, status, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -3724,12 +3724,12 @@ func (s *Server) setTicketStatus(w http.ResponseWriter, r *http.Request, id int6
 
 func (s *Server) ticketBelongsTo(id int64, username string) bool {
 	var count int
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM tickets WHERE id=? AND username=? AND deleted_at IS NULL`, id, username).Scan(&count)
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM tickets WHERE id=$1 AND username=$2 AND deleted_at IS NULL`, id, username).Scan(&count)
 	return count > 0
 }
 
 func (s *Server) ticketMessages(id int64) ([]TicketMessage, error) {
-	rows, err := s.DB.Query(`SELECT id,ticket_id,sender_type,sender_name,message,created_at FROM ticket_messages WHERE ticket_id=? ORDER BY id ASC`, id)
+	rows, err := s.DB.Query(`SELECT id,ticket_id,sender_type,sender_name,message,created_at FROM ticket_messages WHERE ticket_id=$1 ORDER BY id ASC`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -3902,11 +3902,11 @@ func (s *Server) createManualPayment(w http.ResponseWriter, r *http.Request) {
 		in.Method = "manual"
 	}
 	customerID := sql.NullInt64{}
-	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, in.Username).Scan(&customerID.Int64)
+	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, in.Username).Scan(&customerID.Int64)
 	if customerID.Int64 > 0 {
 		customerID.Valid = true
 	}
-	res, err := s.DB.Exec(`INSERT INTO payments(customer_id,username,amount,method,receipt,status,intent_type,admin_note) VALUES(?,?,?,?,?,'approved','wallet_topup',?)`, nullableInt(customerID), in.Username, in.Amount, in.Method, in.Receipt, in.Description)
+	res, err := s.DB.Exec(`INSERT INTO payments(customer_id,username,amount,method,receipt,status,intent_type,admin_note) VALUES($1,$2,$3,$4,$5,'approved','wallet_topup',$6)`, nullableInt(customerID), in.Username, in.Amount, in.Method, in.Receipt, in.Description)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -3936,7 +3936,7 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 	var username, oldStatus, method, intentType string
 	var amount float64
 	var intentID sql.NullInt64
-	if err := tx.QueryRow(`SELECT username,amount,status,method,COALESCE(intent_type,'wallet_topup'),intent_id FROM payments WHERE id=? LIMIT 1 FOR UPDATE`, id).Scan(&username, &amount, &oldStatus, &method, &intentType, &intentID); err == sql.ErrNoRows {
+	if err := tx.QueryRow(`SELECT username,amount,status,method,COALESCE(intent_type,'wallet_topup'),intent_id FROM payments WHERE id=$1 LIMIT 1 FOR UPDATE`, id).Scan(&username, &amount, &oldStatus, &method, &intentType, &intentID); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	} else if err != nil {
@@ -3947,7 +3947,7 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 		intentType = "wallet_topup"
 	}
 	if oldStatus != status {
-		if _, err := tx.Exec(`UPDATE payments SET status=? WHERE id=?`, status, id); err != nil {
+		if _, err := tx.Exec(`UPDATE payments SET status=$1 WHERE id=$2`, status, id); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -3959,13 +3959,13 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 		}
 	}
 	if status == "approved" && intentType == "reseller_topup" {
-		_, err = tx.Exec(`UPDATE admins SET credit = credit + ? WHERE username=?`, amount, username)
+		_, err = tx.Exec(`UPDATE admins SET credit = credit + $1 WHERE username=$2`, amount, username)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		desc := fmt.Sprintf("Manual Top-up approved (Payment #%d): +%.2f IRT", id, amount)
-		_, err = tx.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES(?,?, 'allocation', ?, ?)`, username, amount, desc, "admin")
+		_, err = tx.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES($1,$2, 'allocation', $3, $4)`, username, amount, desc, "admin")
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -3984,7 +3984,7 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 	// Auto-provision WireGuard peer when plan renewal payment is approved
 	if status == "approved" && intentType == "plan_renewal" && intentID.Valid {
 		var custID int64
-		if s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&custID) == nil {
+		if s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&custID) == nil {
 			s.autoProvisionWireGuardPeer(custID)
 		}
 	}
@@ -4000,43 +4000,43 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 
 func (s *Server) applyPlanIntentTx(tx *sql.Tx, username string, planID, paymentID int64, actor string) error {
 	var existing int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM wallet_transactions WHERE reference_type='payment' AND reference_id=? AND type='purchase'`, paymentID).Scan(&existing); err != nil {
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM wallet_transactions WHERE reference_type='payment' AND reference_id=$1 AND type='purchase'`, paymentID).Scan(&existing); err != nil {
 		return err
 	}
 	if existing > 0 {
 		return nil
 	}
 	var customerID int64
-	if err := tx.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
+	if err := tx.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err != nil {
 		return err
 	}
 	var plan Plan
 	var active int
 	var created sql.NullTime
-	if err := tx.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, planID).Scan(&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active, &plan.SortOrder, &created); err != nil {
+	if err := tx.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=$1 LIMIT 1`, planID).Scan(&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active, &plan.SortOrder, &created); err != nil {
 		return err
 	}
 	if active != 1 {
 		return fmt.Errorf("plan_inactive")
 	}
 	var walletCredit float64
-	_ = tx.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=?`, username).Scan(&walletCredit)
+	_ = tx.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=$1`, username).Scan(&walletCredit)
 	if plan.Price > 0 && walletCredit+0.0001 < plan.Price {
 		return fmt.Errorf("insufficient_wallet")
 	}
-	if _, err := tx.Exec(`UPDATE customers SET plan_id=?,status='active' WHERE id=? AND deleted_at IS NULL`, plan.ID, customerID); err != nil {
+	if _, err := tx.Exec(`UPDATE customers SET plan_id=$1,status='active' WHERE id=$2 AND deleted_at IS NULL`, plan.ID, customerID); err != nil {
 		return err
 	}
-	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, username)
+	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Max-Data',':=',?)`, username, bytes); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, bytes); err != nil {
 			return err
 		}
 	}
-	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, username)
+	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, username)
 	if plan.SpeedMbps > 0 {
-		if _, err := tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,'Mikrotik-Rate-Limit',':=',?)`, username, speedLimitValue(plan.SpeedMbps)); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,'Mikrotik-Rate-Limit',':=',$2)`, username, speedLimitValue(plan.SpeedMbps)); err != nil {
 			return err
 		}
 	}
@@ -4044,15 +4044,15 @@ func (s *Server) applyPlanIntentTx(tx *sql.Tx, username string, planID, paymentI
 	if plan.DurationDays > 0 {
 		expires = time.Now().AddDate(0, 0, plan.DurationDays)
 	}
-	if _, err := tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at,paid_amount) VALUES(?,?,?,?,?)`, customerID, username, plan.ID, expires, plan.Price); err != nil {
+	if _, err := tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at,paid_amount) VALUES($1,$2,$3,$4,$5)`, customerID, username, plan.ID, expires, plan.Price); err != nil {
 		return err
 	}
 	if plan.Price > 0 {
 		desc := "plan activated: " + plan.Name
-		if _, err := tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit=credit+VALUES(credit), customer_id=COALESCE(VALUES(customer_id),customer_id)`, customerID, username, -plan.Price); err != nil {
+		if _, err := tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit=wallets.credit+EXCLUDED.credit, customer_id=COALESCE(EXCLUDED.customer_id,wallets.customer_id)`, customerID, username, -plan.Price); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,?)`, customerID, username, -plan.Price, "purchase", desc, actor, "payment", paymentID); err != nil {
+		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, customerID, username, -plan.Price, "purchase", desc, actor, "payment", paymentID); err != nil {
 			return err
 		}
 	}
@@ -4066,7 +4066,7 @@ func (s *Server) syncPaymentWalletStateTx(tx *sql.Tx, paymentID int64, username 
 	}
 	like := fmt.Sprintf("payment #%d %%", paymentID)
 	var current float64
-	if err := tx.QueryRow(`SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE username=? AND type <> 'purchase' AND (reference_type='payment' AND reference_id=? OR description LIKE ?)`, username, paymentID, like).Scan(&current); err != nil {
+	if err := tx.QueryRow(`SELECT COALESCE(SUM(amount),0) FROM wallet_transactions WHERE username=$1 AND type <> 'purchase' AND (reference_type='payment' AND reference_id=$2 OR description LIKE $3)`, username, paymentID, like).Scan(&current); err != nil {
 		return err
 	}
 	delta := desired - current
@@ -4074,8 +4074,8 @@ func (s *Server) syncPaymentWalletStateTx(tx *sql.Tx, paymentID int64, username 
 		return nil
 	}
 	var customerID sql.NullInt64
-	_ = tx.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
-	if _, err := tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit=credit+VALUES(credit), customer_id=COALESCE(VALUES(customer_id),customer_id)`, nullableInt(customerID), username, delta); err != nil {
+	_ = tx.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	if _, err := tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit=wallets.credit+EXCLUDED.credit, customer_id=COALESCE(EXCLUDED.customer_id,wallets.customer_id)`, nullableInt(customerID), username, delta); err != nil {
 		return err
 	}
 	kind := "adjustment"
@@ -4086,7 +4086,7 @@ func (s *Server) syncPaymentWalletStateTx(tx *sql.Tx, paymentID int64, username 
 	} else if delta < 0 && status != "approved" {
 		desc = fmt.Sprintf("payment #%d approval reversed: %s", paymentID, status)
 	}
-	_, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,?)`, nullableInt(customerID), username, delta, kind, desc, "admin", "payment", paymentID)
+	_, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, nullableInt(customerID), username, delta, kind, desc, "admin", "payment", paymentID)
 	return err
 }
 
@@ -4096,22 +4096,22 @@ func (s *Server) applyWalletChange(username string, amount float64, kind, descri
 
 func (s *Server) applyWalletChangeRef(username string, amount float64, kind, description, actor, referenceType string, referenceID *int64) error {
 	var customerID sql.NullInt64
-	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
-	_, err := s.DB.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit=credit+VALUES(credit), customer_id=COALESCE(VALUES(customer_id),customer_id)`, nullableInt(customerID), username, amount)
+	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	_, err := s.DB.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit=wallets.credit+EXCLUDED.credit, customer_id=COALESCE(EXCLUDED.customer_id,wallets.customer_id)`, nullableInt(customerID), username, amount)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,?)`, nullableInt(customerID), username, amount, kind, description, actor, referenceType, nullableInt64Ptr(referenceID))
+	_, err = s.DB.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, nullableInt(customerID), username, amount, kind, description, actor, referenceType, nullableInt64Ptr(referenceID))
 	return err
 }
 
 func (s *Server) setWalletBalance(username string, balance float64, description, actor string) error {
 	var customerID sql.NullInt64
-	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	var current float64
-	_ = s.DB.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=?`, username).Scan(&current)
+	_ = s.DB.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=$1`, username).Scan(&current)
 	delta := balance - current
-	_, err := s.DB.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit=VALUES(credit), customer_id=COALESCE(VALUES(customer_id),customer_id)`, nullableInt(customerID), username, balance)
+	_, err := s.DB.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit=EXCLUDED.credit, customer_id=COALESCE(EXCLUDED.customer_id,wallets.customer_id)`, nullableInt(customerID), username, balance)
 	if err != nil {
 		return err
 	}
@@ -4121,7 +4121,7 @@ func (s *Server) setWalletBalance(username string, balance float64, description,
 	if description == "" {
 		description = fmt.Sprintf("set wallet balance to %.2f", balance)
 	}
-	_, err = s.DB.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,NULL)`, nullableInt(customerID), username, delta, "adjustment", description, actor, "manual")
+	_, err = s.DB.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,NULL)`, nullableInt(customerID), username, delta, "adjustment", description, actor, "manual")
 	return err
 }
 
@@ -4195,7 +4195,7 @@ func (s *Server) portalUsage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) usageForUsername(username string) (UsageSummary, error) {
 	usage := UsageSummary{Sessions: []UsageSession{}}
 	var lastConnected, lastDisconnected sql.NullTime
-	if err := s.DB.QueryRow(`SELECT COALESCE(SUM(COALESCE(acctinputoctets,0)),0),COALESCE(SUM(COALESCE(acctoutputoctets,0)),0),COALESCE(SUM(CASE WHEN acctstoptime IS NULL THEN 1 ELSE 0 END),0),MAX(acctstarttime),MAX(acctstoptime) FROM radacct WHERE username=?`, username).Scan(&usage.TotalInputBytes, &usage.TotalOutputBytes, &usage.ActiveSessions, &lastConnected, &lastDisconnected); err != nil {
+	if err := s.DB.QueryRow(`SELECT COALESCE(SUM(COALESCE(acctinputoctets,0)),0),COALESCE(SUM(COALESCE(acctoutputoctets,0)),0),COALESCE(SUM(CASE WHEN acctstoptime IS NULL THEN 1 ELSE 0 END),0),MAX(acctstarttime),MAX(acctstoptime) FROM radacct WHERE username=$1`, username).Scan(&usage.TotalInputBytes, &usage.TotalOutputBytes, &usage.ActiveSessions, &lastConnected, &lastDisconnected); err != nil {
 		return usage, err
 	}
 	usage.TotalUsageBytes = usage.TotalInputBytes + usage.TotalOutputBytes
@@ -4207,7 +4207,7 @@ func (s *Server) usageForUsername(username string) (UsageSummary, error) {
 		usage.LastDisconnectedAt = lastDisconnected.Time.Format(time.RFC3339)
 	}
 	var maxData string
-	if err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData); err == nil {
+	if err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData); err == nil {
 		usage.MaxDataBytes, _ = strconv.ParseInt(strings.TrimSpace(maxData), 10, 64)
 	}
 	if usage.MaxDataBytes > 0 {
@@ -4217,7 +4217,7 @@ func (s *Server) usageForUsername(username string) (UsageSummary, error) {
 		}
 		usage.RemainingBytes = &remaining
 	}
-	rows, err := s.DB.Query(`SELECT radacctid,username,acctstarttime,acctupdatetime,acctstoptime,COALESCE(acctsessiontime,TIMESTAMPDIFF(SECOND,acctstarttime,COALESCE(acctstoptime,NOW())),0),COALESCE(acctinputoctets,0),COALESCE(acctoutputoctets,0),framedipaddress,callingstationid,acctterminatecause FROM radacct WHERE username=? ORDER BY radacctid DESC LIMIT 50`, username)
+	rows, err := s.DB.Query(`SELECT radacctid,username,acctstarttime,acctupdatetime,acctstoptime,COALESCE(acctsessiontime,EXTRACT(EPOCH FROM (COALESCE(acctstoptime,NOW())-acctstarttime))::INT,0),COALESCE(acctinputoctets,0),COALESCE(acctoutputoctets,0),framedipaddress,callingstationid,acctterminatecause FROM radacct WHERE username=$1 ORDER BY radacctid DESC LIMIT 50`, username)
 	if err != nil {
 		return usage, err
 	}
@@ -4297,13 +4297,13 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 	if nodeID > 0 {
 		// Get node name regardless
 		var domain, publicIP string
-		_ = s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE id=? AND status <> 'disabled' LIMIT 1`, nodeID).Scan(&nodeName, &domain, &publicIP)
+		_ = s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE id=$1 AND status <> 'disabled' LIMIT 1`, nodeID).Scan(&nodeName, &domain, &publicIP)
 
 		if host == "" {
 			// Priority 1: Check for active failover domain pointing to this node
 			var failoverDomain string
 			if err := s.DB.QueryRow(
-				`SELECT domain FROM failover_domains WHERE current_node_id = ? AND is_active = 1 LIMIT 1`, nodeID,
+				`SELECT domain FROM failover_domains WHERE current_node_id = $1 AND is_active = TRUE LIMIT 1`, nodeID,
 			).Scan(&failoverDomain); err == nil && strings.TrimSpace(failoverDomain) != "" {
 				host = strings.TrimSpace(failoverDomain)
 			}
@@ -4312,7 +4312,7 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 		if host == "" {
 			// Priority 2 & 3: Node's domain field, then public_ip
 			var domain2, publicIP2 string
-			_ = s.DB.QueryRow(`SELECT COALESCE(domain,''),public_ip FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&domain2, &publicIP2)
+			_ = s.DB.QueryRow(`SELECT COALESCE(domain,''),public_ip FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&domain2, &publicIP2)
 			host = strings.TrimSpace(domain2)
 			if host == "" {
 				host = strings.TrimSpace(publicIP2)
@@ -4377,18 +4377,18 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	var ciscoEnabled bool
 	if nodeID > 0 {
 		var cnt int
-		_ = s.DB.QueryRow(`SELECT COUNT(*) FROM node_vpn_configs WHERE node_id=? AND protocol='cisco_ipsec' AND enabled=1`, nodeID).Scan(&cnt)
+		_ = s.DB.QueryRow(`SELECT COUNT(*) FROM node_vpn_configs WHERE node_id=$1 AND protocol='cisco_ipsec' AND enabled=TRUE`, nodeID).Scan(&cnt)
 		ciscoEnabled = cnt > 0
 	} else {
 		// If no specific node, check if any node has it enabled
 		var cnt int
-		_ = s.DB.QueryRow(`SELECT COUNT(*) FROM node_vpn_configs WHERE protocol='cisco_ipsec' AND enabled=1 LIMIT 1`).Scan(&cnt)
+		_ = s.DB.QueryRow(`SELECT COUNT(*) FROM node_vpn_configs WHERE protocol='cisco_ipsec' AND enabled=TRUE LIMIT 1`).Scan(&cnt)
 		ciscoEnabled = cnt > 0
 	}
 
 	// Get user's preferred node
 	var preferredNodeID int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
 
 	writeJSON(w, map[string]any{
 		"ok":                     true,
@@ -4587,7 +4587,7 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 	// Get TCP port from node config or default to 8443
 	tcpPort := 8443
 	if nodeID > 0 {
-		_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=? AND protocol='openvpn-tcp' AND enabled=1 LIMIT 1`, nodeID).Scan(&tcpPort)
+		_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='openvpn-tcp' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&tcpPort)
 	}
 
 	// Build remote lines for TCP: preferred node first, then backups
@@ -4595,10 +4595,10 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 
 	// Get user's preferred node — put it first if different from default
 	var preferredNodeID int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
 	if preferredNodeID > 0 && preferredNodeID != nodeID {
 		var prefDomain, prefIP string
-		if s.DB.QueryRow(`SELECT COALESCE(domain,''), public_ip FROM nodes WHERE id=? AND status <> 'disabled'`, preferredNodeID).Scan(&prefDomain, &prefIP) == nil {
+		if s.DB.QueryRow(`SELECT COALESCE(domain,''), public_ip FROM nodes WHERE id=$1 AND status <> 'disabled'`, preferredNodeID).Scan(&prefDomain, &prefIP) == nil {
 			prefHost := strings.TrimSpace(prefDomain)
 			if prefHost == "" {
 				prefHost = strings.TrimSpace(prefIP)
@@ -4614,8 +4614,8 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 	rows, err := s.DB.Query(`
 		SELECT COALESCE(n.domain,''), n.public_ip
 		FROM nodes n
-		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = 1
-		WHERE n.status <> 'disabled' AND n.id <> ? AND n.id <> ?
+		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
+		WHERE n.status <> 'disabled' AND n.id <> $1 AND n.id <> $2
 		ORDER BY n.id`, nodeID, preferredNodeID)
 	if err == nil {
 		defer rows.Close()
@@ -4668,7 +4668,7 @@ func (s *Server) canUsePasswordless(username string) bool {
 	}
 	// Check per-plan setting
 	var allowPasswordless int
-	err := s.DB.QueryRow(`SELECT COALESCE(p.allow_passwordless, 0) FROM customers c JOIN plans p ON p.id = c.plan_id WHERE c.username = ? AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&allowPasswordless)
+	err := s.DB.QueryRow(`SELECT COALESCE(p.allow_passwordless, 0) FROM customers c JOIN plans p ON p.id = c.plan_id WHERE c.username = $1 AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&allowPasswordless)
 	if err != nil {
 		return false
 	}
@@ -4697,8 +4697,8 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	rows, err := s.DB.Query(`
 		SELECT COALESCE(n.domain,''), n.public_ip
 		FROM nodes n
-		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = 1
-		WHERE n.status <> 'disabled' AND n.id <> ?
+		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
+		WHERE n.status <> 'disabled' AND n.id <> $1
 		ORDER BY n.id`, nodeID)
 	if err == nil {
 		defer rows.Close()
@@ -4960,7 +4960,7 @@ func (s *Server) portalPlans(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
+	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE is_active=TRUE ORDER BY sort_order ASC, id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -4999,7 +4999,7 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var customerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err == sql.ErrNoRows {
+	if err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	} else if err != nil {
@@ -5007,7 +5007,7 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := scanPlan(s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, in.PlanID))
+	plan, err := scanPlan(s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE id=$1 LIMIT 1`, in.PlanID))
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
 		return
@@ -5022,13 +5022,13 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var walletCredit float64
-	_ = s.DB.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=?`, username).Scan(&walletCredit)
+	_ = s.DB.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=$1`, username).Scan(&walletCredit)
 	if plan.Price > 0 && walletCredit+0.0001 < plan.Price {
 		required := plan.Price - walletCredit
 		if required < plan.Price && required < 1 {
 			required = plan.Price
 		}
-		res, err := s.DB.Exec(`INSERT INTO payments(customer_id,username,amount,method,receipt,status,intent_type,intent_id,metadata_json,admin_note) VALUES(?,?,?,'portal_topup','','pending','plan_renewal',?,JSON_OBJECT('plan_name',?,'plan_price',?,'wallet_at_request',?),?)`, customerID, username, required, plan.ID, plan.Name, plan.Price, walletCredit, "portal renewal request: "+plan.Name)
+		res, err := s.DB.Exec(`INSERT INTO payments(customer_id,username,amount,method,receipt,status,intent_type,intent_id,metadata_json,admin_note) VALUES($1,$2,$3,'portal_topup','','pending','plan_renewal',$4,JSON_OBJECT('plan_name',$5,'plan_price',$6,'wallet_at_request',$7),$8)`, customerID, username, required, plan.ID, plan.Name, plan.Price, walletCredit, "portal renewal request: "+plan.Name)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -5044,21 +5044,21 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE customers SET plan_id=?,status='active' WHERE id=? AND deleted_at IS NULL`, plan.ID, customerID); err != nil {
+	if _, err := tx.Exec(`UPDATE customers SET plan_id=$1,status='active' WHERE id=$2 AND deleted_at IS NULL`, plan.ID, customerID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, username)
+	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Max-Data',':=',?)`, username, bytes); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, bytes); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 	}
-	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, username)
+	_, _ = tx.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, username)
 	if plan.SpeedMbps > 0 {
-		if _, err := tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,'Mikrotik-Rate-Limit',':=',?)`, username, speedLimitValue(plan.SpeedMbps)); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,'Mikrotik-Rate-Limit',':=',$2)`, username, speedLimitValue(plan.SpeedMbps)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -5067,23 +5067,23 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 	if plan.DurationDays > 0 {
 		expires = time.Now().AddDate(0, 0, plan.DurationDays)
 	}
-	if _, err := tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at,paid_amount) VALUES(?,?,?,?,?)`, customerID, username, plan.ID, expires, plan.Price); err != nil {
+	if _, err := tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at,paid_amount) VALUES($1,$2,$3,$4,$5)`, customerID, username, plan.ID, expires, plan.Price); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	if plan.Price > 0 {
 		desc := "portal plan activated: " + plan.Name
-		paymentRes, err := tx.Exec(`INSERT INTO payments(customer_id,username,amount,method,status,admin_note) VALUES(?,?,?,'wallet','approved',?)`, customerID, username, plan.Price, desc)
+		paymentRes, err := tx.Exec(`INSERT INTO payments(customer_id,username,amount,method,status,admin_note) VALUES($1,$2,$3,'wallet','approved',$4)`, customerID, username, plan.Price, desc)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		paymentID, _ := paymentRes.LastInsertId()
-		if _, err := tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit=credit+VALUES(credit), customer_id=COALESCE(VALUES(customer_id),customer_id)`, customerID, username, -plan.Price); err != nil {
+		if _, err := tx.Exec(`INSERT INTO wallets(customer_id,username,credit) VALUES($1,$2,$3) ON CONFLICT (username) DO UPDATE SET credit=wallets.credit+EXCLUDED.credit, customer_id=COALESCE(EXCLUDED.customer_id,wallets.customer_id)`, customerID, username, -plan.Price); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
-		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES(?,?,?,?,?,?,?,?)`, customerID, username, -plan.Price, "purchase", desc, "customer", "payment", paymentID); err != nil {
+		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id,username,amount,type,description,actor,reference_type,reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, customerID, username, -plan.Price, "purchase", desc, "customer", "payment", paymentID); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -5120,7 +5120,7 @@ func (s *Server) portalPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var currentPw string
-	err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, username).Scan(&currentPw)
+	err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, username).Scan(&currentPw)
 	if err != nil {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid_old_password"})
 		return
@@ -5129,14 +5129,14 @@ func (s *Server) portalPassword(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid_old_password"})
 		return
 	}
-	res, err := s.DB.Exec(`UPDATE radcheck SET value=? WHERE username=? AND attribute IN('Cleartext-Password','User-Password')`, in.NewPassword, username)
+	res, err := s.DB.Exec(`UPDATE radcheck SET value=$1 WHERE username=$2 AND attribute IN('Cleartext-Password','User-Password')`, in.NewPassword, username)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	affected, _ := res.RowsAffected()
 	if affected == 0 {
-		_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Cleartext-Password',':=',?)`, username, in.NewPassword)
+		_, err = s.DB.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Cleartext-Password',':=',$2)`, username, in.NewPassword)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -5158,7 +5158,7 @@ func (s *Server) portalPreferredNode(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		var preferredNodeID int64
-		_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
+		_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
 		writeJSON(w, map[string]any{"ok": true, "preferred_node_id": preferredNodeID})
 	case http.MethodPost:
 		var in struct {
@@ -5171,15 +5171,15 @@ func (s *Server) portalPreferredNode(w http.ResponseWriter, r *http.Request) {
 		// Validate node exists and is active (0 = auto/random)
 		if in.NodeID > 0 {
 			var exists int
-			if err := s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id=? AND status <> 'disabled'`, in.NodeID).Scan(&exists); err != nil || exists == 0 {
+			if err := s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id=$1 AND status <> 'disabled'`, in.NodeID).Scan(&exists); err != nil || exists == 0 {
 				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_node"})
 				return
 			}
 		}
 		if in.NodeID == 0 {
-			_, _ = s.DB.Exec(`UPDATE customers SET preferred_node_id=NULL WHERE username=? AND deleted_at IS NULL`, username)
+			_, _ = s.DB.Exec(`UPDATE customers SET preferred_node_id=NULL WHERE username=$1 AND deleted_at IS NULL`, username)
 		} else {
-			_, _ = s.DB.Exec(`UPDATE customers SET preferred_node_id=? WHERE username=? AND deleted_at IS NULL`, in.NodeID, username)
+			_, _ = s.DB.Exec(`UPDATE customers SET preferred_node_id=$1 WHERE username=$2 AND deleted_at IS NULL`, in.NodeID, username)
 		}
 		writeJSON(w, map[string]any{"ok": true, "preferred_node_id": in.NodeID})
 	default:
@@ -5195,7 +5195,7 @@ func (s *Server) portalPayments(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		rows, err := s.DB.Query(`SELECT p.id,p.username,p.amount,p.method,p.status,COALESCE(p.intent_type,'wallet_topup'),p.intent_id,COALESCE(pl.name,''),p.created_at,p.updated_at FROM payments p LEFT JOIN plans pl ON pl.id=p.intent_id AND p.intent_type='plan_renewal' WHERE p.username=? ORDER BY p.id DESC LIMIT 100`, username)
+		rows, err := s.DB.Query(`SELECT p.id,p.username,p.amount,p.method,p.status,COALESCE(p.intent_type,'wallet_topup'),p.intent_id,COALESCE(pl.name,''),p.created_at,p.updated_at FROM payments p LEFT JOIN plans pl ON pl.id=p.intent_id AND p.intent_type='plan_renewal' WHERE p.username=$1 ORDER BY p.id DESC LIMIT 100`, username)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -5241,8 +5241,8 @@ func (s *Server) portalPayments(w http.ResponseWriter, r *http.Request) {
 			in.Method = "manual"
 		}
 		var customerID sql.NullInt64
-		_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
-		res, err := s.DB.Exec(`INSERT INTO payments(customer_id,username,amount,method,receipt,status,intent_type,admin_note) VALUES(?,?,?,?,?,'pending','wallet_topup','portal request')`, nullableInt(customerID), username, in.Amount, strings.TrimSpace(in.Method), strings.TrimSpace(in.Receipt))
+		_ = s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+		res, err := s.DB.Exec(`INSERT INTO payments(customer_id,username,amount,method,receipt,status,intent_type,admin_note) VALUES($1,$2,$3,$4,$5,'pending','wallet_topup','portal request')`, nullableInt(customerID), username, in.Amount, strings.TrimSpace(in.Method), strings.TrimSpace(in.Receipt))
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -5274,7 +5274,7 @@ func (s *Server) portalMe(w http.ResponseWriter, r *http.Request) {
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		WHERE c.username=? AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&id, &displayName, &status, &plan, &credit, &created, &subToken)
+		WHERE c.username=$1 AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&id, &displayName, &status, &plan, &credit, &created, &subToken)
 	if err == sql.ErrNoRows {
 		writeJSON(w, map[string]any{"ok": true, "customer": map[string]any{"username": username, "status": "active"}})
 		return
@@ -5302,7 +5302,7 @@ func (s *Server) portalMe(w http.ResponseWriter, r *http.Request) {
 	if err := s.DB.QueryRow(`SELECT COALESCE(p.name,''),s.status,s.expires_at
 		FROM subscriptions s
 		LEFT JOIN plans p ON p.id=s.plan_id
-		WHERE s.username=? ORDER BY s.id DESC LIMIT 1`, username).Scan(&subPlan, &subStatus, &expires); err == nil {
+		WHERE s.username=$1 ORDER BY s.id DESC LIMIT 1`, username).Scan(&subPlan, &subStatus, &expires); err == nil {
 		sub := map[string]any{"plan": subPlan, "status": subStatus}
 		if expires.Valid {
 			sub["expires_at"] = expires.Time.Format(time.RFC3339)
@@ -5311,21 +5311,21 @@ func (s *Server) portalMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var maxData string
-	if err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData); err == nil {
+	if err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData); err == nil {
 		customer["max_data_bytes"] = maxData
 	}
 
 	// Resolve billing mode
 	billingEnabled := true // default for admin-created users
 	var customerBillingMode sql.NullString
-	_ = s.DB.QueryRow(`SELECT billing_mode FROM customers WHERE username=?`, username).Scan(&customerBillingMode)
+	_ = s.DB.QueryRow(`SELECT billing_mode FROM customers WHERE username=$1`, username).Scan(&customerBillingMode)
 
 	if customerBillingMode.Valid && customerBillingMode.String != "" {
 		billingEnabled = customerBillingMode.String == "self_service"
 	} else {
 		// Check reseller default
 		var resellerBillingMode string
-		err := s.DB.QueryRow(`SELECT COALESCE(a.billing_mode, 'manual') FROM customers c INNER JOIN admins a ON a.username = c.created_by AND a.role='reseller' WHERE c.username=?`, username).Scan(&resellerBillingMode)
+		err := s.DB.QueryRow(`SELECT COALESCE(a.billing_mode, 'manual') FROM customers c INNER JOIN admins a ON a.username = c.created_by AND a.role='reseller' WHERE c.username=$1`, username).Scan(&resellerBillingMode)
 		if err == nil {
 			billingEnabled = resellerBillingMode == "self_service"
 		}
@@ -5340,7 +5340,7 @@ func (s *Server) radiusRows(table, username string) ([]RadiusCheck, error) {
 	if table != "radcheck" && table != "radreply" {
 		return nil, fmt.Errorf("invalid_radius_table")
 	}
-	rows, err := s.DB.Query(`SELECT id,username,attribute,op,value FROM `+table+` WHERE username=? ORDER BY id ASC`, username)
+	rows, err := s.DB.Query(`SELECT id,username,attribute,op,value FROM `+table+` WHERE username=$1 ORDER BY id ASC`, username)
 	if err != nil {
 		return nil, err
 	}
@@ -5404,7 +5404,7 @@ func (s *Server) currentAdmin(r *http.Request) (string, string, bool) {
 	}
 	var role string
 	var active int
-	err := s.DB.QueryRow(`SELECT role,is_active FROM admins WHERE username=? LIMIT 1`, username).Scan(&role, &active)
+	err := s.DB.QueryRow(`SELECT role,is_active FROM admins WHERE username=$1 LIMIT 1`, username).Scan(&role, &active)
 	if err != nil || active != 1 {
 		return "", "", false
 	}
@@ -5417,12 +5417,12 @@ func (s *Server) currentCustomer(r *http.Request) (string, bool) {
 		return "", false
 	}
 	var status string
-	err := s.DB.QueryRow(`SELECT status FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&status)
+	err := s.DB.QueryRow(`SELECT status FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&status)
 	if err == nil {
 		return username, status != "disabled" && status != "deleted"
 	}
 	var count int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM radcheck WHERE username=?`, username).Scan(&count); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM radcheck WHERE username=$1`, username).Scan(&count); err != nil {
 		return "", false
 	}
 	return username, count > 0
@@ -5542,7 +5542,7 @@ func clientIP(r *http.Request) string {
 func (s *Server) logAudit(actor, action, entityType, entityID string, before, after map[string]any, ip string) {
 	bj, _ := json.Marshal(before)
 	aj, _ := json.Marshal(after)
-	_, _ = s.DB.Exec(`INSERT INTO audit_logs(actor,action,entity_type,entity_id,before_json,after_json,ip) VALUES(?,?,?,?,?,?,?)`, actor, action, entityType, entityID, string(bj), string(aj), ip)
+	_, _ = s.DB.Exec(`INSERT INTO audit_logs(actor,action,entity_type,entity_id,before_json,after_json,ip) VALUES($1,$2,$3,$4,$5,$6,$7)`, actor, action, entityType, entityID, string(bj), string(aj), ip)
 }
 
 func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
@@ -5558,7 +5558,7 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 	if v, _ := strconv.Atoi(r.URL.Query().Get("offset")); v > 0 {
 		offset = v
 	}
-	rows, err := s.DB.Query(`SELECT id,actor,action,entity_type,entity_id,COALESCE(before_json,''),COALESCE(after_json,''),ip,created_at FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?`, limit, offset)
+	rows, err := s.DB.Query(`SELECT id,actor,action,entity_type,entity_id,COALESCE(before_json,''),COALESCE(after_json,''),ip,created_at FROM audit_logs ORDER BY id DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -5594,7 +5594,7 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createEvent(eventType, severity, title, message, actor, related string) {
-	_, _ = s.DB.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES(?,?,?,?,?,?)`, eventType, severity, title, message, actor, related)
+	_, _ = s.DB.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES($1,$2,$3,$4,$5,$6)`, eventType, severity, title, message, actor, related)
 	// Send Telegram notification for warning/error events and key info events
 	if severity == "warning" || severity == "error" {
 		s.Notify.SendEvent(eventType, title, message)
@@ -5619,14 +5619,14 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	where := "1=1"
 	args := []any{}
 	if seen := r.URL.Query().Get("seen"); seen != "" {
-		where += " AND seen=?"
+		where += " AND seen=$1"
 		args = append(args, seen)
 	}
 	if eventType := r.URL.Query().Get("type"); eventType != "" {
-		where += " AND type=?"
+		where += " AND type=$1"
 		args = append(args, eventType)
 	}
-	query := fmt.Sprintf(`SELECT id,type,severity,title,COALESCE(message,''),COALESCE(actor,''),COALESCE(related,''),seen,notified,created_at FROM events WHERE %s ORDER BY id DESC LIMIT ? OFFSET ?`, where)
+	query := fmt.Sprintf(`SELECT id,type,severity,title,COALESCE(message,''),COALESCE(actor,''),COALESCE(related,''),seen,notified,created_at FROM events WHERE %s ORDER BY id DESC LIMIT $1 OFFSET $2`, where)
 	args = append(args, limit, offset)
 	rows, err := s.DB.Query(query, args...)
 	if err != nil {
@@ -5676,7 +5676,7 @@ func (s *Server) eventByID(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
-	if _, err := s.DB.Exec(`UPDATE events SET seen=1,notified=1 WHERE id=?`, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE events SET seen=1,notified=1 WHERE id=$1`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -5697,7 +5697,7 @@ func (s *Server) portalEvents(w http.ResponseWriter, r *http.Request) {
 	if v, _ := strconv.Atoi(r.URL.Query().Get("limit")); v > 0 && v <= 500 {
 		limit = v
 	}
-	rows, err := s.DB.Query(`SELECT id,type,severity,title,COALESCE(message,''),COALESCE(actor,''),COALESCE(related,''),seen,notified,created_at FROM events WHERE related=? ORDER BY id DESC LIMIT ?`, username, limit)
+	rows, err := s.DB.Query(`SELECT id,type,severity,title,COALESCE(message,''),COALESCE(actor,''),COALESCE(related,''),seen,notified,created_at FROM events WHERE related=$1 ORDER BY id DESC LIMIT $2`, username, limit)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -5731,7 +5731,7 @@ func (s *Server) portalEvents(w http.ResponseWriter, r *http.Request) {
 		out = append(out, e)
 	}
 	var unseenCount int
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE related=? AND seen=0`, username).Scan(&unseenCount)
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE related=$1 AND seen=0`, username).Scan(&unseenCount)
 	writeJSON(w, map[string]any{"ok": true, "events": out, "unseen_count": unseenCount})
 }
 
@@ -5750,7 +5750,7 @@ func (s *Server) portalEventByID(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
-	if _, err := s.DB.Exec(`UPDATE events SET seen=1,notified=1 WHERE id=? AND related=?`, id, username); err != nil {
+	if _, err := s.DB.Exec(`UPDATE events SET seen=1,notified=1 WHERE id=$1 AND related=$2`, id, username); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -6195,7 +6195,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	// Import nodes first (referenced by vpn_configs)
 	if nodes, ok := backup.Tables["nodes"]; ok {
 		for _, n := range nodes {
-			_, err := tx.Exec(`INSERT IGNORE INTO nodes(id, name, public_ip, domain, status) VALUES(?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO nodes(id, name, public_ip, domain, status) VALUES($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING`,
 				toInt64(n["id"]), toString(n["name"]), toString(n["public_ip"]),
 				toString(n["domain"]), toString(n["status"]))
 			if err != nil {
@@ -6209,7 +6209,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	// Import plans (referenced by customers)
 	if plans, ok := backup.Tables["plans"]; ok {
 		for _, p := range plans {
-			_, err := tx.Exec(`INSERT IGNORE INTO plans(id, name, data_gb, speed_mbps, duration_days, price, billing_type, price_per_gb, price_per_day, disconnect_on_zero, is_active, sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO plans(id, name, data_gb, speed_mbps, duration_days, price, billing_type, price_per_gb, price_per_day, disconnect_on_zero, is_active, sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
 				toInt64(p["id"]), toString(p["name"]), toFloat64(p["data_gb"]), toFloat64(p["speed_mbps"]),
 				toInt(p["duration_days"]), toFloat64(p["price"]), toString(p["billing_type"]),
 				toFloat64(p["price_per_gb"]), toFloat64(p["price_per_day"]), toBool(p["disconnect_on_zero"]),
@@ -6229,7 +6229,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := c["plan_id"]; exists && v != nil {
 				planID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, err := tx.Exec(`INSERT IGNORE INTO customers(id, username, display_name, status, plan_id, notes, sub_token) VALUES(?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO customers(id, username, display_name, status, plan_id, notes, sub_token) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
 				toInt64(c["id"]), toString(c["username"]), toString(c["display_name"]),
 				toString(c["status"]), planID, toString(c["notes"]), toString(c["sub_token"]))
 			if err != nil {
@@ -6243,7 +6243,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	// Import wallets
 	if wallets, ok := backup.Tables["wallets"]; ok {
 		for _, wal := range wallets {
-			_, err := tx.Exec(`INSERT INTO wallets(username, credit) VALUES(?,?) ON DUPLICATE KEY UPDATE credit=VALUES(credit)`,
+			_, err := tx.Exec(`INSERT INTO wallets(username, credit) VALUES($1,$2) ON CONFLICT (username) DO UPDATE SET credit=EXCLUDED.credit`,
 				toString(wal["username"]), toFloat64(wal["credit"]))
 			if err != nil {
 				failed["wallets"]++
@@ -6256,7 +6256,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	// Import radcheck
 	if radcheck, ok := backup.Tables["radcheck"]; ok {
 		for _, rc := range radcheck {
-			_, err := tx.Exec(`INSERT IGNORE INTO radcheck(id, username, attribute, op, value) VALUES(?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO radcheck(id, username, attribute, op, value) VALUES($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING`,
 				toInt64(rc["id"]), toString(rc["username"]), toString(rc["attribute"]), toString(rc["op"]), toString(rc["value"]))
 			if err != nil {
 				failed["radcheck"]++
@@ -6273,7 +6273,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := p["intent_id"]; exists && v != nil {
 				intentID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, err := tx.Exec(`INSERT IGNORE INTO payments(id, username, amount, method, status, intent_type, intent_id) VALUES(?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO payments(id, username, amount, method, status, intent_type, intent_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
 				toInt64(p["id"]), toString(p["username"]), toFloat64(p["amount"]),
 				toString(p["method"]), toString(p["status"]), toString(p["intent_type"]), intentID)
 			if err != nil {
@@ -6287,7 +6287,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	// Import subscriptions
 	if subs, ok := backup.Tables["subscriptions"]; ok {
 		for _, sub := range subs {
-			_, err := tx.Exec(`INSERT IGNORE INTO subscriptions(id, username, plan, status, paid_amount, discount_code) VALUES(?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO subscriptions(id, username, plan, status, paid_amount, discount_code) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
 				toInt64(sub["id"]), toString(sub["username"]), toString(sub["plan"]),
 				toString(sub["status"]), toFloat64(sub["paid_amount"]), toString(sub["discount_code"]))
 			if err != nil {
@@ -6305,7 +6305,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := tk["customer_id"]; exists && v != nil {
 				customerID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, err := tx.Exec(`INSERT IGNORE INTO tickets(id, customer_id, username, subject, status, priority) VALUES(?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO tickets(id, customer_id, username, subject, status, priority) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
 				toInt64(tk["id"]), customerID, toString(tk["username"]),
 				toString(tk["subject"]), toString(tk["status"]), toString(tk["priority"]))
 			if err != nil {
@@ -6323,7 +6323,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 			if v, exists := wt["reference_id"]; exists && v != nil {
 				refID = sql.NullInt64{Int64: toInt64(v), Valid: true}
 			}
-			_, err := tx.Exec(`INSERT IGNORE INTO wallet_transactions(id, username, amount, type, description, actor, reference_type, reference_id) VALUES(?,?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO wallet_transactions(id, username, amount, type, description, actor, reference_type, reference_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
 				toInt64(wt["id"]), toString(wt["username"]), toFloat64(wt["amount"]),
 				toString(wt["type"]), toString(wt["description"]), toString(wt["actor"]),
 				toString(wt["reference_type"]), refID)
@@ -6344,7 +6344,7 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 					extraJSONStr = sql.NullString{String: string(extraBytes), Valid: true}
 				}
 			}
-			_, err := tx.Exec(`INSERT IGNORE INTO vpn_configs(id, node_id, protocol, port, network, enabled, mtu, max_clients, enable_logs, conn_limit, extra_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+			_, err := tx.Exec(`INSERT INTO vpn_configs(id, node_id, protocol, port, network, enabled, mtu, max_clients, enable_logs, conn_limit, extra_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING`,
 				toInt64(vc["id"]), toInt64(vc["node_id"]), toString(vc["protocol"]),
 				toInt(vc["port"]), toString(vc["network"]), toBool(vc["enabled"]),
 				toInt(vc["mtu"]), toInt(vc["max_clients"]), toBool(vc["enable_logs"]),
@@ -6590,7 +6590,7 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = s.DB.Exec(`INSERT INTO admins(username, password_hash, role, is_active, avatar) VALUES(?,?, 'reseller', 1, ?)`, in.Username, ph, nullString(in.Avatar))
+		_, err = s.DB.Exec(`INSERT INTO admins(username, password_hash, role, is_active, avatar) VALUES($1,$2, 'reseller', 1, $3)`, in.Username, ph, nullString(in.Avatar))
 		if err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "username_taken"})
 			return
@@ -6619,14 +6619,14 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(parts[0], 10, 64)
 
 	var resellerUsername string
-	err := s.DB.QueryRow(`SELECT username FROM admins WHERE id=? AND role='reseller' LIMIT 1`, id).Scan(&resellerUsername)
+	err := s.DB.QueryRow(`SELECT username FROM admins WHERE id=$1 AND role='reseller' LIMIT 1`, id).Scan(&resellerUsername)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "reseller_not_found"})
 		return
 	}
 
 	if r.Method == http.MethodDelete {
-		_, err = s.DB.Exec(`DELETE FROM admins WHERE id=?`, id)
+		_, err = s.DB.Exec(`DELETE FROM admins WHERE id=$1`, id)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -6656,10 +6656,10 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
 			}
-			_, _ = s.DB.Exec(`UPDATE admins SET password_hash=? WHERE id=?`, ph, id)
+			_, _ = s.DB.Exec(`UPDATE admins SET password_hash=$1 WHERE id=$2`, ph, id)
 		}
 		// Always update avatar (allow clearing it)
-		_, _ = s.DB.Exec(`UPDATE admins SET avatar=? WHERE id=?`, nullString(in.Avatar), id)
+		_, _ = s.DB.Exec(`UPDATE admins SET avatar=$1 WHERE id=$2`, nullString(in.Avatar), id)
 		s.logAudit(actor, "reseller.updated", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername}, clientIP(r))
 		writeJSON(w, map[string]any{"ok": true})
 		return
@@ -6674,7 +6674,7 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = s.DB.Exec(`UPDATE admins SET credit = credit + ? WHERE id=?`, in.Amount, id)
+		_, err = s.DB.Exec(`UPDATE admins SET credit = credit + $1 WHERE id=$2`, in.Amount, id)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -6685,7 +6685,7 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 		if in.Amount < 0 {
 			ttype = "deduction"
 		}
-		_, _ = s.DB.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES(?,?,?,?,?)`, resellerUsername, in.Amount, ttype, desc, actor)
+		_, _ = s.DB.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES($1,$2,$3,$4,$5)`, resellerUsername, in.Amount, ttype, desc, actor)
 
 		s.logAudit(actor, "reseller.credit_adjusted", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername, "amount": in.Amount}, clientIP(r))
 		writeJSON(w, map[string]any{"ok": true})
@@ -6695,7 +6695,7 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 	// GET/POST /api/resellers/:id/plans — manage allowed plans for this reseller
 	if len(parts) > 1 && parts[1] == "plans" {
 		if r.Method == http.MethodGet {
-			rows, err := s.DB.Query(`SELECT plan_id FROM reseller_allowed_plans WHERE reseller_id=?`, id)
+			rows, err := s.DB.Query(`SELECT plan_id FROM reseller_allowed_plans WHERE reseller_id=$1`, id)
 			if err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
@@ -6726,9 +6726,9 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer tx.Rollback()
-			_, _ = tx.Exec(`DELETE FROM reseller_allowed_plans WHERE reseller_id=?`, id)
+			_, _ = tx.Exec(`DELETE FROM reseller_allowed_plans WHERE reseller_id=$1`, id)
 			for _, pid := range in.PlanIDs {
-				_, _ = tx.Exec(`INSERT INTO reseller_allowed_plans(reseller_id, plan_id) VALUES(?,?)`, id, pid)
+				_, _ = tx.Exec(`INSERT INTO reseller_allowed_plans(reseller_id, plan_id) VALUES($1,$2)`, id, pid)
 			}
 			if err := tx.Commit(); err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -6758,7 +6758,7 @@ func (s *Server) subscriptionLink(w http.ResponseWriter, r *http.Request) {
 
 	var username string
 	var status string
-	err := s.DB.QueryRow(`SELECT username, status FROM customers WHERE sub_token=? LIMIT 1`, token).Scan(&username, &status)
+	err := s.DB.QueryRow(`SELECT username, status FROM customers WHERE sub_token=$1 LIMIT 1`, token).Scan(&username, &status)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Subscription not found", http.StatusNotFound)
 		return
@@ -6779,7 +6779,7 @@ proxies:
     type: socks5
     server: "%s"
     port: %d
-    # Subscription URL for direct profile: http://%s/api/portal/profiles/openvpn.ovpn?token=%s
+    # Subscription URL for direct profile: http://%s/api/portal/profiles/openvpn.ovpn$1token=%s
   - name: "Koris-L2TP-%s"
     type: socks5
     server: "%s"
@@ -6830,13 +6830,13 @@ rules:
 	}
 
 	var maxData int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(value,0) FROM radcheck WHERE username=? AND attribute='Max-Data'`, username).Scan(&maxData)
+	_ = s.DB.QueryRow(`SELECT COALESCE(value,0) FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username).Scan(&maxData)
 
 	var used int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets+acctoutputoctets),0) FROM radacct WHERE username=?`, username).Scan(&used)
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets+acctoutputoctets),0) FROM radacct WHERE username=$1`, username).Scan(&used)
 
 	var online int
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM radacct WHERE username=? AND acctstoptime IS NULL`, username).Scan(&online)
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM radacct WHERE username=$1 AND acctstoptime IS NULL`, username).Scan(&online)
 
 	isOnline := online > 0
 	pct := 0.0
@@ -7162,7 +7162,7 @@ func (s *Server) liveSessionsPayload() []map[string]any {
 }
 
 func (s *Server) bandwidthPayload() []map[string]any {
-	rows, err := s.DB.Query(`SELECT username, ip, rx_bps, tx_bps FROM user_bandwidth_snapshots WHERE created_at >= NOW() - INTERVAL 30 SECOND ORDER BY created_at DESC`)
+	rows, err := s.DB.Query(`SELECT username, ip, rx_bps, tx_bps FROM user_bandwidth_snapshots WHERE created_at >= NOW() - INTERVAL '30 seconds' ORDER BY created_at DESC`)
 	if err != nil {
 		return []map[string]any{}
 	}
@@ -7204,7 +7204,7 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sessionID, username, nasIP string
-	err := s.DB.QueryRow(`SELECT acctsessionid, username, COALESCE(nasipaddress,'127.0.0.1') FROM radacct WHERE radacctid=? LIMIT 1`, in.ID).Scan(&sessionID, &username, &nasIP)
+	err := s.DB.QueryRow(`SELECT acctsessionid, username, COALESCE(nasipaddress,'127.0.0.1') FROM radacct WHERE radacctid=$1 LIMIT 1`, in.ID).Scan(&sessionID, &username, &nasIP)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "session_not_found"})
 		return
@@ -7225,7 +7225,7 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 		_ = cmd.Run()
 	}()
 
-	_, err = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW() WHERE radacctid=?`, in.ID)
+	_, err = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW() WHERE radacctid=$1`, in.ID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -7265,14 +7265,14 @@ func (s *Server) resellerCheckout(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(`UPDATE admins SET credit = credit + ? WHERE username=?`, in.Amount, actor)
+	_, err = tx.Exec(`UPDATE admins SET credit = credit + $1 WHERE username=$2`, in.Amount, actor)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 
 	desc := fmt.Sprintf("Automatic Gateway Top-up (Cryptomus/Zarinpal): +%.2f IRT", in.Amount)
-	_, err = tx.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES(?,?, 'allocation', ?, ?)`, actor, in.Amount, desc, actor)
+	_, err = tx.Exec(`INSERT INTO reseller_transactions(reseller_username, amount, type, description, actor) VALUES($1,$2, 'allocation', $3, $4)`, actor, in.Amount, desc, actor)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -7299,12 +7299,12 @@ func (s *Server) resellerTransactions(w http.ResponseWriter, r *http.Request) {
 	where := "1=1"
 	args := []any{}
 	if role == "reseller" {
-		where = "reseller_username = ?"
+		where = "reseller_username = $1"
 		args = append(args, actor)
 	} else {
 		reseller := r.URL.Query().Get("reseller")
 		if reseller != "" {
-			where = "reseller_username = ?"
+			where = "reseller_username = $1"
 			args = append(args, reseller)
 		}
 	}
@@ -7339,7 +7339,7 @@ func (s *Server) resellerTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) disconnectCustomerSessions(username string) {
-	rows, err := s.DB.Query(`SELECT radacctid, acctsessionid, COALESCE(nasipaddress,'127.0.0.1') FROM radacct WHERE username=? AND acctstoptime IS NULL`, username)
+	rows, err := s.DB.Query(`SELECT radacctid, acctsessionid, COALESCE(nasipaddress,'127.0.0.1') FROM radacct WHERE username=$1 AND acctstoptime IS NULL`, username)
 	if err != nil {
 		return
 	}
@@ -7360,7 +7360,7 @@ func (s *Server) disconnectCustomerSessions(username string) {
 				_ = cmd.Run()
 			}(username, sessionID, nasIP)
 
-			_, _ = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW() WHERE radacctid=?`, id)
+			_, _ = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW() WHERE radacctid=$1`, id)
 		}
 	}
 }
@@ -7382,7 +7382,7 @@ func (s *Server) resellerPayments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err := s.DB.Exec(`INSERT INTO payments(username, amount, method, status, intent_type, admin_note) VALUES(?, ?, 'manual', 'pending', 'reseller_topup', ?)`, actor, in.Amount, in.Description)
+		_, err := s.DB.Exec(`INSERT INTO payments(username, amount, method, status, intent_type, admin_note) VALUES($1, $2, 'manual', 'pending', 'reseller_topup', $3)`, actor, in.Amount, in.Description)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -7394,7 +7394,7 @@ func (s *Server) resellerPayments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		rows, err := s.DB.Query(`SELECT id, amount, method, status, COALESCE(admin_note,''), created_at FROM payments WHERE username=? AND intent_type='reseller_topup' ORDER BY id DESC LIMIT 100`, actor)
+		rows, err := s.DB.Query(`SELECT id, amount, method, status, COALESCE(admin_note,''), created_at FROM payments WHERE username=$1 AND intent_type='reseller_topup' ORDER BY id DESC LIMIT 100`, actor)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -7554,7 +7554,7 @@ func (s *Server) nodeVPNConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getNodeVPNConfigs(w http.ResponseWriter, nodeID int64) {
-	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=? ORDER BY FIELD(protocol,'openvpn','l2tp','ikev2','ssh','wireguard','cisco_ipsec')`, nodeID)
+	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=$1 ORDER BY FIELD(protocol,'openvpn','l2tp','ikev2','ssh','wireguard','cisco_ipsec')`, nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -7635,8 +7635,8 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	}
 
 	_, err := s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json)
-		VALUES(?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE enabled=VALUES(enabled), port=VALUES(port), network=VALUES(network), extra_json=VALUES(extra_json)`,
+		VALUES($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (node_id, protocol) DO UPDATE SET enabled=EXCLUDED.enabled, port=EXCLUDED.port, network=EXCLUDED.network, extra_json=EXCLUDED.extra_json`,
 		nodeID, in.Protocol, enabledInt, in.Port, strings.TrimSpace(in.Network), nullString(extraStr))
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -7768,10 +7768,10 @@ func (s *Server) uploadCertificate(w http.ResponseWriter, r *http.Request) {
 	if in.IsDefault {
 		defaultInt = 1
 		// Unset other defaults of same type
-		_, _ = s.DB.Exec(`UPDATE vpn_certificates SET is_default=0 WHERE type=?`, in.Type)
+		_, _ = s.DB.Exec(`UPDATE vpn_certificates SET is_default=0 WHERE type=$1`, in.Type)
 	}
 
-	res, err := s.DB.Exec(`INSERT INTO vpn_certificates(name, type, node_id, content, is_default) VALUES(?,?,?,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO vpn_certificates(name, type, node_id, content, is_default) VALUES($1,$2,$3,$4,$5)`,
 		in.Name, in.Type, in.NodeID, in.Content, defaultInt)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -7797,7 +7797,7 @@ func (s *Server) certificateByID(w http.ResponseWriter, r *http.Request) {
 		var nodeID sql.NullInt64
 		var isDefault int
 		var created sql.NullTime
-		err := s.DB.QueryRow(`SELECT id, name, type, node_id, content, is_default, created_at FROM vpn_certificates WHERE id=?`, id).Scan(&c.ID, &c.Name, &c.Type, &nodeID, &c.Content, &isDefault, &created)
+		err := s.DB.QueryRow(`SELECT id, name, type, node_id, content, is_default, created_at FROM vpn_certificates WHERE id=$1`, id).Scan(&c.ID, &c.Name, &c.Type, &nodeID, &c.Content, &isDefault, &created)
 		if err == sql.ErrNoRows {
 			writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 			return
@@ -7816,7 +7816,7 @@ func (s *Server) certificateByID(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "certificate": c})
 
 	case http.MethodDelete:
-		if _, err := s.DB.Exec(`DELETE FROM vpn_certificates WHERE id=?`, id); err != nil {
+		if _, err := s.DB.Exec(`DELETE FROM vpn_certificates WHERE id=$1`, id); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -7866,7 +7866,7 @@ func (s *Server) panelSettings(w http.ResponseWriter, r *http.Request) {
 			if k == "" {
 				continue
 			}
-			_, _ = s.DB.Exec(`INSERT INTO panel_settings(setting_key, setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`, k, v)
+			_, _ = s.DB.Exec(`INSERT INTO panel_settings(setting_key, setting_value) VALUES($1,$2) ON CONFLICT (setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value`, k, v)
 		}
 		actor, _, _ := s.currentAdmin(r)
 		s.logAudit(actor, "settings.updated", "panel_settings", "", nil, map[string]any{"keys": len(in)}, clientIP(r))

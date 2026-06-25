@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -94,7 +94,7 @@ func (s *Server) listCannedResponses(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 
 	if category != "" {
-		query += ` WHERE category = ?`
+		query += ` WHERE category = $1`
 		args = append(args, category)
 	}
 	query += ` ORDER BY category ASC, usage_count DESC, title ASC`
@@ -151,7 +151,7 @@ func (s *Server) createCannedResponse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := s.DB.ExecContext(r.Context(),
-		`INSERT INTO canned_responses (title, body, category) VALUES (?, ?, ?)`,
+		`INSERT INTO canned_responses (title, body, category) VALUES ($1, $2, $3)`,
 		in.Title, in.Body, in.Category)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "insert_failed"})
@@ -191,7 +191,7 @@ func (s *Server) updateCannedResponse(w http.ResponseWriter, r *http.Request, id
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "title_cannot_be_empty"})
 			return
 		}
-		sets = append(sets, "title = ?")
+		sets = append(sets, "title = $1")
 		args = append(args, t)
 	}
 	if in.Body != nil {
@@ -200,7 +200,7 @@ func (s *Server) updateCannedResponse(w http.ResponseWriter, r *http.Request, id
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "body_cannot_be_empty"})
 			return
 		}
-		sets = append(sets, "body = ?")
+		sets = append(sets, "body = $1")
 		args = append(args, b)
 	}
 	if in.Category != nil {
@@ -208,7 +208,7 @@ func (s *Server) updateCannedResponse(w http.ResponseWriter, r *http.Request, id
 		if c == "" {
 			c = "general"
 		}
-		sets = append(sets, "category = ?")
+		sets = append(sets, "category = $1")
 		args = append(args, c)
 	}
 
@@ -218,7 +218,7 @@ func (s *Server) updateCannedResponse(w http.ResponseWriter, r *http.Request, id
 	}
 
 	args = append(args, id)
-	query := fmt.Sprintf(`UPDATE canned_responses SET %s WHERE id = ?`, strings.Join(sets, ", "))
+	query := fmt.Sprintf(`UPDATE canned_responses SET %s WHERE id = $1`, strings.Join(sets, ", "))
 
 	result, err := s.DB.ExecContext(r.Context(), query, args...)
 	if err != nil {
@@ -240,7 +240,7 @@ func (s *Server) updateCannedResponse(w http.ResponseWriter, r *http.Request, id
 
 // deleteCannedResponseByID deletes a canned response by ID from path.
 func (s *Server) deleteCannedResponseByID(w http.ResponseWriter, r *http.Request, id int64) {
-	result, err := s.DB.ExecContext(r.Context(), `DELETE FROM canned_responses WHERE id = ?`, id)
+	result, err := s.DB.ExecContext(r.Context(), `DELETE FROM canned_responses WHERE id = $1`, id)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "delete_failed"})
 		return
@@ -262,7 +262,7 @@ func (s *Server) deleteCannedResponseByID(w http.ResponseWriter, r *http.Request
 // POST /api/canned-responses/{id}/use
 func (s *Server) useCannedResponse(w http.ResponseWriter, r *http.Request, id int64) {
 	result, err := s.DB.ExecContext(r.Context(),
-		`UPDATE canned_responses SET usage_count = usage_count + 1 WHERE id = ?`, id)
+		`UPDATE canned_responses SET usage_count = usage_count + 1 WHERE id = $1`, id)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "update_failed"})
 		return

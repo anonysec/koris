@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -33,13 +33,13 @@ func (s *Server) listResellerPayouts(w http.ResponseWriter, username string) {
 	// Get current balance and min payout amount
 	var balance float64
 	var minPayout float64
-	err := s.DB.QueryRow(`SELECT COALESCE(payout_balance, 0), COALESCE(min_payout_amount, 0) FROM admins WHERE username=?`, username).Scan(&balance, &minPayout)
+	err := s.DB.QueryRow(`SELECT COALESCE(payout_balance, 0), COALESCE(min_payout_amount, 0) FROM admins WHERE username=$1`, username).Scan(&balance, &minPayout)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
 	}
 
-	rows, err := s.DB.Query(`SELECT id, amount, status, COALESCE(payment_details,''), COALESCE(admin_note,''), requested_at, processed_at, COALESCE(processed_by,'') FROM reseller_payouts WHERE reseller_username=? ORDER BY requested_at DESC`, username)
+	rows, err := s.DB.Query(`SELECT id, amount, status, COALESCE(payment_details,''), COALESCE(admin_note,''), requested_at, processed_at, COALESCE(processed_by,'') FROM reseller_payouts WHERE reseller_username=$1 ORDER BY requested_at DESC`, username)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -104,7 +104,7 @@ func (s *Server) createResellerPayout(w http.ResponseWriter, r *http.Request, us
 	// Get current balance and min payout amount
 	var balance float64
 	var minPayout float64
-	err := s.DB.QueryRow(`SELECT COALESCE(payout_balance, 0), COALESCE(min_payout_amount, 0) FROM admins WHERE username=?`, username).Scan(&balance, &minPayout)
+	err := s.DB.QueryRow(`SELECT COALESCE(payout_balance, 0), COALESCE(min_payout_amount, 0) FROM admins WHERE username=$1`, username).Scan(&balance, &minPayout)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -120,7 +120,7 @@ func (s *Server) createResellerPayout(w http.ResponseWriter, r *http.Request, us
 		return
 	}
 
-	res, err := s.DB.Exec(`INSERT INTO reseller_payouts (reseller_username, amount, status, payment_details) VALUES (?, ?, 'pending', ?)`, username, in.Amount, in.PaymentDetails)
+	res, err := s.DB.Exec(`INSERT INTO reseller_payouts (reseller_username, amount, status, payment_details) VALUES ($1, $2, 'pending', $3)`, username, in.Amount, in.PaymentDetails)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -143,7 +143,7 @@ func (s *Server) handleAdminPayouts(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 
 	if statusFilter != "" {
-		query += ` WHERE status=?`
+		query += ` WHERE status=$1`
 		args = append(args, statusFilter)
 	}
 	query += ` ORDER BY requested_at DESC`
@@ -223,7 +223,7 @@ func (s *Server) handleAdminPayoutByID(w http.ResponseWriter, r *http.Request) {
 	var resellerUsername string
 	var amount float64
 	var status string
-	err := s.DB.QueryRow(`SELECT reseller_username, amount, status FROM reseller_payouts WHERE id=?`, id).Scan(&resellerUsername, &amount, &status)
+	err := s.DB.QueryRow(`SELECT reseller_username, amount, status FROM reseller_payouts WHERE id=$1`, id).Scan(&resellerUsername, &amount, &status)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -241,7 +241,7 @@ func (s *Server) handleAdminPayoutByID(w http.ResponseWriter, r *http.Request) {
 	if in.Action == "approve" {
 		// Verify reseller has sufficient balance
 		var currentBalance float64
-		err := s.DB.QueryRow(`SELECT COALESCE(payout_balance, 0) FROM admins WHERE username=?`, resellerUsername).Scan(&currentBalance)
+		err := s.DB.QueryRow(`SELECT COALESCE(payout_balance, 0) FROM admins WHERE username=$1`, resellerUsername).Scan(&currentBalance)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
@@ -259,13 +259,13 @@ func (s *Server) handleAdminPayoutByID(w http.ResponseWriter, r *http.Request) {
 		}
 		defer tx.Rollback()
 
-		_, err = tx.Exec(`UPDATE reseller_payouts SET status='approved', processed_at=NOW(), processed_by=?, admin_note=? WHERE id=?`, admin, in.AdminNote, id)
+		_, err = tx.Exec(`UPDATE reseller_payouts SET status='approved', processed_at=NOW(), processed_by=$1, admin_note=$2 WHERE id=$3`, admin, in.AdminNote, id)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
 		}
 
-		_, err = tx.Exec(`UPDATE admins SET payout_balance = payout_balance - ? WHERE username=?`, amount, resellerUsername)
+		_, err = tx.Exec(`UPDATE admins SET payout_balance = payout_balance - $1 WHERE username=$2`, amount, resellerUsername)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return
@@ -277,7 +277,7 @@ func (s *Server) handleAdminPayoutByID(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Reject
-		_, err := s.DB.Exec(`UPDATE reseller_payouts SET status='rejected', processed_at=NOW(), processed_by=?, admin_note=? WHERE id=?`, admin, in.AdminNote, id)
+		_, err := s.DB.Exec(`UPDATE reseller_payouts SET status='rejected', processed_at=NOW(), processed_by=$1, admin_note=$2 WHERE id=$3`, admin, in.AdminNote, id)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 			return

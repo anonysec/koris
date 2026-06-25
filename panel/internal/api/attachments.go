@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -195,7 +195,7 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request, ticket
 	// Get the latest message for this ticket, or create one
 	var messageID int64
 	err = s.DB.QueryRowContext(r.Context(),
-		`SELECT id FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1`, ticketID,
+		`SELECT id FROM ticket_messages WHERE ticket_id = $1 ORDER BY created_at DESC LIMIT 1`, ticketID,
 	).Scan(&messageID)
 	if err != nil {
 		// No messages exist — create an attachment message
@@ -211,7 +211,7 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request, ticket
 	// Insert attachment record into database
 	result, err := s.DB.ExecContext(r.Context(), `
 		INSERT INTO ticket_attachments (message_id, filename, filepath, filesize, mime_type)
-		VALUES (?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5)`,
 		messageID, filename, filePath, written, mimeType,
 	)
 	if err != nil {
@@ -257,7 +257,7 @@ func (s *Server) serveAttachment(w http.ResponseWriter, r *http.Request) {
 	var messageID int64
 	err = s.DB.QueryRowContext(r.Context(), `
 		SELECT id, message_id, filename, filepath, mime_type
-		FROM ticket_attachments WHERE id = ?`, attachmentID,
+		FROM ticket_attachments WHERE id = $1`, attachmentID,
 	).Scan(&attachmentID, &messageID, &filename, &filePath, &mimeType)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
@@ -267,7 +267,7 @@ func (s *Server) serveAttachment(w http.ResponseWriter, r *http.Request) {
 	// Get the ticket ID from the message
 	var ticketID int64
 	err = s.DB.QueryRowContext(r.Context(),
-		`SELECT ticket_id FROM ticket_messages WHERE id = ?`, messageID,
+		`SELECT ticket_id FROM ticket_messages WHERE id = $1`, messageID,
 	).Scan(&ticketID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})

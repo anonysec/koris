@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 // Package antidpi provides anti-DPI (Deep Packet Inspection) obfuscation
 // configuration management for KorisPanel. It handles obfs4, QUIC tunneling,
@@ -54,7 +54,7 @@ func (s *AntiDPIService) GetConfig(ctx context.Context, nodeID int64) (*AntiDPIC
 		SELECT id, node_id, method, port, bridge_address, cert_fingerprint,
 		       enabled, extra_settings, created_at, updated_at
 		FROM anti_dpi_configs
-		WHERE node_id = ?`, nodeID)
+		WHERE node_id = $1`, nodeID)
 
 	var cfg AntiDPIConfig
 	var bridgeAddr, certFP sql.NullString
@@ -103,14 +103,14 @@ func (s *AntiDPIService) SaveConfig(ctx context.Context, config *AntiDPIConfig) 
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO anti_dpi_configs (node_id, method, port, bridge_address, cert_fingerprint, enabled, extra_settings)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			method = VALUES(method),
-			port = VALUES(port),
-			bridge_address = VALUES(bridge_address),
-			cert_fingerprint = VALUES(cert_fingerprint),
-			enabled = VALUES(enabled),
-			extra_settings = VALUES(extra_settings)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (node_id) DO UPDATE SET
+			method = EXCLUDED.method,
+			port = EXCLUDED.port,
+			bridge_address = EXCLUDED.bridge_address,
+			cert_fingerprint = EXCLUDED.cert_fingerprint,
+			enabled = EXCLUDED.enabled,
+			extra_settings = EXCLUDED.extra_settings`,
 		config.NodeID, config.Method, config.Port,
 		nullStr(config.BridgeAddress), nullStr(config.CertFingerprint),
 		config.Enabled, extraJSON,
@@ -125,7 +125,7 @@ func (s *AntiDPIService) SaveConfig(ctx context.Context, config *AntiDPIConfig) 
 
 // DeleteConfig removes the anti-DPI configuration for a node.
 func (s *AntiDPIService) DeleteConfig(ctx context.Context, nodeID int64) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM anti_dpi_configs WHERE node_id = ?`, nodeID)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM anti_dpi_configs WHERE node_id = $1`, nodeID)
 	if err != nil {
 		return fmt.Errorf("delete anti-dpi config for node %d: %w", nodeID, err)
 	}

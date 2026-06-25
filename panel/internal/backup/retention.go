@@ -1,4 +1,4 @@
-package backup
+﻿package backup
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func (s *Service) ListBackups(ctx context.Context) ([]BackupRecord, error) {
 // DeleteBackup removes a single backup archive and its companion files from disk.
 func (s *Service) DeleteBackup(ctx context.Context, backupID int64) error {
 	var filename string
-	err := s.db.QueryRowContext(ctx, `SELECT filename FROM backups WHERE id=?`, backupID).Scan(&filename)
+	err := s.db.QueryRowContext(ctx, `SELECT filename FROM backups WHERE id=$1`, backupID).Scan(&filename)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func (s *Service) DeleteBackup(ctx context.Context, backupID int64) error {
 	os.Remove(archivePath)
 	os.Remove(archivePath + ".sha256")
 
-	_, err = s.db.ExecContext(ctx, `DELETE FROM backups WHERE id=?`, backupID)
+	_, err = s.db.ExecContext(ctx, `DELETE FROM backups WHERE id=$1`, backupID)
 	return err
 }
 
@@ -48,7 +48,7 @@ func (s *Service) DeleteBackup(ctx context.Context, backupID int64) error {
 func (s *Service) VerifyIntegrity(ctx context.Context, backupID int64) (bool, error) {
 	var filename string
 	var storedChecksum string
-	err := s.db.QueryRowContext(ctx, `SELECT filename, COALESCE(checksum,'') FROM backups WHERE id=?`, backupID).Scan(&filename, &storedChecksum)
+	err := s.db.QueryRowContext(ctx, `SELECT filename, COALESCE(checksum,'') FROM backups WHERE id=$1`, backupID).Scan(&filename, &storedChecksum)
 	if err != nil {
 		return false, err
 	}

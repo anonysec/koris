@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/base64"
@@ -27,7 +27,7 @@ func (s *Server) customerCiscoIPSecConfig(w http.ResponseWriter, r *http.Request
 
 	// Get customer's preferred node (or first online node)
 	var nodeID int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=? AND deleted_at IS NULL`, username).Scan(&nodeID)
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&nodeID)
 
 	// Resolve node host (public IP or domain)
 	host, _, _, _ := s.openVPNEndpointNode(r, nodeID)
@@ -43,7 +43,7 @@ func (s *Server) customerCiscoIPSecConfig(w http.ResponseWriter, r *http.Request
 
 	// Get customer's password from radcheck
 	var password string
-	_ = s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, username).Scan(&password)
+	_ = s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, username).Scan(&password)
 
 	// Generate UUIDs for the profile
 	uuidPayload := generateUUID()
@@ -124,7 +124,7 @@ func (s *Server) ciscoIPSecPSK(nodeID int64) string {
 	// Try per-node Cisco IPSec config
 	if nodeID > 0 {
 		var extraJSON []byte
-		err := s.DB.QueryRow(`SELECT extra_json FROM node_vpn_configs WHERE node_id=? AND protocol='cisco_ipsec' AND enabled=1 LIMIT 1`, nodeID).Scan(&extraJSON)
+		err := s.DB.QueryRow(`SELECT extra_json FROM node_vpn_configs WHERE node_id=$1 AND protocol='cisco_ipsec' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&extraJSON)
 		if err == nil && len(extraJSON) > 0 {
 			var extra struct {
 				PSK string `json:"psk"`

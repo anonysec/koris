@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -250,7 +250,7 @@ func (tc *TrafficCollector) resolveUserID(ctx context.Context, username string) 
 
 	var userID int64
 	err := db.QueryRowContext(ctx,
-		`SELECT id FROM customers WHERE username = ? AND deleted_at IS NULL`,
+		`SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL`,
 		username,
 	).Scan(&userID)
 	if err != nil {

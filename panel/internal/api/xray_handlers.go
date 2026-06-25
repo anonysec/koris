@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -36,7 +36,7 @@ func (s *Server) xraySubscription(w http.ResponseWriter, r *http.Request) {
 	var username string
 	var status string
 	err := s.DB.QueryRow(
-		`SELECT id, username, status FROM customers WHERE xray_uuid = ? AND deleted_at IS NULL LIMIT 1`,
+		`SELECT id, username, status FROM customers WHERE xray_uuid = $1 AND deleted_at IS NULL LIMIT 1`,
 		token,
 	).Scan(&customerID, &username, &status)
 	if err == sql.ErrNoRows {
@@ -59,7 +59,7 @@ func (s *Server) xraySubscription(w http.ResponseWriter, r *http.Request) {
 	var subStatus string
 	var expiresAt sql.NullTime
 	err = s.DB.QueryRow(
-		`SELECT status, expires_at FROM subscriptions WHERE username = ? ORDER BY id DESC LIMIT 1`,
+		`SELECT status, expires_at FROM subscriptions WHERE username = $1 ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&subStatus, &expiresAt)
 	if err == sql.ErrNoRows {

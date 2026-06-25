@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 // Package bot provides a native Telegram Bot integration for KorisPanel.
 // Supports both webhook and long-polling modes.
@@ -480,7 +480,7 @@ func (b *Bot) cmdFind(chatID int64, username string) {
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		WHERE c.username=? AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&id, &displayName, &status, &plan, &credit, &created)
+		WHERE c.username=$1 AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&id, &displayName, &status, &plan, &credit, &created)
 	if err == sql.ErrNoRows {
 		b.sendMessage(chatID, fmt.Sprintf("User `%s` not found", username), "Markdown")
 		return
@@ -491,10 +491,10 @@ func (b *Bot) cmdFind(chatID int64, username string) {
 	}
 
 	var totalBytes int64
-	_ = b.db.QueryRow(`SELECT COALESCE(SUM(acctinputoctets+acctoutputoctets),0) FROM radacct WHERE username=?`, username).Scan(&totalBytes)
+	_ = b.db.QueryRow(`SELECT COALESCE(SUM(acctinputoctets+acctoutputoctets),0) FROM radacct WHERE username=$1`, username).Scan(&totalBytes)
 
 	var online int
-	_ = b.db.QueryRow(`SELECT COUNT(*) FROM radacct WHERE username=? AND acctstoptime IS NULL`, username).Scan(&online)
+	_ = b.db.QueryRow(`SELECT COUNT(*) FROM radacct WHERE username=$1 AND acctstoptime IS NULL`, username).Scan(&online)
 
 	statusIcon := "🟢"
 	if status == "disabled" {
@@ -538,15 +538,15 @@ func (b *Bot) cmdCreate(chatID int64, username, password string) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO customers(username, sub_token, created_by) VALUES(?, ?, 'telegram_bot')`, username, randomHex(24))
+	res, err := tx.Exec(`INSERT INTO customers(username, sub_token, created_by) VALUES($1, $2, 'telegram_bot')`, username, randomHex(24))
 	if err != nil {
 		b.sendMessage(chatID, fmt.Sprintf("Failed: %s", err.Error()), "")
 		return
 	}
 	customerID, _ := res.LastInsertId()
-	_, _ = tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES(?,?,0)`, customerID, username)
-	_, _ = tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Cleartext-Password',':=',?)`, username, password)
-	_, _ = tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Simultaneous-Use',':=','1')`, username)
+	_, _ = tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES($1,$2,0)`, customerID, username)
+	_, _ = tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Cleartext-Password',':=',$2)`, username, password)
+	_, _ = tx.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Simultaneous-Use',':=','1')`, username)
 
 	if err := tx.Commit(); err != nil {
 		b.sendMessage(chatID, "Failed to commit", "")
@@ -557,7 +557,7 @@ func (b *Bot) cmdCreate(chatID int64, username, password string) {
 }
 
 func (b *Bot) cmdSetStatus(chatID int64, username, status string) {
-	result, err := b.db.Exec(`UPDATE customers SET status=? WHERE username=? AND deleted_at IS NULL`, status, username)
+	result, err := b.db.Exec(`UPDATE customers SET status=$1 WHERE username=$2 AND deleted_at IS NULL`, status, username)
 	if err != nil {
 		b.sendMessage(chatID, "Error: "+err.Error(), "")
 		return
@@ -575,13 +575,13 @@ func (b *Bot) cmdSetStatus(chatID int64, username, status string) {
 }
 
 func (b *Bot) cmdTraffic(chatID int64, username string) {
-	result, err := b.db.Exec(`UPDATE radacct SET acctstoptime=COALESCE(acctstoptime, NOW()), acctterminatecause=COALESCE(acctterminatecause, 'Admin-Reset') WHERE username=?`, username)
+	result, err := b.db.Exec(`UPDATE radacct SET acctstoptime=COALESCE(acctstoptime, NOW()), acctterminatecause=COALESCE(acctterminatecause, 'Admin-Reset') WHERE username=$1`, username)
 	if err != nil {
 		b.sendMessage(chatID, "Error: "+err.Error(), "")
 		return
 	}
 	affected, _ := result.RowsAffected()
-	_, _ = b.db.Exec(`UPDATE customers SET status='active' WHERE username=? AND status='limited' AND deleted_at IS NULL`, username)
+	_, _ = b.db.Exec(`UPDATE customers SET status='active' WHERE username=$1 AND status='limited' AND deleted_at IS NULL`, username)
 	b.sendMessage(chatID, fmt.Sprintf("🔄 Traffic reset for `%s`\n%d sessions archived", username, affected), "Markdown")
 }
 
@@ -603,7 +603,7 @@ func (b *Bot) cmdMe(chatID int64, from *User) {
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		WHERE c.username=? AND c.deleted_at IS NULL LIMIT 1`, tgUsername).Scan(&username, &status, &plan, &credit)
+		WHERE c.username=$1 AND c.deleted_at IS NULL LIMIT 1`, tgUsername).Scan(&username, &status, &plan, &credit)
 	if err != nil {
 		b.sendMessage(chatID, "No account linked to your Telegram username. Contact admin.", "")
 		return
@@ -625,10 +625,10 @@ func (b *Bot) cmdUsage(chatID int64, from *User) {
 	username := strings.ToLower(from.Username)
 
 	var totalBytes int64
-	_ = b.db.QueryRow(`SELECT COALESCE(SUM(acctinputoctets+acctoutputoctets),0) FROM radacct WHERE username=?`, username).Scan(&totalBytes)
+	_ = b.db.QueryRow(`SELECT COALESCE(SUM(acctinputoctets+acctoutputoctets),0) FROM radacct WHERE username=$1`, username).Scan(&totalBytes)
 
 	var maxData int64
-	_ = b.db.QueryRow(`SELECT COALESCE(CAST(value AS UNSIGNED),0) FROM radcheck WHERE username=? AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData)
+	_ = b.db.QueryRow(`SELECT COALESCE(CAST(value AS BIGINT),0) FROM radcheck WHERE username=$1 AND attribute='Max-Data' ORDER BY id DESC LIMIT 1`, username).Scan(&maxData)
 
 	remaining := "Unlimited"
 	pct := ""
@@ -655,7 +655,7 @@ func (b *Bot) cmdUsage(chatID int64, from *User) {
 }
 
 func (b *Bot) cmdPlans(chatID int64) {
-	rows, err := b.db.Query(`SELECT name, data_gb, speed_mbps, duration_days, price FROM plans WHERE is_active=1 ORDER BY sort_order, id`)
+	rows, err := b.db.Query(`SELECT name, data_gb, speed_mbps, duration_days, price FROM plans WHERE is_active=TRUE ORDER BY sort_order, id`)
 	if err != nil {
 		b.sendMessage(chatID, "Error loading plans", "")
 		return
@@ -693,8 +693,8 @@ func (b *Bot) cmdRenew(chatID int64, username string, daysStr string) {
 
 	// Try to extend active subscription
 	result, err := b.db.Exec(
-		`UPDATE subscriptions SET expires_at = DATE_ADD(expires_at, INTERVAL ? DAY)
-		 WHERE username = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+		`UPDATE subscriptions SET expires_at = expires_at + INTERVAL '1 day' * $2
+		 WHERE username = $1 AND status = 'active' ORDER BY id DESC LIMIT 1`,
 		days, username,
 	)
 	if err != nil {
@@ -705,8 +705,8 @@ func (b *Bot) cmdRenew(chatID int64, username string, daysStr string) {
 	if affected == 0 {
 		// No active subscription, try to reactivate expired one
 		result, err = b.db.Exec(
-			`UPDATE subscriptions SET expires_at = DATE_ADD(NOW(), INTERVAL ? DAY), status = 'active'
-			 WHERE username = ? ORDER BY id DESC LIMIT 1`,
+			`UPDATE subscriptions SET expires_at = NOW() + INTERVAL '1 day' * $2, status = 'active'
+			 WHERE username = $1 ORDER BY id DESC LIMIT 1`,
 			days, username,
 		)
 		if err != nil {
@@ -719,7 +719,7 @@ func (b *Bot) cmdRenew(chatID int64, username string, daysStr string) {
 			return
 		}
 		// Also reactivate customer
-		_, _ = b.db.Exec(`UPDATE customers SET status = 'active' WHERE username = ? AND deleted_at IS NULL`, username)
+		_, _ = b.db.Exec(`UPDATE customers SET status = 'active' WHERE username = $1 AND deleted_at IS NULL`, username)
 	}
 	b.sendMessage(chatID, fmt.Sprintf("✅ Extended `%s` subscription by *%d* day(s)", username, days), "Markdown")
 }

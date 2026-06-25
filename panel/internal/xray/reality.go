@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package xray
 
@@ -266,7 +266,7 @@ func (s *XrayService) GetRealityPublicKey(ctx context.Context, nodeID int64) (st
 	var realityJSON *string
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT reality_config_json FROM xray_configs WHERE node_id = ?`, nodeID,
+		`SELECT reality_config_json FROM xray_configs WHERE node_id = $1`, nodeID,
 	).Scan(&realityJSON)
 	if err != nil {
 		return "", fmt.Errorf("query reality config for node %d: %w", nodeID, err)

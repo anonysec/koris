@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -199,7 +199,7 @@ func (tm *TunnelManager) storeTunnel(ctx context.Context, nodeID int64, tunnelID
 	db := tm.store.DB()
 	_, err := db.ExecContext(ctx,
 		`INSERT INTO outbound_tunnels (node_id, tunnel_id, protocol, exit_addr, exit_port, state, created_at)
-		 VALUES (?, ?, ?, ?, ?, 'active', NOW())`,
+		 VALUES ($1, $2, $3, $4, $5, 'active', NOW())`,
 		nodeID, tunnelID, config.Protocol, config.ExitAddress, config.ExitPort,
 	)
 	return err
@@ -209,7 +209,7 @@ func (tm *TunnelManager) storeTunnel(ctx context.Context, nodeID int64, tunnelID
 func (tm *TunnelManager) updateTunnelState(ctx context.Context, nodeID int64, tunnelID string, state string) error {
 	db := tm.store.DB()
 	_, err := db.ExecContext(ctx,
-		`UPDATE outbound_tunnels SET state = ? WHERE node_id = ? AND tunnel_id = ?`,
+		`UPDATE outbound_tunnels SET state = $1 WHERE node_id = $2 AND tunnel_id = $3`,
 		state, nodeID, tunnelID,
 	)
 	return err

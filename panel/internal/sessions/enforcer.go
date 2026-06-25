@@ -23,11 +23,11 @@ func NewEnforcer(db *sql.DB) *Enforcer {
 func (e *Enforcer) EnforceConnLimit() {
 	// Get users with Simultaneous-Use > 0 who have more active sessions than allowed
 	rows, err := e.db.Query(`
-		SELECT r.username, CAST(r.value AS UNSIGNED) AS conn_limit,
+		SELECT r.username, CAST(r.value AS BIGINT) AS conn_limit,
 			(SELECT COUNT(*) FROM radacct WHERE username=r.username AND acctstoptime IS NULL) AS active
 		FROM radcheck r
 		JOIN customers c ON c.username = r.username AND c.status = 'active' AND c.deleted_at IS NULL
-		WHERE r.attribute = 'Simultaneous-Use' AND CAST(r.value AS UNSIGNED) > 0
+		WHERE r.attribute = 'Simultaneous-Use' AND CAST(r.value AS BIGINT) > 0
 		HAVING active > conn_limit
 	`)
 	if err != nil {
@@ -46,11 +46,11 @@ func (e *Enforcer) EnforceConnLimit() {
 		if excess <= 0 {
 			continue
 		}
-		// Kill oldest excess sessions
+		// Kill oldest excess sessions (PostgreSQL doesn't support LIMIT on UPDATE)
 		_, err := e.db.Exec(`
 			UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Connection-Limit'
-			WHERE username=? AND acctstoptime IS NULL
-			ORDER BY acctstarttime ASC LIMIT ?
+			WHERE ctid IN (SELECT ctid FROM radacct WHERE username=$1 AND acctstoptime IS NULL
+			ORDER BY acctstarttime ASC LIMIT $2)
 		`, username, excess)
 		if err != nil {
 			log.Printf("[enforcer] kill sessions for %s: %v", username, err)

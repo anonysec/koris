@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -19,7 +19,7 @@ func (s *Server) handleNodeGroupsLoad(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get all node groups with load balancing enabled
-	rows, err := s.DB.Query(`SELECT id, name, max_load_percent FROM node_groups WHERE load_balancing_enabled = 1 ORDER BY name ASC`)
+	rows, err := s.DB.Query(`SELECT id, name, max_load_percent FROM node_groups WHERE load_balancing_enabled = TRUE ORDER BY name ASC`)
 	if err != nil {
 		log.Printf("[loadbalance] failed to query node groups: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -55,7 +55,7 @@ func (s *Server) handleNodeGroupsLoad(w http.ResponseWriter, r *http.Request) {
 
 		// Get all nodes in this group with their capacities
 		nodeRows, err := s.DB.Query(
-			`SELECT id, name, public_ip, max_capacity FROM nodes WHERE group_id = ? AND status <> 'disabled' ORDER BY name ASC`,
+			`SELECT id, name, public_ip, max_capacity FROM nodes WHERE group_id = $1 AND status <> 'disabled' ORDER BY name ASC`,
 			g.ID,
 		)
 		if err != nil {
@@ -71,7 +71,7 @@ func (s *Server) handleNodeGroupsLoad(w http.ResponseWriter, r *http.Request) {
 
 			// Count active sessions for this node via radacct
 			_ = s.DB.QueryRow(
-				`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = ?`,
+				`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = $1`,
 				n.PublicIP,
 			).Scan(&n.ActiveSessions)
 
@@ -108,14 +108,14 @@ func (s *Server) handleNodeGroupsLoad(w http.ResponseWriter, r *http.Request) {
 func (s *Server) selectNodeForGroup(groupID int64) (int64, error) {
 	// Get the group's overload threshold
 	var maxLoadPercent int
-	err := s.DB.QueryRow(`SELECT max_load_percent FROM node_groups WHERE id = ?`, groupID).Scan(&maxLoadPercent)
+	err := s.DB.QueryRow(`SELECT max_load_percent FROM node_groups WHERE id = $1`, groupID).Scan(&maxLoadPercent)
 	if err != nil {
 		return 0, fmt.Errorf("group not found: %v", err)
 	}
 
 	// Get all active nodes in the group
 	rows, err := s.DB.Query(
-		`SELECT id, public_ip, max_capacity FROM nodes WHERE group_id = ? AND status <> 'disabled'`,
+		`SELECT id, public_ip, max_capacity FROM nodes WHERE group_id = $1 AND status <> 'disabled'`,
 		groupID,
 	)
 	if err != nil {
@@ -134,7 +134,7 @@ func (s *Server) selectNodeForGroup(groupID int64) (int64, error) {
 
 		var activeSessions int
 		_ = s.DB.QueryRow(
-			`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = ?`,
+			`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = $1`,
 			publicIP,
 		).Scan(&activeSessions)
 
@@ -153,13 +153,13 @@ func (s *Server) selectNodeForGroup(groupID int64) (int64, error) {
 // and if all nodes exceed 90%, flags the group as overloaded with a notification.
 func (s *Server) checkGroupCapacity(groupID int64) (overloaded bool, notifications []string) {
 	var groupName string
-	err := s.DB.QueryRow(`SELECT name FROM node_groups WHERE id = ?`, groupID).Scan(&groupName)
+	err := s.DB.QueryRow(`SELECT name FROM node_groups WHERE id = $1`, groupID).Scan(&groupName)
 	if err != nil {
 		return false, nil
 	}
 
 	rows, err := s.DB.Query(
-		`SELECT id, name, public_ip, max_capacity FROM nodes WHERE group_id = ? AND status <> 'disabled'`,
+		`SELECT id, name, public_ip, max_capacity FROM nodes WHERE group_id = $1 AND status <> 'disabled'`,
 		groupID,
 	)
 	if err != nil {
@@ -184,7 +184,7 @@ func (s *Server) checkGroupCapacity(groupID int64) (overloaded bool, notificatio
 
 		var activeSessions int
 		_ = s.DB.QueryRow(
-			`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = ?`,
+			`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = $1`,
 			publicIP,
 		).Scan(&activeSessions)
 

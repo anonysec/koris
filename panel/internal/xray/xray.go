@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 // Package xray provides the Xray/VLESS management system for KorisPanel.
 // It handles Xray configuration, inbound protocol management (VLESS, VMess,
@@ -110,7 +110,7 @@ func (s *XrayService) GetConfig(ctx context.Context, nodeID int64) (*XrayConfig,
 	row := s.db.QueryRowContext(ctx, `
 		SELECT node_id, enabled, config_json, reality_config_json,
 		       last_synced_at, created_at, updated_at
-		FROM xray_configs WHERE node_id = ?`, nodeID)
+		FROM xray_configs WHERE node_id = $1`, nodeID)
 
 	var cfg XrayConfig
 	var configJSON []byte
@@ -187,11 +187,11 @@ func (s *XrayService) SaveConfig(ctx context.Context, cfg *XrayConfig) error {
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO xray_configs (node_id, enabled, config_json, reality_config_json)
-		VALUES (?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			enabled = VALUES(enabled),
-			config_json = VALUES(config_json),
-			reality_config_json = VALUES(reality_config_json),
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (node_id) DO UPDATE SET
+			enabled = EXCLUDED.enabled,
+			config_json = EXCLUDED.config_json,
+			reality_config_json = EXCLUDED.reality_config_json,
 			updated_at = CURRENT_TIMESTAMP`,
 		cfg.NodeID, cfg.Enabled, configJSON, realityJSON,
 	)
@@ -205,7 +205,7 @@ func (s *XrayService) SaveConfig(ctx context.Context, cfg *XrayConfig) error {
 
 // DeleteConfig removes the Xray configuration for a node.
 func (s *XrayService) DeleteConfig(ctx context.Context, nodeID int64) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM xray_configs WHERE node_id = ?`, nodeID)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM xray_configs WHERE node_id = $1`, nodeID)
 	if err != nil {
 		return fmt.Errorf("delete xray config: %w", err)
 	}

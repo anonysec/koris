@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -124,7 +124,7 @@ func (s *Server) bulkSetStatus(customerID int64, status, actor, ip string) error
 		return err
 	}
 
-	if _, err := s.DB.Exec(`UPDATE customers SET status=? WHERE id=? AND deleted_at IS NULL`, status, customerID); err != nil {
+	if _, err := s.DB.Exec(`UPDATE customers SET status=$1 WHERE id=$2 AND deleted_at IS NULL`, status, customerID); err != nil {
 		return err
 	}
 
@@ -146,7 +146,7 @@ func (s *Server) bulkDelete(customerID int64, actor, ip string) error {
 		return err
 	}
 
-	res, err := s.DB.Exec(`UPDATE customers SET deleted_at=NOW(), status='deleted' WHERE id=? AND deleted_at IS NULL`, customerID)
+	res, err := s.DB.Exec(`UPDATE customers SET deleted_at=NOW(), status='deleted' WHERE id=$1 AND deleted_at IS NULL`, customerID)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func (s *Server) bulkTrafficReset(customerID int64, actor, ip string) error {
 	// 1. Look up customer username
 	var username string
 	var status string
-	err := s.DB.QueryRow(`SELECT username, status FROM customers WHERE id=? AND deleted_at IS NULL LIMIT 1`, customerID).Scan(&username, &status)
+	err := s.DB.QueryRow(`SELECT username, status FROM customers WHERE id=$1 AND deleted_at IS NULL LIMIT 1`, customerID).Scan(&username, &status)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("customer not found")
 	}
@@ -180,13 +180,13 @@ func (s *Server) bulkTrafficReset(customerID int64, actor, ip string) error {
 	}
 
 	// 2. Zero radacct counters for active sessions
-	_, err = s.DB.Exec(`UPDATE radacct SET acctinputoctets=0, acctoutputoctets=0 WHERE username=? AND acctstoptime IS NULL`, username)
+	_, err = s.DB.Exec(`UPDATE radacct SET acctinputoctets=0, acctoutputoctets=0 WHERE username=$1 AND acctstoptime IS NULL`, username)
 	if err != nil {
 		return fmt.Errorf("failed to reset radacct counters: %v", err)
 	}
 
 	// 3. Insert wallet_transaction of type "adjustment" with description "Traffic reset (bulk)"
-	_, err = s.DB.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES(?, ?, 0, 'adjustment', 'Traffic reset (bulk)', ?)`,
+	_, err = s.DB.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES($1, $2, 0, 'adjustment', 'Traffic reset (bulk)', $3)`,
 		customerID, username, actor)
 	if err != nil {
 		return fmt.Errorf("failed to insert wallet transaction: %v", err)
@@ -194,7 +194,7 @@ func (s *Server) bulkTrafficReset(customerID int64, actor, ip string) error {
 
 	// 4. If customer status == 'limited', update to 'active'
 	if status == "limited" {
-		_, err = s.DB.Exec(`UPDATE customers SET status='active' WHERE id=? AND deleted_at IS NULL`, customerID)
+		_, err = s.DB.Exec(`UPDATE customers SET status='active' WHERE id=$1 AND deleted_at IS NULL`, customerID)
 		if err != nil {
 			return fmt.Errorf("failed to update customer status: %v", err)
 		}
@@ -253,7 +253,7 @@ func (s *Server) bulkExtend(customerID int64, params map[string]any, actor, ip s
 	days, _ := toPositiveInt(params["days"])
 
 	res, err := s.DB.Exec(
-		`UPDATE subscriptions SET expires_at = DATE_ADD(expires_at, INTERVAL ? DAY) WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`,
+		`UPDATE subscriptions SET expires_at = expires_at + INTERVAL '1 day' * $1 WHERE customer_id=$2 AND status='active' ORDER BY id DESC LIMIT 1`,
 		days, customerID,
 	)
 	if err != nil {
@@ -284,18 +284,18 @@ func (s *Server) bulkChangePlan(customerID int64, params map[string]any, actor, 
 
 	// Verify plan exists
 	var planExists int
-	err = s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=? AND is_active=1 LIMIT 1`, planID).Scan(&planExists)
+	err = s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=$1 AND is_active=TRUE LIMIT 1`, planID).Scan(&planExists)
 	if err != nil {
 		return fmt.Errorf("plan not found or inactive")
 	}
 
-	_, err = s.DB.Exec(`UPDATE customers SET plan_id=? WHERE id=? AND deleted_at IS NULL`, planID, customerID)
+	_, err = s.DB.Exec(`UPDATE customers SET plan_id=$1 WHERE id=$2 AND deleted_at IS NULL`, planID, customerID)
 	if err != nil {
 		return fmt.Errorf("failed to change plan: %v", err)
 	}
 
 	// Update active subscription's plan reference
-	_, _ = s.DB.Exec(`UPDATE subscriptions SET plan_id=? WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`, planID, customerID)
+	_, _ = s.DB.Exec(`UPDATE subscriptions SET plan_id=$1 WHERE customer_id=$2 AND status='active' ORDER BY id DESC LIMIT 1`, planID, customerID)
 
 	s.logAudit(actor, "customer.plan_changed", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{
 		"username": username, "plan_id": planID, "bulk": true,
@@ -317,13 +317,13 @@ func (s *Server) bulkAssignTag(customerID int64, params map[string]any, actor, i
 
 	// Verify tag exists
 	var tagExists int
-	err = s.DB.QueryRow(`SELECT 1 FROM user_tags WHERE id=? LIMIT 1`, tagID).Scan(&tagExists)
+	err = s.DB.QueryRow(`SELECT 1 FROM user_tags WHERE id=$1 LIMIT 1`, tagID).Scan(&tagExists)
 	if err != nil {
 		return fmt.Errorf("tag not found")
 	}
 
 	// INSERT IGNORE for idempotency — no error if already assigned
-	_, err = s.DB.Exec(`INSERT IGNORE INTO customer_tags (customer_id, tag_id) VALUES (?, ?)`, customerID, tagID)
+	_, err = s.DB.Exec(`INSERT INTO customer_tags (customer_id, tag_id) VALUES ($1, $2) ON CONFLICT (customer_id, tag_id) DO NOTHING`, customerID, tagID)
 	if err != nil {
 		return fmt.Errorf("failed to assign tag: %v", err)
 	}

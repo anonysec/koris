@@ -1,4 +1,4 @@
-package backup
+﻿package backup
 
 import (
 	"archive/tar"
@@ -110,11 +110,11 @@ func LoadConfigFromDB(db *sql.DB) Config {
 
 // UpdateConfig persists schedule and retention count to panel_settings.
 func (s *Service) UpdateConfig(schedule string, retentionCount int) error {
-	_, err := s.db.Exec(`UPDATE panel_settings SET setting_value = ? WHERE setting_key = 'backup_schedule'`, schedule)
+	_, err := s.db.Exec(`UPDATE panel_settings SET setting_value = $1 WHERE setting_key = 'backup_schedule'`, schedule)
 	if err != nil {
 		return fmt.Errorf("update backup_schedule: %w", err)
 	}
-	_, err = s.db.Exec(`UPDATE panel_settings SET setting_value = ? WHERE setting_key = 'backup_retention_count'`, strconv.Itoa(retentionCount))
+	_, err = s.db.Exec(`UPDATE panel_settings SET setting_value = $1 WHERE setting_key = 'backup_retention_count'`, strconv.Itoa(retentionCount))
 	if err != nil {
 		return fmt.Errorf("update backup_retention_count: %w", err)
 	}
@@ -191,7 +191,7 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 	now := time.Now()
 	filename := generateFilename(now)
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO backups (filename, status, type, started_at) VALUES (?, 'in_progress', ?, NOW())`,
+		`INSERT INTO backups (filename, status, type, started_at) VALUES ($1, 'in_progress', $2, NOW())`,
 		filename, backupType)
 	if err != nil {
 		return 0, fmt.Errorf("insert backup record: %w", err)
@@ -260,7 +260,7 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 
 	// 11. Update record to completed
 	_, _ = s.db.ExecContext(ctx,
-		`UPDATE backups SET status='completed', size_bytes=?, checksum=?, nodes_included=?, nodes_skipped=?, completed_at=NOW() WHERE id=?`,
+		`UPDATE backups SET status='completed', size_bytes=$1, checksum=$2, nodes_included=$3, nodes_skipped=$4, completed_at=NOW() WHERE id=$5`,
 		sizeBytes, checksum, marshalJSON(nodesIncluded), marshalJSON(nodesSkipped), backupID)
 
 	// 12. Apply retention policy
@@ -278,7 +278,7 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 // failBackup updates a backup record to "failed" with the given error message.
 func (s *Service) failBackup(ctx context.Context, id int64, errMsg string) {
 	_, _ = s.db.ExecContext(ctx,
-		`UPDATE backups SET status='failed', error_message=?, completed_at=NOW() WHERE id=?`,
+		`UPDATE backups SET status='failed', error_message=$1, completed_at=NOW() WHERE id=$2`,
 		errMsg, id)
 }
 
@@ -425,7 +425,7 @@ func (s *Service) ApplyRetention(ctx context.Context) {
 		os.Remove(archivePath)
 		os.Remove(archivePath + ".sha256")
 		_, _ = s.db.ExecContext(ctx,
-			`DELETE FROM backups WHERE id=?`, r.id)
+			`DELETE FROM backups WHERE id=$1`, r.id)
 	}
 }
 
@@ -450,7 +450,7 @@ func (s *Service) CreateBackupAsync(ctx context.Context) (int64, error) {
 	now := time.Now()
 	filename := generateFilename(now)
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO backups (filename, status, type, started_at) VALUES (?, 'in_progress', 'manual', NOW())`,
+		`INSERT INTO backups (filename, status, type, started_at) VALUES ($1, 'in_progress', 'manual', NOW())`,
 		filename)
 	if err != nil {
 		return 0, fmt.Errorf("insert backup record: %w", err)
@@ -470,13 +470,13 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 
 	// Get filename from record
 	var filename string
-	if err := s.db.QueryRowContext(ctx, `SELECT filename FROM backups WHERE id=?`, backupID).Scan(&filename); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT filename FROM backups WHERE id=$1`, backupID).Scan(&filename); err != nil {
 		s.failBackup(ctx, backupID, "record not found: "+err.Error())
 		return
 	}
 
 	// Update type
-	_, _ = s.db.ExecContext(ctx, `UPDATE backups SET type=? WHERE id=?`, backupType, backupID)
+	_, _ = s.db.ExecContext(ctx, `UPDATE backups SET type=$1 WHERE id=$2`, backupType, backupID)
 
 	// Execute mysqldump
 	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
@@ -536,7 +536,7 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 
 	// Update record to completed
 	_, _ = s.db.ExecContext(ctx,
-		`UPDATE backups SET status='completed', size_bytes=?, checksum=?, nodes_included=?, nodes_skipped=?, completed_at=NOW() WHERE id=?`,
+		`UPDATE backups SET status='completed', size_bytes=$1, checksum=$2, nodes_included=$3, nodes_skipped=$4, completed_at=NOW() WHERE id=$5`,
 		sizeBytes, checksum, marshalJSON(nodesIncluded), marshalJSON(nodesSkipped), backupID)
 
 	// Apply retention policy
@@ -588,7 +588,7 @@ func countTablesAndRows(archivePath string) (tableCount int, totalRowCount int64
 
 	// Scan dump.sql line by line
 	createTableRe := regexp.MustCompile(`(?i)^CREATE\s+TABLE\s`)
-	insertRe := regexp.MustCompile(`(?i)^INSERT\s+INTO\s`)
+	insertRe := regexp.MustCompile(`($1i)^INSERT\s+INTO\s`)
 
 	scanner := bufio.NewScanner(tr)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB line buffer for large INSERT statements

@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -127,7 +127,7 @@ func (s *Server) createGateway(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := s.DB.Exec(
-		`INSERT INTO payment_gateways (name, display_name, config_json, is_active) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO payment_gateways (name, display_name, config_json, is_active) VALUES ($1, $2, $3, $4)`,
 		in.Name, in.DisplayName, configStr, isActive,
 	)
 	if err != nil {
@@ -170,11 +170,11 @@ func (s *Server) updateGateway(w http.ResponseWriter, r *http.Request, id int64)
 	var args []any
 
 	if in.DisplayName != nil {
-		setClauses = append(setClauses, "display_name = ?")
+		setClauses = append(setClauses, "display_name = $1")
 		args = append(args, *in.DisplayName)
 	}
 	if len(in.ConfigJSON) > 0 {
-		setClauses = append(setClauses, "config_json = ?")
+		setClauses = append(setClauses, "config_json = $1")
 		args = append(args, string(in.ConfigJSON))
 	}
 	if in.IsActive != nil {
@@ -182,7 +182,7 @@ func (s *Server) updateGateway(w http.ResponseWriter, r *http.Request, id int64)
 		if *in.IsActive {
 			active = 1
 		}
-		setClauses = append(setClauses, "is_active = ?")
+		setClauses = append(setClauses, "is_active = $1")
 		args = append(args, active)
 	}
 
@@ -215,13 +215,13 @@ func (s *Server) updateGateway(w http.ResponseWriter, r *http.Request, id int64)
 func (s *Server) deleteGateway(w http.ResponseWriter, r *http.Request, id int64) {
 	// Get the gateway name before deletion for registry deregistration
 	var name string
-	err := s.DB.QueryRow(`SELECT name FROM payment_gateways WHERE id = ?`, id).Scan(&name)
+	err := s.DB.QueryRow(`SELECT name FROM payment_gateways WHERE id = $1`, id).Scan(&name)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
 
-	_, err = s.DB.Exec(`DELETE FROM payment_gateways WHERE id = ?`, id)
+	_, err = s.DB.Exec(`DELETE FROM payment_gateways WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("[payment] delete gateway failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})

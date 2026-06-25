@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -18,7 +18,7 @@ func CheckSLABreachesStandalone(db *sql.DB, notify func(string)) {
 		SELECT id, subject, priority
 		FROM tickets
 		WHERE status IN ('open', 'in_progress')
-		  AND sla_breached = 0
+		  AND sla_breached = FALSE
 		  AND sla_deadline_at IS NOT NULL
 		  AND sla_deadline_at < NOW()
 	`)
@@ -36,7 +36,7 @@ func CheckSLABreachesStandalone(db *sql.DB, notify func(string)) {
 			continue
 		}
 
-		_, err := db.Exec(`UPDATE tickets SET sla_breached = 1 WHERE id = ?`, ticketID)
+		_, err := db.Exec(`UPDATE tickets SET sla_breached = TRUE WHERE id = $1`, ticketID)
 		if err != nil {
 			log.Printf("[sla] failed to mark ticket %d as breached: %v", ticketID, err)
 			continue
@@ -104,7 +104,7 @@ func AutoCloseStaleTicketsStandalone(db *sql.DB, notify func(string)) {
 
 	for _, st := range staleTickets {
 		// Close the ticket
-		_, err := db.Exec(`UPDATE tickets SET status = 'closed', closed_at = NOW() WHERE id = ?`, st.ID)
+		_, err := db.Exec(`UPDATE tickets SET status = 'closed', closed_at = NOW() WHERE id = $1`, st.ID)
 		if err != nil {
 			log.Printf("[sla] failed to auto-close ticket %d: %v", st.ID, err)
 			continue
@@ -112,7 +112,7 @@ func AutoCloseStaleTicketsStandalone(db *sql.DB, notify func(string)) {
 
 		// Insert system message
 		_, err = db.Exec(
-			`INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message) VALUES (?, 'system', 'System', ?)`,
+			`INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, message) VALUES ($1, 'system', 'System', $2)`,
 			st.ID, "Ticket auto-closed due to inactivity",
 		)
 		if err != nil {

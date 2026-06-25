@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -230,7 +230,7 @@ func (s *Server) handleXrayInboundCreate(w http.ResponseWriter, r *http.Request)
 	result, err := s.DB.Exec(`
 		INSERT INTO xray_inbounds (customer_id, node_id, uuid, protocol, transport, security,
 			port, server_name, public_key, short_id, private_key, path, service_name, core_name, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active')`,
 		in.CustomerID, in.NodeID, uuid, in.Protocol, in.Transport, in.Security,
 		in.Port, nullIfEmpty(in.ServerName), nullIfEmpty(in.PublicKey), nullIfEmpty(in.ShortID),
 		nullIfEmpty(in.PrivateKey), nullIfEmpty(in.Path), nullIfEmpty(in.ServiceName), in.CoreName,
@@ -311,7 +311,7 @@ func (s *Server) handleXrayInboundGet(w http.ResponseWriter, r *http.Request, id
 		FROM xray_inbounds xi
 		LEFT JOIN nodes n ON n.id = xi.node_id
 		LEFT JOIN customers c ON c.id = xi.customer_id
-		WHERE xi.id = ?`, id).Scan(
+		WHERE xi.id = $1`, id).Scan(
 		&ib.ID, &ib.CustomerID, &ib.NodeID, &ib.UUID, &ib.Protocol, &ib.Transport,
 		&ib.Security, &ib.Port, &ib.ServerName, &ib.PublicKey, &ib.ShortID, &ib.PrivateKey,
 		&ib.Path, &ib.ServiceName, &ib.Status, &ib.RxBytes, &ib.TxBytes,
@@ -356,7 +356,7 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 		SELECT node_id, uuid, protocol, transport, security, port,
 		       COALESCE(server_name,''), COALESCE(public_key,''), COALESCE(short_id,''),
 		       COALESCE(private_key,''), COALESCE(path,''), COALESCE(service_name,'')
-		FROM xray_inbounds WHERE id = ?`, id).Scan(
+		FROM xray_inbounds WHERE id = $1`, id).Scan(
 		&nodeID, &uuid, &protocol, &transport, &security, &port,
 		&serverName, &publicKey, &shortID, &privateKey, &path, &serviceName,
 	)
@@ -374,7 +374,7 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_port"})
 			return
 		}
-		setClauses = append(setClauses, "port = ?")
+		setClauses = append(setClauses, "port = $1")
 		setArgs = append(setArgs, *in.Port)
 		port = *in.Port
 	}
@@ -385,7 +385,7 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_transport"})
 			return
 		}
-		setClauses = append(setClauses, "transport = ?")
+		setClauses = append(setClauses, "transport = $1")
 		setArgs = append(setArgs, *in.Transport)
 		transport = *in.Transport
 	}
@@ -396,37 +396,37 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_security"})
 			return
 		}
-		setClauses = append(setClauses, "security = ?")
+		setClauses = append(setClauses, "security = $1")
 		setArgs = append(setArgs, *in.Security)
 		security = *in.Security
 	}
 	if in.ServerName != nil {
-		setClauses = append(setClauses, "server_name = ?")
+		setClauses = append(setClauses, "server_name = $1")
 		setArgs = append(setArgs, nullIfEmpty(*in.ServerName))
 		serverName = *in.ServerName
 	}
 	if in.PublicKey != nil {
-		setClauses = append(setClauses, "public_key = ?")
+		setClauses = append(setClauses, "public_key = $1")
 		setArgs = append(setArgs, nullIfEmpty(*in.PublicKey))
 		publicKey = *in.PublicKey
 	}
 	if in.ShortID != nil {
-		setClauses = append(setClauses, "short_id = ?")
+		setClauses = append(setClauses, "short_id = $1")
 		setArgs = append(setArgs, nullIfEmpty(*in.ShortID))
 		shortID = *in.ShortID
 	}
 	if in.PrivateKey != nil {
-		setClauses = append(setClauses, "private_key = ?")
+		setClauses = append(setClauses, "private_key = $1")
 		setArgs = append(setArgs, nullIfEmpty(*in.PrivateKey))
 		privateKey = *in.PrivateKey
 	}
 	if in.Path != nil {
-		setClauses = append(setClauses, "path = ?")
+		setClauses = append(setClauses, "path = $1")
 		setArgs = append(setArgs, nullIfEmpty(*in.Path))
 		path = *in.Path
 	}
 	if in.ServiceName != nil {
-		setClauses = append(setClauses, "service_name = ?")
+		setClauses = append(setClauses, "service_name = $1")
 		setArgs = append(setArgs, nullIfEmpty(*in.ServiceName))
 		serviceName = *in.ServiceName
 	}
@@ -437,7 +437,7 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_status"})
 			return
 		}
-		setClauses = append(setClauses, "status = ?")
+		setClauses = append(setClauses, "status = $1")
 		setArgs = append(setArgs, *in.Status)
 	}
 
@@ -454,7 +454,7 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 		}
 		updateSQL += clause
 	}
-	updateSQL += " WHERE id = ?"
+	updateSQL += " WHERE id = $1"
 	setArgs = append(setArgs, id)
 
 	_, err = s.DB.Exec(updateSQL, setArgs...)
@@ -496,7 +496,7 @@ func (s *Server) handleXrayInboundDelete(w http.ResponseWriter, r *http.Request,
 	// Get inbound details for the task payload
 	var nodeID int64
 	var uuid string
-	err := s.DB.QueryRow(`SELECT node_id, uuid FROM xray_inbounds WHERE id = ?`, id).Scan(&nodeID, &uuid)
+	err := s.DB.QueryRow(`SELECT node_id, uuid FROM xray_inbounds WHERE id = $1`, id).Scan(&nodeID, &uuid)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -506,7 +506,7 @@ func (s *Server) handleXrayInboundDelete(w http.ResponseWriter, r *http.Request,
 	log.Printf("[xray] xray_remove for node %d inbound %d (dispatched via gRPC)", nodeID, id)
 
 	// Delete from xray_inbounds
-	_, err = s.DB.Exec(`DELETE FROM xray_inbounds WHERE id = ?`, id)
+	_, err = s.DB.Exec(`DELETE FROM xray_inbounds WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("[xray] delete inbound %d failed: %v", id, err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})

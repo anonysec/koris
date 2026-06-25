@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -21,7 +21,7 @@ func (s *Server) resellerSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		var billingMode string
-		err := s.DB.QueryRow(`SELECT COALESCE(billing_mode, 'manual') FROM admins WHERE username=?`, actor).Scan(&billingMode)
+		err := s.DB.QueryRow(`SELECT COALESCE(billing_mode, 'manual') FROM admins WHERE username=$1`, actor).Scan(&billingMode)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -41,7 +41,7 @@ func (s *Server) resellerSettings(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_mode"})
 			return
 		}
-		if _, err := s.DB.Exec(`UPDATE admins SET billing_mode=? WHERE username=?`, in.BillingMode, actor); err != nil {
+		if _, err := s.DB.Exec(`UPDATE admins SET billing_mode=$1 WHERE username=$2`, in.BillingMode, actor); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -66,13 +66,13 @@ func (s *Server) resellerDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var credit float64
-	_ = s.DB.QueryRow(`SELECT COALESCE(credit, 0) FROM admins WHERE username=?`, actor).Scan(&credit)
+	_ = s.DB.QueryRow(`SELECT COALESCE(credit, 0) FROM admins WHERE username=$1`, actor).Scan(&credit)
 
-	totalUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=? AND deleted_at IS NULL`, actor)
-	activeUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=? AND deleted_at IS NULL AND status='active'`, actor)
+	totalUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=$1 AND deleted_at IS NULL`, actor)
+	activeUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=$1 AND deleted_at IS NULL AND status='active'`, actor)
 
 	var totalUsageBytes int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = ? AND c.deleted_at IS NULL`, actor).Scan(&totalUsageBytes)
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = $1 AND c.deleted_at IS NULL`, actor).Scan(&totalUsageBytes)
 
 	// Daily usage for last 7 days
 	dailyUsage := make([]int64, 7)
@@ -82,7 +82,7 @@ func (s *Server) resellerDashboard(w http.ResponseWriter, r *http.Request) {
 		start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
 		end := start.Add(24 * time.Hour)
 		var bytes int64
-		_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = ? AND c.deleted_at IS NULL AND ra.acctstarttime >= ? AND ra.acctstarttime < ?`, actor, start, end).Scan(&bytes)
+		_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = $1 AND c.deleted_at IS NULL AND ra.acctstarttime >= $2 AND ra.acctstarttime < $3`, actor, start, end).Scan(&bytes)
 		dailyUsage[6-i] = bytes
 	}
 
@@ -117,7 +117,7 @@ func (s *Server) resellerPlanPrices(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listResellerPlanPrices(w http.ResponseWriter, actor string) {
 	var resellerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM admins WHERE username=?`, actor).Scan(&resellerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM admins WHERE username=$1`, actor).Scan(&resellerID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -126,9 +126,9 @@ func (s *Server) listResellerPlanPrices(w http.ResponseWriter, actor string) {
 		SELECT p.id, p.name, p.data_gb, p.speed_mbps, p.duration_days, p.price,
 			COALESCE(rp.sell_price, 0)
 		FROM plans p
-		INNER JOIN reseller_allowed_plans rap ON rap.plan_id = p.id AND rap.reseller_id = ?
-		LEFT JOIN reseller_plan_prices rp ON rp.plan_id = p.id AND rp.reseller_id = ?
-		WHERE p.is_active = 1 AND COALESCE(p.billing_type, 'quota') != 'payg'
+		INNER JOIN reseller_allowed_plans rap ON rap.plan_id = p.id AND rap.reseller_id = $1
+		LEFT JOIN reseller_plan_prices rp ON rp.plan_id = p.id AND rp.reseller_id = $2
+		WHERE p.is_active = TRUE AND COALESCE(p.billing_type, 'quota') != 'payg'
 		ORDER BY p.sort_order ASC, p.id DESC`, resellerID, resellerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -172,15 +172,15 @@ func (s *Server) setResellerPlanPrice(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	var resellerID int64
-	if err := s.DB.QueryRow(`SELECT id FROM admins WHERE username=?`, actor).Scan(&resellerID); err != nil {
+	if err := s.DB.QueryRow(`SELECT id FROM admins WHERE username=$1`, actor).Scan(&resellerID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 
 	_, err := s.DB.Exec(`
 		INSERT INTO reseller_plan_prices (reseller_id, plan_id, sell_price)
-		VALUES (?, ?, ?)
-		ON DUPLICATE KEY UPDATE sell_price = VALUES(sell_price), updated_at = NOW()`,
+		VALUES ($1, $2, $3)
+		ON CONFLICT (reseller_id, plan_id) DO UPDATE SET sell_price = EXCLUDED.sell_price, updated_at = NOW()`,
 		resellerID, in.PlanID, in.SellPrice)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -254,7 +254,7 @@ func (s *Server) listResellerTickets(w http.ResponseWriter, actor string) {
 	rows, err := s.DB.Query(`
 		SELECT id, subject, status, created_at, updated_at
 		FROM reseller_tickets
-		WHERE reseller_username = ?
+		WHERE reseller_username = $1
 		ORDER BY id DESC LIMIT 200`, actor)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -300,14 +300,14 @@ func (s *Server) createResellerTicket(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 
-	res, err := s.DB.Exec(`INSERT INTO reseller_tickets (reseller_username, subject) VALUES (?, ?)`, actor, in.Subject)
+	res, err := s.DB.Exec(`INSERT INTO reseller_tickets (reseller_username, subject) VALUES ($1, $2)`, actor, in.Subject)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	ticketID, _ := res.LastInsertId()
 
-	_, err = s.DB.Exec(`INSERT INTO reseller_ticket_messages (ticket_id, sender, message) VALUES (?, ?, ?)`, ticketID, actor, in.Message)
+	_, err = s.DB.Exec(`INSERT INTO reseller_ticket_messages (ticket_id, sender, message) VALUES ($1, $2, $3)`, ticketID, actor, in.Message)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -327,13 +327,13 @@ func (s *Server) getResellerTicket(w http.ResponseWriter, actor string, ticketID
 
 	var subject, status string
 	var created, updated time.Time
-	err := s.DB.QueryRow(`SELECT subject, status, created_at, updated_at FROM reseller_tickets WHERE id=? AND reseller_username=?`, ticketID, actor).Scan(&subject, &status, &created, &updated)
+	err := s.DB.QueryRow(`SELECT subject, status, created_at, updated_at FROM reseller_tickets WHERE id=$1 AND reseller_username=$2`, ticketID, actor).Scan(&subject, &status, &created, &updated)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
 
-	rows, err := s.DB.Query(`SELECT id, sender, message, created_at FROM reseller_ticket_messages WHERE ticket_id=? ORDER BY id ASC`, ticketID)
+	rows, err := s.DB.Query(`SELECT id, sender, message, created_at FROM reseller_ticket_messages WHERE ticket_id=$1 ORDER BY id ASC`, ticketID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -378,19 +378,19 @@ func (s *Server) replyResellerTicket(w http.ResponseWriter, r *http.Request, act
 
 	// Verify ticket belongs to this reseller
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM reseller_tickets WHERE id=? AND reseller_username=?`, ticketID, actor).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM reseller_tickets WHERE id=$1 AND reseller_username=$2`, ticketID, actor).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
 
-	_, err := s.DB.Exec(`INSERT INTO reseller_ticket_messages (ticket_id, sender, message) VALUES (?, ?, ?)`, ticketID, actor, in.Message)
+	_, err := s.DB.Exec(`INSERT INTO reseller_ticket_messages (ticket_id, sender, message) VALUES ($1, $2, $3)`, ticketID, actor, in.Message)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 
 	// Reopen ticket if it was closed
-	_, _ = s.DB.Exec(`UPDATE reseller_tickets SET status='open', updated_at=NOW() WHERE id=?`, ticketID)
+	_, _ = s.DB.Exec(`UPDATE reseller_tickets SET status='open', updated_at=NOW() WHERE id=$1`, ticketID)
 
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -399,11 +399,11 @@ func (s *Server) replyResellerTicket(w http.ResponseWriter, r *http.Request, act
 
 func (s *Server) closeResellerTicket(w http.ResponseWriter, actor string, ticketID int64) {
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM reseller_tickets WHERE id=? AND reseller_username=?`, ticketID, actor).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM reseller_tickets WHERE id=$1 AND reseller_username=$2`, ticketID, actor).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
-	_, _ = s.DB.Exec(`UPDATE reseller_tickets SET status='closed', updated_at=NOW() WHERE id=?`, ticketID)
+	_, _ = s.DB.Exec(`UPDATE reseller_tickets SET status='closed', updated_at=NOW() WHERE id=$1`, ticketID)
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -437,7 +437,7 @@ func (s *Server) resellerWalletAdjust(w http.ResponseWriter, r *http.Request) {
 
 	// Verify this customer belongs to the reseller
 	var username string
-	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? AND created_by=? AND deleted_at IS NULL`, customerID, actor).Scan(&username); err != nil {
+	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=$1 AND created_by=$2 AND deleted_at IS NULL`, customerID, actor).Scan(&username); err != nil {
 		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "not_your_user"})
 		return
 	}

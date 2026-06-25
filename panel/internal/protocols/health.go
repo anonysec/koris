@@ -35,7 +35,7 @@ func CheckProtocolHealth(db *sql.DB) {
 		SELECT nvc.node_id, n.public_ip, nvc.protocol, nvc.port
 		FROM node_vpn_configs nvc
 		JOIN nodes n ON n.id = nvc.node_id
-		WHERE nvc.enabled = 1 AND n.status IN ('online', 'stale')
+		WHERE nvc.enabled = TRUE AND n.status IN ('online', 'stale')
 		  AND nvc.port > 0`)
 	if err != nil {
 		log.Printf("[protocols] health check query failed: %v", err)
@@ -74,8 +74,8 @@ func CheckProtocolHealth(db *sql.DB) {
 		// Upsert into node_services table (service name matches protocol name)
 		_, _ = db.Exec(`
 			INSERT INTO node_services (node_id, service, status, updated_at)
-			VALUES (?, ?, ?, NOW())
-			ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = NOW()`,
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (node_id, service) DO UPDATE SET status = EXCLUDED.status, updated_at = NOW()`,
 			t.NodeID, t.Protocol, status)
 	}
 }

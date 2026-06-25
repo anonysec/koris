@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -74,7 +74,7 @@ func (s *Server) aiDiagnosticsHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.DB.QueryContext(r.Context(),
-		`SELECT id, score, trend, checks_json, generated_at FROM health_scores WHERE generated_at >= ? AND generated_at <= ? ORDER BY generated_at DESC LIMIT 1000`,
+		`SELECT id, score, trend, checks_json, generated_at FROM health_scores WHERE generated_at >= $1 AND generated_at <= $2 ORDER BY generated_at DESC LIMIT 1000`,
 		from, to,
 	)
 	if err != nil {
@@ -210,7 +210,7 @@ func (s *Server) aiHealingRuleByID(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "action_mode must be 'auto_fix' or 'alert_only'"})
 			return
 		}
-		sets = append(sets, "action_mode=?")
+		sets = append(sets, "action_mode=$1")
 		args = append(args, mode)
 	}
 	if in.CooldownSeconds != nil {
@@ -218,7 +218,7 @@ func (s *Server) aiHealingRuleByID(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "cooldown_seconds must be non-negative"})
 			return
 		}
-		sets = append(sets, "cooldown_seconds=?")
+		sets = append(sets, "cooldown_seconds=$1")
 		args = append(args, *in.CooldownSeconds)
 	}
 	if in.Enabled != nil {
@@ -226,11 +226,11 @@ func (s *Server) aiHealingRuleByID(w http.ResponseWriter, r *http.Request) {
 		if *in.Enabled {
 			enabled = 1
 		}
-		sets = append(sets, "enabled=?")
+		sets = append(sets, "enabled=$1")
 		args = append(args, enabled)
 	}
 	if in.ThresholdsJSON != nil {
-		sets = append(sets, "thresholds_json=?")
+		sets = append(sets, "thresholds_json=$1")
 		args = append(args, string(in.ThresholdsJSON))
 	}
 
@@ -241,7 +241,7 @@ func (s *Server) aiHealingRuleByID(w http.ResponseWriter, r *http.Request) {
 
 	args = append(args, id)
 	result, err := s.DB.ExecContext(r.Context(),
-		`UPDATE healing_rules SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
+		`UPDATE healing_rules SET `+strings.Join(sets, ",")+` WHERE id=$1`, args...)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -283,6 +283,7 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 	// Build WHERE clause
 	where := []string{"1=1"}
 	args := []any{}
+	argN := 1
 
 	if fromStr != "" {
 		from, err := time.Parse(time.RFC3339, fromStr)
@@ -290,8 +291,9 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid 'from' parameter"})
 			return
 		}
-		where = append(where, "created_at >= ?")
+		where = append(where, fmt.Sprintf("created_at >= $%d", argN))
 		args = append(args, from)
+		argN++
 	}
 	if toStr != "" {
 		to, err := time.Parse(time.RFC3339, toStr)
@@ -299,16 +301,19 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid 'to' parameter"})
 			return
 		}
-		where = append(where, "created_at <= ?")
+		where = append(where, fmt.Sprintf("created_at <= $%d", argN))
 		args = append(args, to)
+		argN++
 	}
 	if ruleKey != "" {
-		where = append(where, "rule_key = ?")
+		where = append(where, fmt.Sprintf("rule_key = $%d", argN))
 		args = append(args, ruleKey)
+		argN++
 	}
 	if status != "" {
-		where = append(where, "result_status = ?")
+		where = append(where, fmt.Sprintf("result_status = $%d", argN))
 		args = append(args, status)
+		argN++
 	}
 
 	whereClause := strings.Join(where, " AND ")
@@ -326,10 +331,12 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 
 	// Query page
 	offset := (page - 1) * pageSize
+	limitN := len(args) + 1
+	offsetN := len(args) + 2
 	args = append(args, pageSize, offset)
 
 	rows, err := s.DB.QueryContext(r.Context(),
-		`SELECT id, rule_key, resource_type, resource_id, action_performed, result_status, COALESCE(error_message,''), execution_ms, created_at FROM healing_actions WHERE `+whereClause+` ORDER BY created_at DESC LIMIT ? OFFSET ?`, args...)
+		`SELECT id, rule_key, resource_type, resource_id, action_performed, result_status, COALESCE(error_message,''), execution_ms, created_at FROM healing_actions WHERE `+whereClause+fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, limitN, offsetN), args...)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -375,7 +382,6 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
 // allowedUnits is the whitelist of systemd units that can be queried via serverLogs.
 var allowedUnits = map[string]bool{
 	"panel":      true,
@@ -385,7 +391,7 @@ var allowedUnits = map[string]bool{
 	"strongswan": true,
 	"mariadb":    true,
 	"mysql":      true,
-	"knode": true,
+	"knode":      true,
 }
 
 // serverLogs returns recent journalctl output for a whitelisted systemd unit.

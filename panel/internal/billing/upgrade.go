@@ -30,7 +30,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	var balance float64
 	err = tx.QueryRowContext(ctx, `
 		SELECT plan_id, username, COALESCE(wallet_balance, 0)
-		FROM customers WHERE id = ? AND deleted_at IS NULL`, customerID,
+		FROM customers WHERE id = $1 AND deleted_at IS NULL`, customerID,
 	).Scan(&currentPlanID, &username, &balance)
 	if err != nil {
 		return fmt.Errorf("fetch customer %d: %w", customerID, err)
@@ -48,7 +48,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	var currentCurrency string
 	err = tx.QueryRowContext(ctx, `
 		SELECT id, name, price, duration_days, COALESCE(currency, 'IRR')
-		FROM plans WHERE id = ?`, currentPlanID.Int64,
+		FROM plans WHERE id = $1`, currentPlanID.Int64,
 	).Scan(&currentPlan.ID, &currentPlan.Name, &currentPlan.Price, &currentDurationDays, &currentCurrency)
 	if err != nil {
 		return fmt.Errorf("fetch current plan %d: %w", currentPlanID.Int64, err)
@@ -61,7 +61,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	var newPlanActive bool
 	err = tx.QueryRowContext(ctx, `
 		SELECT id, name, price, duration_days, COALESCE(currency, 'IRR'), is_active
-		FROM plans WHERE id = ?`, newPlanID,
+		FROM plans WHERE id = $1`, newPlanID,
 	).Scan(&newPlan.ID, &newPlan.Name, &newPlan.Price, &newDurationDays, &newCurrency, &newPlanActive)
 	if err != nil {
 		return fmt.Errorf("fetch new plan %d: %w", newPlanID, err)
@@ -76,7 +76,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	err = tx.QueryRowContext(ctx, `
 		SELECT started_at, expires_at
 		FROM subscriptions
-		WHERE customer_id = ? AND status = 'active'
+		WHERE customer_id = $1 AND status = 'active'
 		ORDER BY id DESC LIMIT 1`, customerID,
 	).Scan(&startedAt, &expiresAt)
 	if err != nil {
@@ -144,7 +144,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO invoices (customer_id, invoice_number, amount, currency, status, type, description, plan_id, gateway_id, payment_ref, pdf_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		inv.CustomerID, inv.InvoiceNumber, inv.Amount, inv.Currency,
 		inv.Status, inv.Type, inv.Description,
 		inv.PlanID, inv.GatewayID, inv.PaymentRef, inv.PDFPath,
@@ -161,7 +161,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	// 8. Deduct from wallet (only if cost > 0)
 	if cost > 0 {
 		_, err = tx.ExecContext(ctx, `
-			UPDATE customers SET wallet_balance = wallet_balance - ? WHERE id = ?`,
+			UPDATE customers SET wallet_balance = wallet_balance - $1 WHERE id = $2`,
 			cost, customerID,
 		)
 		if err != nil {
@@ -171,7 +171,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 
 	// 9. Update customer's plan_id
 	_, err = tx.ExecContext(ctx, `
-		UPDATE customers SET plan_id = ? WHERE id = ?`,
+		UPDATE customers SET plan_id = $1 WHERE id = $2`,
 		newPlanID, customerID,
 	)
 	if err != nil {
@@ -181,7 +181,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	// 10. Cancel old subscription, create new one
 	_, err = tx.ExecContext(ctx, `
 		UPDATE subscriptions SET status = 'cancelled'
-		WHERE customer_id = ? AND status = 'active'`,
+		WHERE customer_id = $1 AND status = 'active'`,
 		customerID,
 	)
 	if err != nil {
@@ -191,7 +191,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	newExpires := now.AddDate(0, 0, newDurationDays)
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO subscriptions (customer_id, username, plan_id, status, started_at, expires_at, paid_amount)
-		VALUES (?, ?, ?, 'active', ?, ?, ?)`,
+		VALUES ($1, $2, $3, 'active', $4, $5, $6)`,
 		customerID, username, newPlanID, now, newExpires, cost,
 	)
 	if err != nil {
@@ -203,7 +203,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	if cost > 0 {
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO wallet_transactions (customer_id, username, amount, type, description, actor, reference_type, reference_id, invoice_id)
-			VALUES (?, ?, ?, 'purchase', ?, 'system', 'invoice', ?, ?)`,
+			VALUES ($1, $2, $3, 'purchase', $4, 'system', 'invoice', $5, $6)`,
 			customerID, username, -cost, txDesc, invoiceID, invoiceID,
 		)
 		if err != nil {
@@ -218,7 +218,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO plan_changes (customer_id, username, old_plan_id, new_plan_id, change_type, prorated_credit, actor, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, 'system', NOW())`,
+		VALUES ($1, $2, $3, $4, $5, $6, 'system', NOW())`,
 		customerID, username, currentPlanID.Int64, newPlanID, changeType, creditRemaining,
 	)
 	if err != nil {
@@ -228,7 +228,7 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 	// 13. Log in events table for audit trail
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO events (type, severity, title, message, actor, related)
-		VALUES ('plan_upgrade', 'info', ?, ?, 'system', ?)`,
+		VALUES ('plan_upgrade', 'info', $1, $2, 'system', $3)`,
 		fmt.Sprintf("Plan %s: %s → %s", changeType, currentPlan.Name, newPlan.Name),
 		fmt.Sprintf("Customer %s upgraded from %s (%.2f) to %s (%.2f). Credit: %.2f, Charged: %.2f",
 			username, currentPlan.Name, currentPlan.Price, newPlan.Name, newPlan.Price, creditRemaining, cost),

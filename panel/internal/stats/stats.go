@@ -24,8 +24,7 @@ func New(db *sql.DB) *Service {
 }
 
 // AggregateHourly rolls up bandwidth data from node_usage_snapshots into
-// bandwidth_hourly for the given hour. Uses ON DUPLICATE KEY UPDATE for
-// idempotent operation.
+// bandwidth_hourly for the given hour. Uses ON CONFLICT for idempotent operation.
 func (s *Service) AggregateHourly(ctx context.Context, hour time.Time) error {
 	// Truncate to hour boundary
 	hourStart := hour.Truncate(time.Hour)
@@ -35,7 +34,7 @@ func (s *Service) AggregateHourly(ctx context.Context, hour time.Time) error {
 		INSERT INTO bandwidth_hourly (node_id, hour_start, rx_bytes, tx_bytes, peak_rx_bps, peak_tx_bps, online_users_avg, online_users_peak)
 		SELECT 
 			node_id,
-			? AS hour_start,
+			$1 AS hour_start,
 			COALESCE(SUM(rx_bytes), 0) AS rx_bytes,
 			COALESCE(SUM(tx_bytes), 0) AS tx_bytes,
 			COALESCE(MAX(rx_bytes), 0) AS peak_rx_bps,
@@ -43,15 +42,15 @@ func (s *Service) AggregateHourly(ctx context.Context, hour time.Time) error {
 			COALESCE(AVG(online_users), 0) AS online_users_avg,
 			COALESCE(MAX(online_users), 0) AS online_users_peak
 		FROM node_usage_snapshots
-		WHERE created_at >= ? AND created_at < ?
+		WHERE created_at >= $2 AND created_at < $3
 		GROUP BY node_id
-		ON DUPLICATE KEY UPDATE
-			rx_bytes = VALUES(rx_bytes),
-			tx_bytes = VALUES(tx_bytes),
-			peak_rx_bps = VALUES(peak_rx_bps),
-			peak_tx_bps = VALUES(peak_tx_bps),
-			online_users_avg = VALUES(online_users_avg),
-			online_users_peak = VALUES(online_users_peak)
+		ON CONFLICT (node_id, hour_start) DO UPDATE SET
+			rx_bytes = EXCLUDED.rx_bytes,
+			tx_bytes = EXCLUDED.tx_bytes,
+			peak_rx_bps = EXCLUDED.peak_rx_bps,
+			peak_tx_bps = EXCLUDED.peak_tx_bps,
+			online_users_avg = EXCLUDED.online_users_avg,
+			online_users_peak = EXCLUDED.online_users_peak
 	`
 
 	_, err := s.db.ExecContext(ctx, query, hourStart, hourStart, hourEnd)
@@ -72,24 +71,24 @@ func (s *Service) AggregateDaily(ctx context.Context, day time.Time) error {
 	revenueQuery := `
 		INSERT INTO revenue_daily (day_date, total_revenue, subscription_revenue, topup_revenue, refund_amount, new_customers, churned_customers, active_customers)
 		SELECT
-			? AS day_date,
+			$1 AS day_date,
 			COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS total_revenue,
 			COALESCE(SUM(CASE WHEN type='subscription' AND amount > 0 THEN amount ELSE 0 END), 0) AS subscription_revenue,
 			COALESCE(SUM(CASE WHEN type='topup' AND amount > 0 THEN amount ELSE 0 END), 0) AS topup_revenue,
 			COALESCE(SUM(CASE WHEN type='refund' THEN ABS(amount) ELSE 0 END), 0) AS refund_amount,
-			(SELECT COUNT(*) FROM customers WHERE created_at >= ? AND created_at < ? AND deleted_at IS NULL) AS new_customers,
-			(SELECT COUNT(*) FROM customers WHERE status='expired' AND updated_at >= ? AND updated_at < ?) AS churned_customers,
+			(SELECT COUNT(*) FROM customers WHERE created_at >= $2 AND created_at < $3 AND deleted_at IS NULL) AS new_customers,
+			(SELECT COUNT(*) FROM customers WHERE status='expired' AND updated_at >= $4 AND updated_at < $5) AS churned_customers,
 			(SELECT COUNT(*) FROM customers WHERE status='active' AND deleted_at IS NULL) AS active_customers
 		FROM wallet_transactions
-		WHERE created_at >= ? AND created_at < ?
-		ON DUPLICATE KEY UPDATE
-			total_revenue = VALUES(total_revenue),
-			subscription_revenue = VALUES(subscription_revenue),
-			topup_revenue = VALUES(topup_revenue),
-			refund_amount = VALUES(refund_amount),
-			new_customers = VALUES(new_customers),
-			churned_customers = VALUES(churned_customers),
-			active_customers = VALUES(active_customers)
+		WHERE created_at >= $6 AND created_at < $7
+		ON CONFLICT (day_date) DO UPDATE SET
+			total_revenue = EXCLUDED.total_revenue,
+			subscription_revenue = EXCLUDED.subscription_revenue,
+			topup_revenue = EXCLUDED.topup_revenue,
+			refund_amount = EXCLUDED.refund_amount,
+			new_customers = EXCLUDED.new_customers,
+			churned_customers = EXCLUDED.churned_customers,
+			active_customers = EXCLUDED.active_customers
 	`
 
 	_, err := s.db.ExecContext(ctx, revenueQuery, dayDate, dayDate, nextDay, dayDate, nextDay, dayDate, nextDay)
@@ -101,7 +100,7 @@ func (s *Service) AggregateDaily(ctx context.Context, day time.Time) error {
 	protocolQuery := `
 		INSERT INTO protocol_usage_daily (day_date, node_id, protocol, session_count, total_bytes, unique_users)
 		SELECT
-			? AS day_date,
+			$1 AS day_date,
 			r.nasipaddress_node_id AS node_id,
 			CASE 
 				WHEN r.calledstationid LIKE '%openvpn%' THEN 'openvpn'
@@ -116,12 +115,12 @@ func (s *Service) AggregateDaily(ctx context.Context, day time.Time) error {
 			COALESCE(SUM(r.acctinputoctets + r.acctoutputoctets), 0) AS total_bytes,
 			COUNT(DISTINCT r.username) AS unique_users
 		FROM radacct r
-		WHERE r.acctstarttime >= ? AND r.acctstarttime < ?
+		WHERE r.acctstarttime >= $2 AND r.acctstarttime < $3
 		GROUP BY r.nasipaddress_node_id, protocol
-		ON DUPLICATE KEY UPDATE
-			session_count = VALUES(session_count),
-			total_bytes = VALUES(total_bytes),
-			unique_users = VALUES(unique_users)
+		ON CONFLICT (day_date, node_id, protocol) DO UPDATE SET
+			session_count = EXCLUDED.session_count,
+			total_bytes = EXCLUDED.total_bytes,
+			unique_users = EXCLUDED.unique_users
 	`
 
 	// Note: nasipaddress_node_id may not exist as a column directly.
@@ -141,11 +140,11 @@ func (s *Service) AggregateDaily(ctx context.Context, day time.Time) error {
 func (s *Service) QueryBandwidth(ctx context.Context, from, to time.Time, nodeID int64) ([]BandwidthPoint, error) {
 	query := `SELECT hour_start, rx_bytes, tx_bytes, peak_rx_bps, peak_tx_bps, online_users_avg
 		FROM bandwidth_hourly
-		WHERE hour_start >= ? AND hour_start < ?`
+		WHERE hour_start >= $1 AND hour_start < $2`
 	args := []any{from, to}
 
 	if nodeID > 0 {
-		query += ` AND node_id = ?`
+		query += ` AND node_id = $3`
 		args = append(args, nodeID)
 	}
 	query += ` ORDER BY hour_start ASC`
@@ -192,7 +191,7 @@ type RevenuePoint struct {
 func (s *Service) QueryRevenue(ctx context.Context, from, to time.Time) ([]RevenuePoint, error) {
 	query := `SELECT day_date, total_revenue, subscription_revenue, topup_revenue, refund_amount, new_customers, churned_customers
 		FROM revenue_daily
-		WHERE day_date >= ? AND day_date < ?
+		WHERE day_date >= $1 AND day_date < $2
 		ORDER BY day_date ASC`
 
 	rows, err := s.db.QueryContext(ctx, query, from, to)

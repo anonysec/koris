@@ -1,4 +1,4 @@
-package db
+﻿package db
 
 import (
 	"database/sql"
@@ -143,8 +143,8 @@ func Migrate(db *sql.DB, dir string) error {
 	sort.Strings(names)
 
 	// Use appropriate placeholder syntax
-	checkSQL := `SELECT COUNT(*) FROM schema_migrations WHERE version=?`
-	insertSQL := `INSERT INTO schema_migrations(version) VALUES(?)`
+	checkSQL := `SELECT COUNT(*) FROM schema_migrations WHERE version=$1`
+	insertSQL := `INSERT INTO schema_migrations(version) VALUES($1)`
 	if pg {
 		checkSQL = `SELECT COUNT(*) FROM schema_migrations WHERE version=$1`
 		insertSQL = `INSERT INTO schema_migrations(version) VALUES($1)`

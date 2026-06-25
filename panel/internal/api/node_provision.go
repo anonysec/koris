@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"crypto/rand"
@@ -48,7 +48,7 @@ func (s *Server) nodeProvision(w http.ResponseWriter, r *http.Request) {
 
 	// Create the node record with status='pending'
 	res, err := s.DB.Exec(
-		`INSERT INTO nodes(name, public_ip, api_token_hash, status) VALUES(?, '', ?, 'offline')`,
+		`INSERT INTO nodes(name, public_ip, api_token_hash, status) VALUES($1, '', $2, 'offline')`,
 		name, tokenHash,
 	)
 	if err != nil {
@@ -64,7 +64,7 @@ func (s *Server) nodeProvision(w http.ResponseWriter, r *http.Request) {
 			proto = strings.TrimSpace(proto)
 			if proto != "" {
 				_, _ = s.DB.Exec(
-					`INSERT INTO node_tags (node_id, tag) VALUES (?, ?) ON DUPLICATE KEY UPDATE tag=tag`,
+					`INSERT INTO node_tags (node_id, tag) VALUES ($1, $2) ON CONFLICT (node_id, tag) DO NOTHING`,
 					nodeID, "protocol:"+proto,
 				)
 			}

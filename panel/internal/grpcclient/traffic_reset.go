@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -83,7 +83,7 @@ func getCoreTypesForUser(ctx context.Context, db *sql.DB, username string) ([]st
 	// Check if user has a preferred node
 	var preferredNodeID sql.NullInt64
 	_ = db.QueryRowContext(ctx,
-		`SELECT preferred_node_id FROM customers WHERE username = ? AND deleted_at IS NULL`,
+		`SELECT preferred_node_id FROM customers WHERE username = $1 AND deleted_at IS NULL`,
 		username,
 	).Scan(&preferredNodeID)
 
@@ -91,7 +91,7 @@ func getCoreTypesForUser(ctx context.Context, db *sql.DB, username string) ([]st
 	var args []any
 
 	if preferredNodeID.Valid && preferredNodeID.Int64 > 0 {
-		query = `SELECT DISTINCT service FROM node_services WHERE node_id = ? AND status != 'unknown'`
+		query = `SELECT DISTINCT service FROM node_services WHERE node_id = $1 AND status != 'unknown'`
 		args = []any{preferredNodeID.Int64}
 	} else {
 		query = `SELECT DISTINCT service FROM node_services WHERE status != 'unknown'`

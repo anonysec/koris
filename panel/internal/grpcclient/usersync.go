@@ -1,4 +1,4 @@
-package grpcclient
+﻿package grpcclient
 
 import (
 	"context"
@@ -200,7 +200,7 @@ func (s *UserSyncService) buildPayload(ctx context.Context, username string) (Us
 	// Get customer status and check for expired/suspended
 	var status string
 	err := db.QueryRowContext(ctx,
-		`SELECT status FROM customers WHERE username = ? AND deleted_at IS NULL`,
+		`SELECT status FROM customers WHERE username = $1 AND deleted_at IS NULL`,
 		username,
 	).Scan(&status)
 	if err != nil {
@@ -222,7 +222,7 @@ func (s *UserSyncService) buildPayload(ctx context.Context, username string) (Us
 		var expiresAt sql.NullTime
 		err = db.QueryRowContext(ctx,
 			`SELECT expires_at FROM subscriptions
-			 WHERE username = ? AND status = 'active'
+			 WHERE username = $1 AND status = 'active'
 			 ORDER BY id DESC LIMIT 1`,
 			username,
 		).Scan(&expiresAt)
@@ -237,7 +237,7 @@ func (s *UserSyncService) buildPayload(ctx context.Context, username string) (Us
 	// Get password from radcheck (Cleartext-Password)
 	_ = db.QueryRowContext(ctx,
 		`SELECT value FROM radcheck
-		 WHERE username = ? AND attribute IN ('Cleartext-Password', 'User-Password')
+		 WHERE username = $1 AND attribute IN ('Cleartext-Password', 'User-Password')
 		 ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&payload.Password)
@@ -246,7 +246,7 @@ func (s *UserSyncService) buildPayload(ctx context.Context, username string) (Us
 	var maxDataStr string
 	err = db.QueryRowContext(ctx,
 		`SELECT value FROM radcheck
-		 WHERE username = ? AND attribute = 'Max-Data'
+		 WHERE username = $1 AND attribute = 'Max-Data'
 		 ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&maxDataStr)
@@ -258,7 +258,7 @@ func (s *UserSyncService) buildPayload(ctx context.Context, username string) (Us
 	var maxConnStr string
 	err = db.QueryRowContext(ctx,
 		`SELECT value FROM radcheck
-		 WHERE username = ? AND attribute = 'Simultaneous-Use'
+		 WHERE username = $1 AND attribute = 'Simultaneous-Use'
 		 ORDER BY id DESC LIMIT 1`,
 		username,
 	).Scan(&maxConnStr)
@@ -270,7 +270,7 @@ func (s *UserSyncService) buildPayload(ctx context.Context, username string) (Us
 	var downloadKbps int64
 	err = db.QueryRowContext(ctx,
 		`SELECT download_kbps FROM bandwidth_rules
-		 WHERE username = ? AND is_active = 1`,
+		 WHERE username = $1 AND is_active = TRUE`,
 		username,
 	).Scan(&downloadKbps)
 	if err == nil && downloadKbps > 0 {
@@ -291,7 +291,7 @@ func (s *UserSyncService) getUserCoreTypes(ctx context.Context, username string)
 	// Check if user has a preferred node
 	var preferredNodeID sql.NullInt64
 	_ = db.QueryRowContext(ctx,
-		`SELECT preferred_node_id FROM customers WHERE username = ? AND deleted_at IS NULL`,
+		`SELECT preferred_node_id FROM customers WHERE username = $1 AND deleted_at IS NULL`,
 		username,
 	).Scan(&preferredNodeID)
 
@@ -300,7 +300,7 @@ func (s *UserSyncService) getUserCoreTypes(ctx context.Context, username string)
 
 	if preferredNodeID.Valid && preferredNodeID.Int64 > 0 {
 		// Only cores on the preferred node
-		query = `SELECT DISTINCT service FROM node_services WHERE node_id = ? AND status != 'unknown'`
+		query = `SELECT DISTINCT service FROM node_services WHERE node_id = $1 AND status != 'unknown'`
 		args = []any{preferredNodeID.Int64}
 	} else {
 		// All active cores across all nodes
@@ -375,7 +375,7 @@ func (s *UserSyncService) getNodeCoreTypes(ctx context.Context, nodeID int64) ([
 	db := s.store.DB()
 
 	rows, err := db.QueryContext(ctx,
-		`SELECT service FROM node_services WHERE node_id = ? AND status != 'unknown'`,
+		`SELECT service FROM node_services WHERE node_id = $1 AND status != 'unknown'`,
 		nodeID,
 	)
 	if err != nil {
@@ -431,7 +431,7 @@ func (s *UserSyncService) recordSyncFailure(nodeID int64, coreTypes []string, pa
 
 	_, err := db.Exec(
 		`INSERT INTO sync_failures (node_id, core_type, error_msg, payload, attempts, resolved, created_at)
-		 VALUES (?, ?, ?, ?, 2, FALSE, NOW())`,
+		 VALUES ($1, $2, $3, $4, 2, FALSE, NOW())`,
 		nodeID, coreType, errMsg, payloadJSON,
 	)
 	if err != nil {

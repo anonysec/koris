@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -138,7 +138,7 @@ func (s *Server) handleMTProtoCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Insert into mtproto_proxies
 	result, err := s.DB.Exec(
-		`INSERT INTO mtproto_proxies (node_id, port, secret, status) VALUES (?, ?, ?, 'pending')`,
+		`INSERT INTO mtproto_proxies (node_id, port, secret, status) VALUES ($1, $2, $3, 'pending')`,
 		in.NodeID, in.Port, secret,
 	)
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *Server) handleMTProtoCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Update mtproto_proxies status to active on success
-		_, _ = s.DB.Exec(`UPDATE mtproto_proxies SET status = 'active' WHERE id = ?`, id)
+		_, _ = s.DB.Exec(`UPDATE mtproto_proxies SET status = 'active' WHERE id = $1`, id)
 	} else {
 		log.Printf("[knode] gRPC not configured, cannot enable mtproto on node %d", in.NodeID)
 	}
@@ -178,7 +178,7 @@ func (s *Server) handleMTProtoCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMTProtoDelete(w http.ResponseWriter, r *http.Request, id int64) {
 	// Get node_id from the proxy record
 	var nodeID int64
-	err := s.DB.QueryRow(`SELECT node_id FROM mtproto_proxies WHERE id = ?`, id).Scan(&nodeID)
+	err := s.DB.QueryRow(`SELECT node_id FROM mtproto_proxies WHERE id = $1`, id).Scan(&nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -195,7 +195,7 @@ func (s *Server) handleMTProtoDelete(w http.ResponseWriter, r *http.Request, id 
 	}
 
 	// Delete from mtproto_proxies
-	_, err = s.DB.Exec(`DELETE FROM mtproto_proxies WHERE id = ?`, id)
+	_, err = s.DB.Exec(`DELETE FROM mtproto_proxies WHERE id = $1`, id)
 	if err != nil {
 		log.Printf("[mtproto] delete failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -210,7 +210,7 @@ func (s *Server) handleMTProtoDelete(w http.ResponseWriter, r *http.Request, id 
 func (s *Server) handleMTProtoRotate(w http.ResponseWriter, r *http.Request, id int64) {
 	// Verify proxy exists and get node_id
 	var nodeID int64
-	err := s.DB.QueryRow(`SELECT node_id FROM mtproto_proxies WHERE id = ?`, id).Scan(&nodeID)
+	err := s.DB.QueryRow(`SELECT node_id FROM mtproto_proxies WHERE id = $1`, id).Scan(&nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -226,7 +226,7 @@ func (s *Server) handleMTProtoRotate(w http.ResponseWriter, r *http.Request, id 
 	newSecret := hex.EncodeToString(secretBytes)
 
 	// Update secret in database
-	_, err = s.DB.Exec(`UPDATE mtproto_proxies SET secret = ? WHERE id = ?`, newSecret, id)
+	_, err = s.DB.Exec(`UPDATE mtproto_proxies SET secret = $1 WHERE id = $2`, newSecret, id)
 	if err != nil {
 		log.Printf("[mtproto] update secret failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -237,7 +237,7 @@ func (s *Server) handleMTProtoRotate(w http.ResponseWriter, r *http.Request, id 
 	if s.CoreMgr != nil {
 		// Get port for the reconfigure
 		var port int
-		_ = s.DB.QueryRow(`SELECT port FROM mtproto_proxies WHERE id = ?`, id).Scan(&port)
+		_ = s.DB.QueryRow(`SELECT port FROM mtproto_proxies WHERE id = $1`, id).Scan(&port)
 
 		extraConfig, _ := json.Marshal(map[string]any{
 			"secret": newSecret,
@@ -262,7 +262,7 @@ func (s *Server) handleMTProtoLink(w http.ResponseWriter, r *http.Request, id in
 		SELECT COALESCE(n.public_ip, ''), m.port, m.secret
 		FROM mtproto_proxies m
 		JOIN nodes n ON n.id = m.node_id
-		WHERE m.id = ?`, id).Scan(&nodeIP, &port, &secret)
+		WHERE m.id = $1`, id).Scan(&nodeIP, &port, &secret)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -111,7 +111,7 @@ func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
 
 	// Check unique name (among non-deleted templates)
 	var exists int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM user_templates WHERE name = ? AND deleted_at IS NULL`, in.Name).Scan(&exists)
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM user_templates WHERE name = $1 AND deleted_at IS NULL`, in.Name).Scan(&exists)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
@@ -124,7 +124,7 @@ func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
 	// Validate plan_id exists if provided
 	if in.PlanID != nil {
 		var planExists int
-		err := s.DB.QueryRow(`SELECT COUNT(*) FROM plans WHERE id = ?`, *in.PlanID).Scan(&planExists)
+		err := s.DB.QueryRow(`SELECT COUNT(*) FROM plans WHERE id = $1`, *in.PlanID).Scan(&planExists)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
@@ -141,7 +141,7 @@ func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
 
 	actor, _, _ := s.currentAdmin(r)
 
-	res, err := s.DB.Exec(`INSERT INTO user_templates(name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+	res, err := s.DB.Exec(`INSERT INTO user_templates(name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by) VALUES($1, $2, $3, $4, $5, $6, $7)`,
 		in.Name, in.PlanID, in.Status, in.ConnectionLimit, radiusChecks, radiusReplies, actor)
 	if err != nil {
 		// Handle duplicate name race condition (UNIQUE constraint)
@@ -156,7 +156,7 @@ func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
 	id, _ := res.LastInsertId()
 
 	// Fetch the created template to return it
-	row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = ?`, id)
+	row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = $1`, id)
 	t, err := scanTemplate(row)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
@@ -171,7 +171,7 @@ func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64) {
 	// Check that template exists and is not deleted
 	var deletedAt sql.NullTime
-	err := s.DB.QueryRow(`SELECT deleted_at FROM user_templates WHERE id = ?`, id).Scan(&deletedAt)
+	err := s.DB.QueryRow(`SELECT deleted_at FROM user_templates WHERE id = $1`, id).Scan(&deletedAt)
 	if err == sql.ErrNoRows {
 		writeError(w, http.StatusNotFound, "not_found", "template not found")
 		return
@@ -210,7 +210,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 		}
 		// Check unique name (excluding current template)
 		var exists int
-		err := s.DB.QueryRow(`SELECT COUNT(*) FROM user_templates WHERE name = ? AND deleted_at IS NULL AND id != ?`, name, id).Scan(&exists)
+		err := s.DB.QueryRow(`SELECT COUNT(*) FROM user_templates WHERE name = $1 AND deleted_at IS NULL AND id != $2`, name, id).Scan(&exists)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
@@ -219,14 +219,14 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 			writeError(w, http.StatusConflict, "duplicate_name", "a template with this name already exists")
 			return
 		}
-		setClauses = append(setClauses, "name = ?")
+		setClauses = append(setClauses, "name = $1")
 		args = append(args, name)
 	}
 
 	if in.PlanID != nil {
 		// Validate plan exists
 		var planExists int
-		err := s.DB.QueryRow(`SELECT COUNT(*) FROM plans WHERE id = ?`, *in.PlanID).Scan(&planExists)
+		err := s.DB.QueryRow(`SELECT COUNT(*) FROM plans WHERE id = $1`, *in.PlanID).Scan(&planExists)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
@@ -235,7 +235,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 			writeError(w, http.StatusBadRequest, "bad_request", "plan_id does not exist")
 			return
 		}
-		setClauses = append(setClauses, "plan_id = ?")
+		setClauses = append(setClauses, "plan_id = $1")
 		args = append(args, *in.PlanID)
 	}
 
@@ -244,7 +244,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 			writeError(w, http.StatusBadRequest, "bad_request", "status must be 'active' or 'disabled'")
 			return
 		}
-		setClauses = append(setClauses, "status = ?")
+		setClauses = append(setClauses, "status = $1")
 		args = append(args, *in.Status)
 	}
 
@@ -253,17 +253,17 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 			writeError(w, http.StatusBadRequest, "bad_request", "connection_limit must be >= 0")
 			return
 		}
-		setClauses = append(setClauses, "connection_limit = ?")
+		setClauses = append(setClauses, "connection_limit = $1")
 		args = append(args, *in.ConnectionLimit)
 	}
 
 	if in.RadiusChecks != nil {
-		setClauses = append(setClauses, "radius_checks = ?")
+		setClauses = append(setClauses, "radius_checks = $1")
 		args = append(args, nullableJSON(in.RadiusChecks))
 	}
 
 	if in.RadiusReplies != nil {
-		setClauses = append(setClauses, "radius_replies = ?")
+		setClauses = append(setClauses, "radius_replies = $1")
 		args = append(args, nullableJSON(in.RadiusReplies))
 	}
 
@@ -273,7 +273,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 	}
 
 	// Always update updated_at
-	setClauses = append(setClauses, "updated_at = ?")
+	setClauses = append(setClauses, "updated_at = $1")
 	args = append(args, time.Now().UTC())
 	args = append(args, id)
 
@@ -288,7 +288,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 	}
 
 	// Fetch updated template
-	row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = ?`, id)
+	row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = $1`, id)
 	t, err := scanTemplate(row)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
@@ -302,7 +302,7 @@ func (s *Server) updateTemplate(w http.ResponseWriter, r *http.Request, id int64
 
 // deleteTemplate soft-deletes a template by setting deleted_at.
 func (s *Server) deleteTemplate(w http.ResponseWriter, r *http.Request, id int64) {
-	res, err := s.DB.Exec(`UPDATE user_templates SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL`, id)
+	res, err := s.DB.Exec(`UPDATE user_templates SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return

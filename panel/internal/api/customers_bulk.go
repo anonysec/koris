@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -188,7 +188,7 @@ func (s *Server) customerBulkExtend(customerID int64, params map[string]any, act
 
 	// Extend the active subscription's expires_at by N days
 	res, err := s.DB.Exec(
-		`UPDATE subscriptions SET expires_at = DATE_ADD(expires_at, INTERVAL ? DAY) WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`,
+		`UPDATE subscriptions SET expires_at = expires_at + INTERVAL '1 day' * $1 WHERE customer_id=$2 AND status='active' ORDER BY id DESC LIMIT 1`,
 		days, customerID,
 	)
 	if err != nil {
@@ -219,19 +219,19 @@ func (s *Server) customerBulkChangePlan(customerID int64, params map[string]any,
 
 	// Verify plan exists
 	var planExists int
-	err = s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=? AND is_active=1 LIMIT 1`, planID).Scan(&planExists)
+	err = s.DB.QueryRow(`SELECT 1 FROM plans WHERE id=$1 AND is_active=TRUE LIMIT 1`, planID).Scan(&planExists)
 	if err != nil {
 		return fmt.Errorf("plan not found or inactive")
 	}
 
 	// Update customer's plan_id
-	_, err = s.DB.Exec(`UPDATE customers SET plan_id=? WHERE id=? AND deleted_at IS NULL`, planID, customerID)
+	_, err = s.DB.Exec(`UPDATE customers SET plan_id=$1 WHERE id=$2 AND deleted_at IS NULL`, planID, customerID)
 	if err != nil {
 		return fmt.Errorf("failed to change plan: %v", err)
 	}
 
 	// Update active subscription's plan reference
-	_, _ = s.DB.Exec(`UPDATE subscriptions SET plan_id=? WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`, planID, customerID)
+	_, _ = s.DB.Exec(`UPDATE subscriptions SET plan_id=$1 WHERE customer_id=$2 AND status='active' ORDER BY id DESC LIMIT 1`, planID, customerID)
 
 	s.logAudit(actor, "customer.plan_changed", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{
 		"username": username, "plan_id": planID, "bulk": true,
@@ -257,7 +257,7 @@ func (s *Server) customerBulkAddData(customerID int64, params map[string]any, ac
 
 	// Increase the customer's data allowance in subscriptions table
 	res, err := s.DB.Exec(
-		`UPDATE subscriptions SET data_limit_bytes = data_limit_bytes + ? WHERE customer_id=? AND status='active' ORDER BY id DESC LIMIT 1`,
+		`UPDATE subscriptions SET data_limit_bytes = data_limit_bytes + $1 WHERE customer_id=$2 AND status='active' ORDER BY id DESC LIMIT 1`,
 		dataBytes, customerID,
 	)
 	if err != nil {
@@ -284,7 +284,7 @@ func (s *Server) customerBulkDisable(customerID int64, actor, ip string) error {
 		return err
 	}
 
-	_, err = s.DB.Exec(`UPDATE customers SET status='disabled' WHERE id=? AND deleted_at IS NULL`, customerID)
+	_, err = s.DB.Exec(`UPDATE customers SET status='disabled' WHERE id=$1 AND deleted_at IS NULL`, customerID)
 	if err != nil {
 		return fmt.Errorf("failed to disable customer: %v", err)
 	}
@@ -307,7 +307,7 @@ func (s *Server) customerBulkEnable(customerID int64, actor, ip string) error {
 		return err
 	}
 
-	_, err = s.DB.Exec(`UPDATE customers SET status='active' WHERE id=? AND deleted_at IS NULL`, customerID)
+	_, err = s.DB.Exec(`UPDATE customers SET status='active' WHERE id=$1 AND deleted_at IS NULL`, customerID)
 	if err != nil {
 		return fmt.Errorf("failed to enable customer: %v", err)
 	}
@@ -328,7 +328,7 @@ func (s *Server) customerBulkDelete(customerID int64, actor, ip string) error {
 		return err
 	}
 
-	res, err := s.DB.Exec(`UPDATE customers SET deleted_at=NOW(), status='deleted' WHERE id=? AND deleted_at IS NULL`, customerID)
+	res, err := s.DB.Exec(`UPDATE customers SET deleted_at=NOW(), status='deleted' WHERE id=$1 AND deleted_at IS NULL`, customerID)
 	if err != nil {
 		return fmt.Errorf("failed to delete customer: %v", err)
 	}
@@ -385,13 +385,13 @@ func (s *Server) customerBulkAssignTag(customerID int64, params map[string]any, 
 
 	// Verify tag exists
 	var tagExists int
-	err = s.DB.QueryRow(`SELECT 1 FROM user_tags WHERE id=? LIMIT 1`, tagID).Scan(&tagExists)
+	err = s.DB.QueryRow(`SELECT 1 FROM user_tags WHERE id=$1 LIMIT 1`, tagID).Scan(&tagExists)
 	if err != nil {
 		return fmt.Errorf("tag not found")
 	}
 
 	// INSERT IGNORE for idempotency — no error if already assigned
-	_, err = s.DB.Exec(`INSERT IGNORE INTO customer_tags (customer_id, tag_id) VALUES (?, ?)`, customerID, tagID)
+	_, err = s.DB.Exec(`INSERT INTO customer_tags (customer_id, tag_id) VALUES ($1, $2) ON CONFLICT (customer_id, tag_id) DO NOTHING`, customerID, tagID)
 	if err != nil {
 		return fmt.Errorf("failed to assign tag: %v", err)
 	}

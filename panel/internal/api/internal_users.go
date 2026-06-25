@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -39,13 +40,15 @@ func (s *Server) internalUsers(w http.ResponseWriter, r *http.Request) {
 		WHERE c.deleted_at IS NULL`
 
 	var args []any
+	argN := 1
 	if status != "" {
-		countQuery += ` AND status = ?`
-		dataQuery += ` AND c.status = ?`
+		countQuery += fmt.Sprintf(` AND status = $%d`, argN)
+		dataQuery += fmt.Sprintf(` AND c.status = $%d`, argN)
 		args = append(args, status)
+		argN++
 	}
 
-	dataQuery += ` ORDER BY c.id DESC LIMIT ? OFFSET ?`
+	dataQuery += fmt.Sprintf(` ORDER BY c.id DESC LIMIT $%d OFFSET $%d`, argN, argN+1)
 
 	// Get total count.
 	var total int

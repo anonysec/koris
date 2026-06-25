@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -141,7 +141,7 @@ func (s *Server) getNodeBandwidth(w http.ResponseWriter, nodeID int64) {
 
 	err := s.DB.QueryRow(`
 		SELECT bandwidth_quota_gb, bandwidth_used_bytes, bandwidth_reset_at
-		FROM nodes WHERE id = ?
+		FROM nodes WHERE id = $1
 	`, nodeID).Scan(&quotaGB, &usedBytes, &resetAt)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "node_not_found"})
@@ -203,7 +203,7 @@ func (s *Server) setNodeBandwidth(w http.ResponseWriter, r *http.Request, nodeID
 		}
 	}
 
-	res, err := s.DB.Exec(`UPDATE nodes SET bandwidth_quota_gb = ? WHERE id = ?`, quotaVal, nodeID)
+	res, err := s.DB.Exec(`UPDATE nodes SET bandwidth_quota_gb = $1 WHERE id = $2`, quotaVal, nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return

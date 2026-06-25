@@ -1,4 +1,4 @@
-package health
+﻿package health
 
 import (
 	"context"
@@ -131,7 +131,7 @@ func (de *DiagnosticsEngine) PersistScore(ctx context.Context, report *HealthRep
 	}
 
 	_, err = de.db.ExecContext(ctx,
-		`INSERT INTO health_scores (score, trend, checks_json, generated_at) VALUES (?, ?, ?, ?)`,
+		`INSERT INTO health_scores (score, trend, checks_json, generated_at) VALUES ($1, $2, $3, $4)`,
 		report.Score, report.Trend, string(checksJSON), report.GeneratedAt,
 	)
 	return err
@@ -140,7 +140,7 @@ func (de *DiagnosticsEngine) PersistScore(ctx context.Context, report *HealthRep
 // GetHistory retrieves historical health scores within the given time range.
 func (de *DiagnosticsEngine) GetHistory(ctx context.Context, from, to time.Time) ([]HealthScoreRecord, error) {
 	rows, err := de.db.QueryContext(ctx,
-		`SELECT id, score, trend, checks_json, generated_at FROM health_scores WHERE generated_at >= ? AND generated_at <= ? ORDER BY generated_at DESC LIMIT 1000`,
+		`SELECT id, score, trend, checks_json, generated_at FROM health_scores WHERE generated_at >= $1 AND generated_at <= $2 ORDER BY generated_at DESC LIMIT 1000`,
 		from, to,
 	)
 	if err != nil {
@@ -167,7 +167,7 @@ func (de *DiagnosticsEngine) GetHistory(ctx context.Context, from, to time.Time)
 func (de *DiagnosticsEngine) getRecentScores(ctx context.Context, duration time.Duration) ([]int, error) {
 	since := time.Now().Add(-duration)
 	rows, err := de.db.QueryContext(ctx,
-		`SELECT score FROM health_scores WHERE generated_at >= ? ORDER BY generated_at ASC`,
+		`SELECT score FROM health_scores WHERE generated_at >= $1 ORDER BY generated_at ASC`,
 		since,
 	)
 	if err != nil {

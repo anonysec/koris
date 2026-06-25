@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -110,7 +110,7 @@ func (s *Server) createPromoCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, _, _ := s.currentAdmin(r)
-	res, err := s.DB.Exec(`INSERT INTO promo_codes(code, type, value, max_uses, min_amount, applicable_plans, starts_at, expires_at, created_by) VALUES(?,?,?,?,?,?,?,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO promo_codes(code, type, value, max_uses, min_amount, applicable_plans, starts_at, expires_at, created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 		in.Code, in.Type, in.Value, in.MaxUses, in.MinAmount, nullString(in.ApplicablePlans), startsAt, expiresAt, actor)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate") {
@@ -133,7 +133,7 @@ func (s *Server) promoCodeByID(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodDelete:
-		if _, err := s.DB.Exec(`DELETE FROM promo_codes WHERE id=?`, id); err != nil {
+		if _, err := s.DB.Exec(`DELETE FROM promo_codes WHERE id=$1`, id); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -151,7 +151,7 @@ func (s *Server) promoCodeByID(w http.ResponseWriter, r *http.Request) {
 			if *in.IsActive {
 				active = 1
 			}
-			s.DB.Exec(`UPDATE promo_codes SET is_active=? WHERE id=?`, active, id)
+			s.DB.Exec(`UPDATE promo_codes SET is_active=$1 WHERE id=$2`, active, id)
 		}
 		writeJSON(w, map[string]any{"ok": true})
 	default:
@@ -189,7 +189,7 @@ func (s *Server) portalApplyPromo(w http.ResponseWriter, r *http.Request) {
 	var promo PromoCode
 	var active int
 	var starts, expires sql.NullTime
-	err := s.DB.QueryRow(`SELECT id, code, type, value, max_uses, used_count, min_amount, is_active, starts_at, expires_at FROM promo_codes WHERE code=?`, in.Code).Scan(
+	err := s.DB.QueryRow(`SELECT id, code, type, value, max_uses, used_count, min_amount, is_active, starts_at, expires_at FROM promo_codes WHERE code=$1`, in.Code).Scan(
 		&promo.ID, &promo.Code, &promo.Type, &promo.Value, &promo.MaxUses, &promo.UsedCount, &promo.MinAmount, &active, &starts, &expires)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "invalid_code"})
@@ -226,7 +226,7 @@ func (s *Server) portalApplyPromo(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user already used this code
 	var alreadyUsed int
-	s.DB.QueryRow(`SELECT COUNT(*) FROM promo_usage WHERE promo_id=? AND username=?`, promo.ID, username).Scan(&alreadyUsed)
+	s.DB.QueryRow(`SELECT COUNT(*) FROM promo_usage WHERE promo_id=$1 AND username=$2`, promo.ID, username).Scan(&alreadyUsed)
 	if alreadyUsed > 0 {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "already_used"})
 		return

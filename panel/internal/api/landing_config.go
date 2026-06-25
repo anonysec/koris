@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -42,7 +42,7 @@ func (s *Server) getLandingConfig(w http.ResponseWriter, r *http.Request) {
 	for _, key := range landingConfigKeys {
 		dbKey := "landing_" + key
 		var val string
-		err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = ?`, dbKey).Scan(&val)
+		err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, dbKey).Scan(&val)
 		if err != nil {
 			// Key not set yet — use defaults
 			switch key {
@@ -116,7 +116,7 @@ func (s *Server) setLandingConfig(w http.ResponseWriter, r *http.Request) {
 
 		dbKey := "landing_" + key
 		_, err := s.DB.Exec(
-			`INSERT INTO panel_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+			`INSERT INTO panel_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`,
 			dbKey, strVal,
 		)
 		if err != nil {

@@ -65,10 +65,10 @@ func (s *Server) statisticsGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) statisticsBandwidth(w http.ResponseWriter, from, to time.Time, nodeID int64) {
 	query := `SELECT hour_start, SUM(rx_bytes), SUM(tx_bytes), MAX(peak_rx_bps), MAX(peak_tx_bps)
-		FROM bandwidth_hourly WHERE hour_start >= ? AND hour_start < ?`
+		FROM bandwidth_hourly WHERE hour_start >= $1 AND hour_start < $2`
 	args := []any{from, to}
 	if nodeID > 0 {
-		query += ` AND node_id = ?`
+		query += ` AND node_id = $3`
 		args = append(args, nodeID)
 	}
 	query += ` GROUP BY hour_start ORDER BY hour_start ASC`
@@ -128,7 +128,7 @@ func (s *Server) statisticsBandwidth(w http.ResponseWriter, from, to time.Time, 
 
 func (s *Server) statisticsUserGrowth(w http.ResponseWriter, from, to time.Time) {
 	query := `SELECT day_date, new_customers, churned_customers, active_customers
-		FROM revenue_daily WHERE day_date >= ? AND day_date < ? ORDER BY day_date ASC`
+		FROM revenue_daily WHERE day_date >= $1 AND day_date < $2 ORDER BY day_date ASC`
 
 	rows, err := s.DB.Query(query, from, to)
 	if err != nil {
@@ -174,7 +174,7 @@ func (s *Server) statisticsUserGrowth(w http.ResponseWriter, from, to time.Time)
 
 func (s *Server) statisticsRevenue(w http.ResponseWriter, from, to time.Time) {
 	query := `SELECT day_date, total_revenue, subscription_revenue, topup_revenue, refund_amount
-		FROM revenue_daily WHERE day_date >= ? AND day_date < ? ORDER BY day_date ASC`
+		FROM revenue_daily WHERE day_date >= $1 AND day_date < $2 ORDER BY day_date ASC`
 
 	rows, err := s.DB.Query(query, from, to)
 	if err != nil {
@@ -217,10 +217,10 @@ func (s *Server) statisticsRevenue(w http.ResponseWriter, from, to time.Time) {
 
 func (s *Server) statisticsProtocol(w http.ResponseWriter, from, to time.Time, nodeID int64) {
 	query := `SELECT protocol, SUM(session_count), SUM(total_bytes), SUM(unique_users)
-		FROM protocol_usage_daily WHERE day_date >= ? AND day_date < ?`
+		FROM protocol_usage_daily WHERE day_date >= $1 AND day_date < $2`
 	args := []any{from, to}
 	if nodeID > 0 {
-		query += ` AND node_id = ?`
+		query += ` AND node_id = $3`
 		args = append(args, nodeID)
 	}
 	query += ` GROUP BY protocol ORDER BY SUM(session_count) DESC`
@@ -261,7 +261,7 @@ func (s *Server) statisticsNodePerformance(w http.ResponseWriter, from, to time.
 	query := `SELECT bh.node_id, n.name, SUM(bh.rx_bytes + bh.tx_bytes) as total_bytes, AVG(bh.online_users_avg) as avg_users
 		FROM bandwidth_hourly bh
 		LEFT JOIN nodes n ON n.id = bh.node_id
-		WHERE bh.hour_start >= ? AND bh.hour_start < ?
+		WHERE bh.hour_start >= $1 AND bh.hour_start < $2
 		GROUP BY bh.node_id, n.name
 		ORDER BY total_bytes DESC`
 

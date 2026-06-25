@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -35,7 +35,7 @@ func (s *Server) adminCustomFieldByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.DB.Exec(`DELETE FROM custom_fields WHERE id=?`, id)
+	res, err := s.DB.Exec(`DELETE FROM custom_fields WHERE id=$1`, id)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -108,7 +108,7 @@ func (s *Server) createCustomField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.DB.Exec(`INSERT INTO custom_fields(field_name, field_type, field_options, required, display_order) VALUES(?,?,?,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO custom_fields(field_name, field_type, field_options, required, display_order) VALUES($1,$2,$3,$4,$5)`,
 		in.FieldName, in.FieldType, in.FieldOptions, in.Required, in.DisplayOrder)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate") {
@@ -158,7 +158,7 @@ func (s *Server) adminCustomerSubresource(w http.ResponseWriter, r *http.Request
 func (s *Server) getCustomerCustomFields(w http.ResponseWriter, r *http.Request, customerID int64) {
 	// Verify customer exists
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM customers WHERE id=? AND deleted_at IS NULL`, customerID).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM customers WHERE id=$1 AND deleted_at IS NULL`, customerID).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}
@@ -167,7 +167,7 @@ func (s *Server) getCustomerCustomFields(w http.ResponseWriter, r *http.Request,
 		SELECT cf.id, cf.field_name, cf.field_type, COALESCE(cf.field_options,''), cf.required, cf.display_order,
 		       COALESCE(ccv.field_value,'')
 		FROM custom_fields cf
-		LEFT JOIN customer_custom_values ccv ON ccv.field_id=cf.id AND ccv.customer_id=?
+		LEFT JOIN customer_custom_values ccv ON ccv.field_id=cf.id AND ccv.customer_id=$1
 		ORDER BY cf.display_order, cf.id`, customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
@@ -212,7 +212,7 @@ func (s *Server) setCustomerCustomFields(w http.ResponseWriter, r *http.Request,
 
 	// Verify customer exists
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM customers WHERE id=? AND deleted_at IS NULL`, customerID).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM customers WHERE id=$1 AND deleted_at IS NULL`, customerID).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}
@@ -222,7 +222,7 @@ func (s *Server) setCustomerCustomFields(w http.ResponseWriter, r *http.Request,
 		if err != nil || fieldID <= 0 {
 			continue
 		}
-		_, err = s.DB.Exec(`INSERT INTO customer_custom_values(customer_id, field_id, field_value) VALUES(?,?,?) ON DUPLICATE KEY UPDATE field_value=VALUES(field_value)`,
+		_, err = s.DB.Exec(`INSERT INTO customer_custom_values(customer_id, field_id, field_value) VALUES($1,$2,$3) ON CONFLICT (customer_id, field_id) DO UPDATE SET field_value = EXCLUDED.field_value`,
 			customerID, fieldID, value)
 		if err != nil {
 			// Skip invalid field IDs (FK constraint will reject them)

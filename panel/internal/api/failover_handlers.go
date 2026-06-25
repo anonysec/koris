@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -59,7 +59,7 @@ func (s *Server) testFailoverProvider(w http.ResponseWriter, r *http.Request, id
 	var providerType, apiTokenEncrypted, zoneID string
 	var isActive int
 	err := s.DB.QueryRow(
-		`SELECT type, api_token_encrypted, zone_id, is_active FROM dns_providers WHERE id = ? LIMIT 1`, id,
+		`SELECT type, api_token_encrypted, zone_id, is_active FROM dns_providers WHERE id = $1 LIMIT 1`, id,
 	).Scan(&providerType, &apiTokenEncrypted, &zoneID, &isActive)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found", "message": "Provider not found"})
@@ -121,7 +121,7 @@ func (s *Server) testFailoverProvider(w http.ResponseWriter, r *http.Request, id
 
 		// On 401/403, mark provider inactive
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			_, dbErr := s.DB.Exec(`UPDATE dns_providers SET is_active = 0, updated_at = ? WHERE id = ?`, time.Now().UTC().Format("2006-01-02 15:04:05"), id)
+			_, dbErr := s.DB.Exec(`UPDATE dns_providers SET is_active = FALSE, updated_at = $1 WHERE id = $2`, time.Now().UTC().Format("2006-01-02 15:04:05"), id)
 			if dbErr != nil {
 				log.Printf("[failover] failed to mark provider %d inactive: %v", id, dbErr)
 			}
@@ -220,7 +220,7 @@ func (s *Server) createFailoverProvider(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	res, err := s.DB.Exec(`INSERT INTO dns_providers(name, type, api_token_encrypted, zone_id, account_id, is_active, created_at, updated_at) VALUES(?,?,?,?,?,1,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO dns_providers(name, type, api_token_encrypted, zone_id, account_id, is_active, created_at, updated_at) VALUES($1,$2,$3,$4,$5,1,$6,$7)`,
 		in.Name, in.Type, encrypted, in.ZoneID, in.AccountID, now, now)
 	if err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
@@ -253,28 +253,28 @@ func (s *Server) updateFailoverProvider(w http.ResponseWriter, r *http.Request, 
 	}
 	// Verify provider exists
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM dns_providers WHERE id = ?`, id).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM dns_providers WHERE id = $1`, id).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	}
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	if in.Name != nil {
-		s.DB.Exec(`UPDATE dns_providers SET name = ?, updated_at = ? WHERE id = ?`, trimSpace(*in.Name), now, id)
+		s.DB.Exec(`UPDATE dns_providers SET name = $1, updated_at = $2 WHERE id = $3`, trimSpace(*in.Name), now, id)
 	}
 	if in.APIToken != nil && *in.APIToken != "" {
 		encrypted, err := encryptToken(*in.APIToken)
 		if err == nil {
-			s.DB.Exec(`UPDATE dns_providers SET api_token_encrypted = ?, updated_at = ? WHERE id = ?`, encrypted, now, id)
+			s.DB.Exec(`UPDATE dns_providers SET api_token_encrypted = $1, updated_at = $2 WHERE id = $3`, encrypted, now, id)
 		}
 	}
 	if in.ZoneID != nil {
-		s.DB.Exec(`UPDATE dns_providers SET zone_id = ?, updated_at = ? WHERE id = ?`, *in.ZoneID, now, id)
+		s.DB.Exec(`UPDATE dns_providers SET zone_id = $1, updated_at = $2 WHERE id = $3`, *in.ZoneID, now, id)
 	}
 	if in.AccountID != nil {
-		s.DB.Exec(`UPDATE dns_providers SET account_id = ?, updated_at = ? WHERE id = ?`, *in.AccountID, now, id)
+		s.DB.Exec(`UPDATE dns_providers SET account_id = $1, updated_at = $2 WHERE id = $3`, *in.AccountID, now, id)
 	}
 	if in.IsActive != nil {
-		s.DB.Exec(`UPDATE dns_providers SET is_active = ?, updated_at = ? WHERE id = ?`, boolInt(*in.IsActive), now, id)
+		s.DB.Exec(`UPDATE dns_providers SET is_active = $1, updated_at = $2 WHERE id = $3`, boolInt(*in.IsActive), now, id)
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -282,12 +282,12 @@ func (s *Server) updateFailoverProvider(w http.ResponseWriter, r *http.Request, 
 func (s *Server) deleteFailoverProvider(w http.ResponseWriter, r *http.Request, id int64) {
 	// Check if referenced by active failover domains
 	var refCount int
-	s.DB.QueryRow(`SELECT COUNT(*) FROM failover_domains WHERE dns_provider_id = ? AND is_active = 1`, id).Scan(&refCount)
+	s.DB.QueryRow(`SELECT COUNT(*) FROM failover_domains WHERE dns_provider_id = $1 AND is_active = TRUE`, id).Scan(&refCount)
 	if refCount > 0 {
 		writeJSONCode(w, http.StatusConflict, map[string]any{"ok": false, "error": "provider_in_use", "message": "Provider is referenced by active failover domains"})
 		return
 	}
-	_, err := s.DB.Exec(`DELETE FROM dns_providers WHERE id = ?`, id)
+	_, err := s.DB.Exec(`DELETE FROM dns_providers WHERE id = $1`, id)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return

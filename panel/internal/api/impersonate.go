@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -29,7 +29,7 @@ func (s *Server) adminImpersonateCustomer(w http.ResponseWriter, r *http.Request
 	var username string
 	var deletedAt sql.NullTime
 	err := s.DB.QueryRow(
-		`SELECT username, deleted_at FROM customers WHERE id=? LIMIT 1`,
+		`SELECT username, deleted_at FROM customers WHERE id=$1 LIMIT 1`,
 		customerID,
 	).Scan(&username, &deletedAt)
 	if err == sql.ErrNoRows {
@@ -91,7 +91,7 @@ func (s *Server) portalImpersonateLogin(w http.ResponseWriter, r *http.Request) 
 
 	// Verify the customer still exists and is not deleted/disabled
 	var status string
-	err := s.DB.QueryRow(`SELECT status FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&status)
+	err := s.DB.QueryRow(`SELECT status FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&status)
 	if err != nil {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid_token"})
 		return

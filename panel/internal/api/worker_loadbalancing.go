@@ -1,4 +1,4 @@
-//go:build !lite
+﻿//go:build !lite
 
 package api
 
@@ -14,7 +14,7 @@ import (
 // checks capacity for each, and notifies the admin if any group is overloaded.
 // Designed to be called from the background worker every 5 minutes.
 func ReEvaluateLoadBalancing(db *sql.DB, notify func(string)) {
-	rows, err := db.Query(`SELECT id, name, max_load_percent FROM node_groups WHERE load_balancing_enabled = 1`)
+	rows, err := db.Query(`SELECT id, name, max_load_percent FROM node_groups WHERE load_balancing_enabled = TRUE`)
 	if err != nil {
 		log.Printf("[loadbalance] re-evaluate query error: %v", err)
 		return
@@ -55,7 +55,7 @@ func ReEvaluateLoadBalancing(db *sql.DB, notify func(string)) {
 // a group are over the 85% threshold and if all nodes exceed 90%, sends notification.
 func checkGroupCapacityStandalone(db *sql.DB, groupID int64, groupName string, maxLoadPercent int) (overloaded bool, notifications []string) {
 	rows, err := db.Query(
-		`SELECT id, name, public_ip, max_capacity FROM nodes WHERE group_id = ? AND status <> 'disabled'`,
+		`SELECT id, name, public_ip, max_capacity FROM nodes WHERE group_id = $1 AND status <> 'disabled'`,
 		groupID,
 	)
 	if err != nil {
@@ -81,7 +81,7 @@ func checkGroupCapacityStandalone(db *sql.DB, groupID int64, groupName string, m
 
 		var activeSessions int
 		_ = db.QueryRow(
-			`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = ?`,
+			`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL AND nasipaddress = $1`,
 			publicIP,
 		).Scan(&activeSessions)
 

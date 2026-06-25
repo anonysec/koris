@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -30,7 +30,7 @@ func UpdateBandwidthQuota(db *sql.DB, nodeID int64, rxBytes, txBytes int64) {
 	// Convert bytes to GB (approximate)
 	deltaGB := float64(totalBytes) / (1024 * 1024 * 1024)
 
-	_, err := db.Exec(`UPDATE node_bandwidth_quotas SET current_usage_gb = current_usage_gb + ? WHERE node_id = ?`, deltaGB, nodeID)
+	_, err := db.Exec(`UPDATE node_bandwidth_quotas SET current_usage_gb = current_usage_gb + $1 WHERE node_id = $2`, deltaGB, nodeID)
 	if err != nil {
 		log.Printf("[quota] failed to update bandwidth usage for node %d: %v", nodeID, err)
 	}
@@ -106,7 +106,7 @@ func CheckBandwidthQuotas(db *sql.DB, notify func(string)) {
 func ResetBandwidthQuotas(db *sql.DB) {
 	today := time.Now().Day()
 
-	result, err := db.Exec(`UPDATE node_bandwidth_quotas SET current_usage_gb = 0 WHERE reset_day = ? AND current_usage_gb > 0`, today)
+	result, err := db.Exec(`UPDATE node_bandwidth_quotas SET current_usage_gb = 0 WHERE reset_day = $1 AND current_usage_gb > 0`, today)
 	if err != nil {
 		log.Printf("[quota] reset error: %v", err)
 		return
@@ -118,7 +118,7 @@ func ResetBandwidthQuotas(db *sql.DB) {
 
 		// Clear alert state for reset nodes so alerts can fire again next cycle
 		bwAlertLevelMu.Lock()
-		rows, err := db.Query(`SELECT node_id FROM node_bandwidth_quotas WHERE reset_day = ?`, today)
+		rows, err := db.Query(`SELECT node_id FROM node_bandwidth_quotas WHERE reset_day = $1`, today)
 		if err == nil {
 			for rows.Next() {
 				var nodeID int64
@@ -150,7 +150,7 @@ func (s *Server) nodeQuota(w http.ResponseWriter, r *http.Request) {
 
 	// Verify node exists
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "node_not_found"})
 		return
 	}
@@ -172,7 +172,7 @@ func (s *Server) getNodeQuota(w http.ResponseWriter, nodeID int64) {
 	var thresholdPct int
 	var resetDay int
 
-	err := s.DB.QueryRow(`SELECT monthly_limit_gb, current_usage_gb, alert_threshold_pct, reset_day FROM node_bandwidth_quotas WHERE node_id = ?`, nodeID).
+	err := s.DB.QueryRow(`SELECT monthly_limit_gb, current_usage_gb, alert_threshold_pct, reset_day FROM node_bandwidth_quotas WHERE node_id = $1`, nodeID).
 		Scan(&limitGB, &usageGB, &thresholdPct, &resetDay)
 	if err == sql.ErrNoRows {
 		// No quota configured — return defaults
@@ -250,8 +250,8 @@ func (s *Server) setNodeQuota(w http.ResponseWriter, r *http.Request, nodeID int
 
 	_, err := s.DB.Exec(`
 		INSERT INTO node_bandwidth_quotas (node_id, monthly_limit_gb, alert_threshold_pct, reset_day)
-		VALUES (?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE monthly_limit_gb = VALUES(monthly_limit_gb), alert_threshold_pct = VALUES(alert_threshold_pct), reset_day = VALUES(reset_day)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (node_id) DO UPDATE SET monthly_limit_gb = EXCLUDED.monthly_limit_gb, alert_threshold_pct = EXCLUDED.alert_threshold_pct, reset_day = EXCLUDED.reset_day
 	`, nodeID, limitGB, thresholdPct, resetDay)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})

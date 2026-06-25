@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"encoding/json"
@@ -106,7 +106,7 @@ func (s *Server) nodeTagsByID(w http.ResponseWriter, r *http.Request) {
 
 	// Verify node exists
 	var exists int
-	if err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=? LIMIT 1`, nodeID).Scan(&exists); err != nil {
+	if err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&exists); err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "node_not_found"})
 		return
 	}
@@ -125,7 +125,7 @@ func (s *Server) nodeTagsByID(w http.ResponseWriter, r *http.Request) {
 
 // getNodeTags returns tags for a specific node.
 func (s *Server) getNodeTags(w http.ResponseWriter, nodeID int64) {
-	rows, err := s.DB.Query(`SELECT tag FROM node_tags WHERE node_id=? ORDER BY tag`, nodeID)
+	rows, err := s.DB.Query(`SELECT tag FROM node_tags WHERE node_id=$1 ORDER BY tag`, nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -165,7 +165,7 @@ func (s *Server) addNodeTag(w http.ResponseWriter, r *http.Request, nodeID int64
 		return
 	}
 
-	_, err := s.DB.Exec(`INSERT INTO node_tags (node_id, tag) VALUES (?, ?) ON DUPLICATE KEY UPDATE tag=tag`, nodeID, in.Tag)
+	_, err := s.DB.Exec(`INSERT INTO node_tags (node_id, tag) VALUES ($1, $2) ON CONFLICT (node_id, tag) DO NOTHING`, nodeID, in.Tag)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return
@@ -194,7 +194,7 @@ func (s *Server) removeNodeTag(w http.ResponseWriter, r *http.Request, nodeID in
 		return
 	}
 
-	_, err := s.DB.Exec(`DELETE FROM node_tags WHERE node_id=? AND tag=?`, nodeID, in.Tag)
+	_, err := s.DB.Exec(`DELETE FROM node_tags WHERE node_id=$1 AND tag=$2`, nodeID, in.Tag)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return

@@ -1,4 +1,4 @@
-package protocols
+﻿package protocols
 
 import (
 	"database/sql"
@@ -21,7 +21,7 @@ type ProtocolResourceStats struct {
 // If the agent hasn't reported protocol_resources, we fall back to service status only.
 func ParseProtocolResources(db *sql.DB, nodeID int64) []ProtocolResourceStats {
 	var payloadRaw []byte
-	err := db.QueryRow(`SELECT payload_json FROM node_status WHERE node_id = ?`, nodeID).Scan(&payloadRaw)
+	err := db.QueryRow(`SELECT payload_json FROM node_status WHERE node_id = $1`, nodeID).Scan(&payloadRaw)
 	if err != nil || len(payloadRaw) == 0 {
 		return nil
 	}

@@ -21,7 +21,7 @@ type DebtInfo struct {
 func (b *BillingEngine) GetDebtInfo(ctx context.Context, customerID int64) (*DebtInfo, error) {
 	var balance float64
 	err := b.db.QueryRowContext(ctx, `
-		SELECT COALESCE(wallet_balance, 0) FROM customers WHERE id = ? AND deleted_at IS NULL`,
+		SELECT COALESCE(wallet_balance, 0) FROM customers WHERE id = $1 AND deleted_at IS NULL`,
 		customerID,
 	).Scan(&balance)
 	if err != nil {
@@ -42,7 +42,7 @@ func (b *BillingEngine) GetDebtInfo(ctx context.Context, customerID int64) (*Deb
 		var ts time.Time
 		err := b.db.QueryRowContext(ctx, `
 			SELECT MIN(created_at) FROM wallet_transactions
-			WHERE customer_id = ? AND amount < 0
+			WHERE customer_id = $1 AND amount < 0
 			ORDER BY created_at ASC LIMIT 1`,
 			customerID,
 		).Scan(&ts)
