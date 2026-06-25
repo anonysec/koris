@@ -5,8 +5,11 @@ import { defineAsyncComponent } from 'vue'
 import SiteHeader from './components/SiteHeader.vue'
 import HeroSection from './components/HeroSection.vue'
 import FeaturesSection from './components/FeaturesSection.vue'
+import ProtocolsSection from './components/ProtocolsSection.vue'
 
 // Below-the-fold: lazy-loaded (code-split into separate chunks)
+const MonitoringSection = defineAsyncComponent(() => import('./components/MonitoringSection.vue'))
+const TLSSection = defineAsyncComponent(() => import('./components/TLSSection.vue'))
 const PricingSection = defineAsyncComponent(() => import('./components/PricingSection.vue'))
 const CTASection = defineAsyncComponent(() => import('./components/CTASection.vue'))
 const FaqSection = defineAsyncComponent(() => import('./components/FaqSection.vue'))
@@ -23,6 +26,15 @@ const SiteFooter = defineAsyncComponent(() => import('./components/SiteFooter.vu
 
     <!-- Features Section -->
     <FeaturesSection />
+
+    <!-- Protocols Section -->
+    <ProtocolsSection />
+
+    <!-- Monitoring Section -->
+    <MonitoringSection />
+
+    <!-- TLS & Security Section -->
+    <TLSSection />
 
     <!-- Pricing Section -->
     <PricingSection />

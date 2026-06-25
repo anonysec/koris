@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNodesStore } from '@/stores/nodes'
+import { useMetricsStore } from '@/stores/metrics'
 import { storeToRefs } from 'pinia'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
@@ -16,10 +17,13 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
+import NodeListCard from '@/components/nodes/NodeListCard.vue'
+import NodeAddForm from '@/components/nodes/NodeAddForm.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const store = useNodesStore()
+const metricsStore = useMetricsStore()
 const { list: nodesList } = storeToRefs(store)
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -52,6 +56,16 @@ const nodeForm = ref({
   name: '',
   public_ip: '',
   domain: '',
+})
+
+// ─── Sorted Nodes: offline/stale first ───────────────────────────────────────
+const sortedNodes = computed(() => {
+  const statusOrder: Record<string, number> = { offline: 0, stale: 1, disabled: 2, online: 3 }
+  return [...store.list].sort((a, b) => {
+    const aOrder = statusOrder[a.status] ?? 2
+    const bOrder = statusOrder[b.status] ?? 2
+    return aOrder - bOrder
+  })
 })
 
 
