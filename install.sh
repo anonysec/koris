@@ -225,6 +225,11 @@ ENV
     fi
   fi
 
+  # Install koris CLI
+  cp "${INSTALL_DIR}/koris.sh" /usr/local/bin/koris
+  chmod +x /usr/local/bin/koris
+  log "CLI installed: run 'koris' from anywhere"
+
   show_result "${setup_key}"
 }
 
