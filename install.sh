@@ -92,6 +92,31 @@ usage() {
 }
 
 prompt_config() {
+  # Edition selection
+  echo -e "${BOLD}What do you want to install?${NC}"
+  echo ""
+  echo -e "  ${CYAN}1)${NC} koris      — Full panel (billing, tickets, xray, reseller, all features)"
+  echo -e "  ${CYAN}2)${NC} korislite  — Lite panel (OpenVPN, L2TP, users, nodes, settings)"
+  echo -e "  ${CYAN}3)${NC} knode      — Node agent only (install on VPN servers)"
+  echo ""
+  read -rp "$(echo -e "${CYAN}Choose [1/2/3]: ${NC}")" edition_choice </dev/tty
+  case "$edition_choice" in
+    1) EDITION="full" ;;
+    2) EDITION="lite" ;;
+    3) EDITION="knode" ;;
+    *) err "Invalid choice. Run the script again." ;;
+  esac
+  echo ""
+
+  # If knode-only, skip panel prompts
+  if [[ "${EDITION}" == "knode" ]]; then
+    log "Selected: knode (node agent only)"
+    return
+  fi
+
+  log "Selected: ${EDITION}"
+  echo ""
+
   [[ -z "${DB_PASS}" ]] && DB_PASS="$(gen_secret 16)"
 
   if [[ -z "${DOMAIN}" ]]; then

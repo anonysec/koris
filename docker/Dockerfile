@@ -18,11 +18,11 @@ COPY . .
 
 # Build frontend - Admin
 WORKDIR /build/panel/web/admin
-RUN npm ci --production=false && npm run build
+RUN npm install && npm run build
 
 # Build frontend - Portal
 WORKDIR /build/panel/web/portal
-RUN npm ci --production=false && npm run build
+RUN npm install && npm run build
 
 # Build Go binary
 WORKDIR /build
