@@ -28,7 +28,7 @@ func (s *Server) handleAdminLanding(w http.ResponseWriter, r *http.Request) {
 
 // getAdminLanding returns landing_settings row as JSON.
 func (s *Server) getAdminLanding(w http.ResponseWriter, r *http.Request) {
-	var enabled int
+	var enabled bool
 	var title string
 	var description, logoURL, heroContent sql.NullString
 
@@ -42,7 +42,7 @@ func (s *Server) getAdminLanding(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"ok": true,
 		"settings": map[string]any{
-			"enabled":      enabled == 1,
+			"enabled":      enabled,
 			"title":        title,
 			"description":  description.String,
 			"logo_url":     logoURL.String,
@@ -130,13 +130,13 @@ func (s *Server) serveLandingPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check landing_settings enabled flag
-	var enabled int
+	var enabled bool
 	var title string
 	var description, logoURL, heroContent sql.NullString
 
 	err := s.DB.QueryRow(`SELECT enabled, title, COALESCE(description,''), COALESCE(logo_url,''), COALESCE(hero_content,'') FROM landing_settings WHERE id=1`).
 		Scan(&enabled, &title, &description, &logoURL, &heroContent)
-	if err != nil || enabled == 0 {
+	if err != nil || !enabled {
 		// Landing disabled — redirect to login
 		http.Redirect(w, r, "/portal/", http.StatusFound)
 		return

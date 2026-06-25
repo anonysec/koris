@@ -147,14 +147,14 @@ func (s *Server) aiHealingRules(w http.ResponseWriter, r *http.Request) {
 	var rules []RuleResponse
 	for rows.Next() {
 		var rule RuleResponse
-		var enabled int
+		var enabled bool
 		var thresholds []byte
 		var createdAt, updatedAt sql.NullTime
 		if err := rows.Scan(&rule.ID, &rule.RuleKey, &rule.DisplayName, &rule.ConditionType, &rule.ActionMode, &rule.CooldownSeconds, &enabled, &thresholds, &createdAt, &updatedAt); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
-		rule.Enabled = enabled == 1
+		rule.Enabled = enabled
 		if thresholds != nil {
 			rule.ThresholdsJSON = thresholds
 		}

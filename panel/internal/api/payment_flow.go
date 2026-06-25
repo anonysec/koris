@@ -64,9 +64,9 @@ func (s *Server) handlePaymentInitiate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check gateway is active in the database
-	var isActive int
+	var isActive bool
 	err := s.DB.QueryRow(`SELECT is_active FROM payment_gateways WHERE name = $1 LIMIT 1`, in.GatewayName).Scan(&isActive)
-	if err != nil || isActive != 1 {
+	if err != nil || !isActive {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "gateway_not_active"})
 		return
 	}
