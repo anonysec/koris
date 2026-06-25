@@ -97,6 +97,18 @@ prompt_config() {
   if [[ -z "${DOMAIN}" ]]; then
     read -rp "$(echo -e "${CYAN}Domain (blank for IP-only): ${NC}")" DOMAIN </dev/tty
   fi
+  if [[ "${PANEL_PORT}" == "2026" ]]; then
+    read -rp "$(echo -e "${CYAN}Panel port [2026]: ${NC}")" input_port </dev/tty
+    PANEL_PORT="${input_port:-2026}"
+  fi
+  if [[ "${DB_NAME}" == "koris" ]]; then
+    read -rp "$(echo -e "${CYAN}DB name [koris]: ${NC}")" input_db </dev/tty
+    DB_NAME="${input_db:-koris}"
+  fi
+  if [[ "${DB_USER}" == "koris" ]]; then
+    read -rp "$(echo -e "${CYAN}DB user [koris]: ${NC}")" input_user </dev/tty
+    DB_USER="${input_user:-koris}"
+  fi
 
   echo ""
   log "Edition:  ${EDITION}"
