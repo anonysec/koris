@@ -55,6 +55,7 @@ DB_NAME="koris"
 DB_USER="koris"
 DB_PASS=""
 WITH_KNODE="yes"
+TLS_MODE="selfsigned"
 
 parse_args() {
   for arg in "$@"; do
@@ -135,11 +136,30 @@ prompt_config() {
     DB_USER="${input_user:-koris}"
   fi
 
+  # SSL mode selection
+  echo ""
+  echo -e "  ${CYAN}1)${NC} Let's Encrypt (requires domain pointed to this server)"
+  echo -e "  ${CYAN}2)${NC} Self-signed certificate (works immediately, browser warning)"
+  echo -e "  ${CYAN}3)${NC} No SSL (plain HTTP)"
+  echo ""
+  read -rp "$(echo -e "${CYAN}SSL mode [1/2/3]: ${NC}")" ssl_choice </dev/tty
+  case "${ssl_choice}" in
+    1)
+      TLS_MODE="acme"
+      if [[ -z "${DOMAIN}" || "${DOMAIN}" == "_" ]]; then
+        err "Let's Encrypt requires a domain. Re-run and provide one."
+      fi
+      ;;
+    3) TLS_MODE="disabled" ;;
+    *) TLS_MODE="selfsigned" ;;
+  esac
+
   echo ""
   log "Edition:  ${EDITION}"
   log "Mode:     ${INSTALL_MODE}"
   log "Port:     ${PANEL_PORT}"
   log "Domain:   ${DOMAIN:-<none>}"
+  log "SSL:      ${TLS_MODE}"
   log "Database: ${DB_NAME} (user: ${DB_USER})"
   echo ""
 }
@@ -169,10 +189,6 @@ install_docker() {
   local session_secret="$(gen_secret 32)"
   local setup_key="$(gen_secret 16)"
 
-  # Determine TLS mode
-  local tls_mode="selfsigned"
-  [[ -n "${DOMAIN}" && "${DOMAIN}" != "_" ]] && tls_mode="acme"
-
   # Write env file
   mkdir -p "${CONFIG_DIR}"
   cat > "${CONFIG_DIR}/panel.env" <<ENV
@@ -189,7 +205,7 @@ PANEL_ADDR=0.0.0.0:${PANEL_PORT}
 PANEL_SESSION_SECRET=${session_secret}
 PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
-PANEL_TLS_MODE=${tls_mode}
+PANEL_TLS_MODE=${TLS_MODE}
 PANEL_DOMAIN=${DOMAIN:-}
 ENV
   chmod 600 "${CONFIG_DIR}/panel.env"
@@ -207,6 +223,8 @@ ENV
   # Wait for health check
   log "Waiting for panel to start..."
   local attempts=0
+  local health_url="http://localhost:${PANEL_PORT}/api/health"
+  [[ "${TLS_MODE}" != "disabled" ]] && health_url="https://localhost:${PANEL_PORT}/api/health"
   while [[ $attempts -lt 30 ]]; do
     if docker inspect -f '{{.State.Health.Status}}' koris 2>/dev/null | grep -q healthy; then
       break
@@ -599,7 +617,13 @@ show_result() {
   local setup_key="$1"
   local server_ip
   server_ip=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-  local access_url="https://${DOMAIN:-${server_ip}}"
+
+  # Build access URL with port
+  local access_host="${DOMAIN:-${server_ip}}"
+  local access_url="http://${access_host}:${PANEL_PORT}"
+  if [[ "${TLS_MODE}" == "acme" || "${TLS_MODE}" == "selfsigned" ]]; then
+    access_url="https://${access_host}:${PANEL_PORT}"
+  fi
 
   echo ""
   echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
@@ -618,6 +642,11 @@ show_result() {
   echo -e "  ${CYAN}${setup_key}${NC}"
   echo ""
   echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
+  echo ""
+  echo -e "  ${CYAN}TLS/SSL:${NC}   Place cert files at:"
+  echo -e "             /etc/koris/cert.pem"
+  echo -e "             /etc/koris/key.pem"
+  echo -e "             Then: koris restart"
   echo ""
   if [[ "${INSTALL_MODE}" == "docker" ]]; then
     echo -e "  ${CYAN}Logs:${NC}      koris logs"
