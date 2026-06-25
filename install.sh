@@ -172,22 +172,21 @@ install_docker() {
 
   # Write env file
   mkdir -p "${CONFIG_DIR}"
+  local db_root_pass="$(gen_secret 16)"
   cat > "${CONFIG_DIR}/panel.env" <<ENV
 # KorisPanel Docker Configuration
-DB_HOST=db
-DB_PORT=3306
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASS=${DB_PASS}
-DB_ROOT_PASS=$(gen_secret 16)
 
-PANEL_PORT=${PANEL_PORT}
-PANEL_DOMAIN=${DOMAIN:-_}
+# Panel application
+PANEL_ADDR=0.0.0.0:${PANEL_PORT}
+PANEL_DB_DSN=${DB_USER}:${DB_PASS}@tcp(db:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8
 PANEL_SESSION_SECRET=${session_secret}
-PANEL_SECRET=${panel_secret}
 PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
 PANEL_TUI_ENABLED=false
+
+# MariaDB container
+DB_ROOT_PASS=${db_root_pass}
+DB_PASS=${DB_PASS}
 ENV
   chmod 600 "${CONFIG_DIR}/panel.env"
 
