@@ -278,6 +278,16 @@ install_docker() {
   # Clone/update source
   clone_source
 
+  # Reuse existing DB password if db-data volume exists (reinstall scenario)
+  if [[ -f "${CONFIG_DIR}/panel.env" ]]; then
+    local existing_pass
+    existing_pass=$(grep -oP 'POSTGRES_PASSWORD=\K.*' "${CONFIG_DIR}/panel.env" 2>/dev/null || true)
+    if [[ -n "${existing_pass}" ]]; then
+      DB_PASS="${existing_pass}"
+      log "Reusing existing database password from previous installation"
+    fi
+  fi
+
   # Generate secrets
   local session_secret="$(gen_secret 32)"
   local setup_key="$(gen_secret 16)"
@@ -416,13 +426,22 @@ install_knode_docker() {
     return
   }
 
-  # Prompt for port
+  # Prompt for port (like standalone knode installer)
   local knode_port
   read -rp "$(echo -e "${CYAN}knode port [2083]: ${NC}")" knode_port </dev/tty
   knode_port="${knode_port:-2083}"
 
-  # Generate knode config
-  local knode_api_key="$(gen_secret 16)"
+  # Check if existing knode config has an API key (reinstall case)
+  local knode_api_key=""
+  if [[ -f /etc/knode/config.toml ]]; then
+    knode_api_key=$(grep -oP 'api_keys\s*=\s*\["\K[^"]+' /etc/knode/config.toml 2>/dev/null || true)
+  fi
+  if [[ -z "${knode_api_key}" ]]; then
+    knode_api_key="$(gen_secret 16)"
+  else
+    log "Reusing existing knode API key"
+  fi
+
   mkdir -p /etc/knode
   cat > /etc/knode/config.toml <<TOML
 [api]
@@ -439,14 +458,33 @@ gogc = 100
 mem_limit = "256MB"
 TOML
 
-  # Run knode container
+  # Detect existing Let's Encrypt certs
+  local le_dir="/etc/letsencrypt/live"
+  if [[ -d "${le_dir}" ]]; then
+    local domain_dir
+    domain_dir=$(ls -1d "${le_dir}"/*/ 2>/dev/null | head -1)
+    if [[ -n "${domain_dir}" && -f "${domain_dir}fullchain.pem" && -f "${domain_dir}privkey.pem" ]]; then
+      log "Found existing Let's Encrypt certificate, configuring knode to use it"
+      cat >> /etc/knode/config.toml <<TOML2
+
+[tls]
+cert = "${domain_dir}fullchain.pem"
+key = "${domain_dir}privkey.pem"
+TOML2
+    fi
+  fi
+
+  # Remove old container and certs (force regeneration with new SANs)
   docker rm -f knode 2>/dev/null || true
+  rm -rf /etc/knode/certs/api/
+
+  # Run knode container
   docker run -d --name knode --network host --restart unless-stopped \
     --cap-add NET_ADMIN --cap-add NET_RAW \
     -v /etc/knode:/etc/knode \
     knode:latest
 
-  sleep 2
+  sleep 3
   if docker ps --format '{{.Names}}' | grep -qx knode; then
     log "knode is ${GREEN}running${NC} on port ${knode_port}"
   else
@@ -470,7 +508,7 @@ TOML
   echo -e "  ${GREEN}${knode_api_key}${NC}"
   echo ""
   echo -e "  ${CYAN}Certificate:${NC}"
-  cat "/etc/knode/certs/api/cert.pem" 2>/dev/null || echo "  (certificate not yet generated — check: docker logs knode)"
+  cat "/etc/knode/certs/api/cert.pem" 2>/dev/null || echo "  (certificate not yet generated — wait a moment and run: cat /etc/knode/certs/api/cert.pem)"
   echo ""
   echo -e "${GREEN}═══════════════════════════════════════${NC}"
   echo ""
