@@ -21,7 +21,7 @@ const toast = useToast()
 // ─── Form State ─────────────────────────────────────────────────────────────
 const name = ref('')
 const address = ref('')
-const port = ref(62050)
+const port = ref(2083)
 const apiKey = ref('')
 const certPem = ref('')
 
@@ -85,7 +85,7 @@ async function handleSubmit() {
 function resetForm() {
   name.value = ''
   address.value = ''
-  port.value = 62050
+  port.value = 2083
   apiKey.value = ''
   certPem.value = ''
 }
@@ -121,7 +121,7 @@ function resetForm() {
 
       <KFormField name="node-port" :label="t('label.port')" :error="errors.port">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="port" type="number" placeholder="62050" />
+          <KInput :id="fieldId" v-model="port" type="number" placeholder="2083" />
         </template>
       </KFormField>
 
