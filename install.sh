@@ -203,15 +203,18 @@ clean_reinstall() {
 
   cd "${INSTALL_DIR}"
 
-  # Step 1: Stop and remove all project containers
+  # Step 1: Stop and remove all project containers (including knode)
   log "Stopping containers..."
   if ! docker compose down 2>/dev/null; then
     warn "docker compose down failed — attempting manual container removal"
-    for ctr in koris koris-db koris-pgadmin knode; do
-      docker stop "${ctr}" 2>/dev/null || warn "Could not stop container: ${ctr}"
-      docker rm -f "${ctr}" 2>/dev/null || warn "Could not remove container: ${ctr}"
-    done
   fi
+  # Always stop knode separately (not managed by panel's docker-compose)
+  for ctr in koris koris-db koris-pgadmin knode; do
+    if docker ps -a --format '{{.Names}}' | grep -qx "${ctr}"; then
+      docker stop "${ctr}" 2>/dev/null || true
+      docker rm -f "${ctr}" 2>/dev/null || true
+    fi
+  done
 
   # Step 2: Remove previously built images (Panel + knode)
   log "Removing project images..."
