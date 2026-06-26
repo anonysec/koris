@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useNodesStore, type NodeFormData } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
+import { useI18n } from '@koris/composables/useI18n'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -10,8 +11,10 @@ import KAlert from '@koris/ui/KAlert.vue'
 
 const emit = defineEmits<{
   (e: 'created', nodeId: number): void
+  (e: 'close'): void
 }>()
 
+const { t } = useI18n()
 const nodesStore = useNodesStore()
 const toast = useToast()
 
@@ -20,9 +23,7 @@ const name = ref('')
 const address = ref('')
 const port = ref(62050)
 const apiKey = ref('')
-const clientCertPem = ref('')
-const clientKeyPem = ref('')
-const caCertPem = ref('')
+const certPem = ref('')
 
 const saving = ref(false)
 const feedback = ref<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -30,12 +31,11 @@ const feedback = ref<{ type: 'success' | 'error'; message: string } | null>(null
 // ─── Validation ─────────────────────────────────────────────────────────────
 const errors = computed(() => {
   const e: Record<string, string> = {}
-  if (!address.value.trim()) e.address = 'Address is required'
+  if (!address.value.trim()) e.address = t('nodes.validation_address')
   const p = Number(port.value)
-  if (!Number.isInteger(p) || p < 1 || p > 65535) e.port = 'Port must be 1–65535'
-  if (!clientCertPem.value.trim()) e.clientCertPem = 'Client certificate is required'
-  if (!clientKeyPem.value.trim()) e.clientKeyPem = 'Client key is required'
-  if (!caCertPem.value.trim()) e.caCertPem = 'CA certificate is required'
+  if (!Number.isInteger(p) || p < 1 || p > 65535) e.port = t('nodes.validation_port')
+  if (!apiKey.value.trim()) e.apiKey = t('nodes.validation_api_key')
+  if (!certPem.value.trim()) e.certPem = t('nodes.validation_cert')
   return e
 })
 
@@ -49,24 +49,24 @@ async function handleSubmit() {
   feedback.value = null
 
   const payload: NodeFormData = {
-    name: name.value.trim(),
+    name: name.value.trim() || address.value.trim(),
     address: address.value.trim(),
     port: Number(port.value),
-    api_key: apiKey.value,
-    client_cert_pem: clientCertPem.value,
-    client_key_pem: clientKeyPem.value,
-    ca_cert_pem: caCertPem.value,
+    api_key: apiKey.value.trim(),
+    client_cert_pem: '',
+    client_key_pem: '',
+    ca_cert_pem: certPem.value.trim(),
   }
 
   const nodeId = await nodesStore.createNode(payload)
 
   if (nodeId) {
-    feedback.value = { type: 'success', message: 'Node created successfully' }
-    toast.success('Node created')
+    feedback.value = { type: 'success', message: t('nodes.created_success') }
+    toast.success(t('nodes.created_success'))
     emit('created', nodeId)
     resetForm()
   } else {
-    feedback.value = { type: 'error', message: 'Failed to create node. Check connection details.' }
+    feedback.value = { type: 'error', message: t('nodes.created_error') }
   }
 
   saving.value = false
@@ -77,84 +77,110 @@ function resetForm() {
   address.value = ''
   port.value = 62050
   apiKey.value = ''
-  clientCertPem.value = ''
-  clientKeyPem.value = ''
-  caCertPem.value = ''
+  certPem.value = ''
 }
 </script>
 
 <template>
-  <form class="node-add-form" @submit.prevent="handleSubmit">
-    <h3 class="node-add-form__title">Add Node</h3>
+  <div class="node-add-slide">
+    <div class="node-add-slide__header">
+      <h3 class="node-add-slide__title">{{ t('nodes.add_node') }}</h3>
+      <KButton variant="ghost" size="sm" @click="emit('close')">✕</KButton>
+    </div>
+
+    <p class="node-add-slide__hint">
+      {{ t('nodes.add_hint') }}
+    </p>
 
     <KAlert v-if="feedback" :variant="feedback.type" closable @close="feedback = null">
       {{ feedback.message }}
     </KAlert>
 
-    <KFormField name="node-name" label="Name" hint="Friendly name for this node">
-      <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="name" placeholder="e.g. de-1" />
-      </template>
-    </KFormField>
+    <form class="node-add-slide__form" @submit.prevent="handleSubmit">
+      <KFormField name="node-name" :label="t('nodes.node_name')" hint="Optional — defaults to address">
+        <template #default="{ fieldId }">
+          <KInput :id="fieldId" v-model="name" placeholder="e.g. de-1, us-west" />
+        </template>
+      </KFormField>
 
-    <KFormField name="node-address" label="Address" :error="errors.address">
-      <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="address" placeholder="e.g. 192.168.1.100 or node.example.com" />
-      </template>
-    </KFormField>
+      <KFormField name="node-address" :label="t('nodes.address')" :error="errors.address">
+        <template #default="{ fieldId }">
+          <KInput :id="fieldId" v-model="address" placeholder="IP or hostname (e.g. 185.1.2.3)" />
+        </template>
+      </KFormField>
 
-    <KFormField name="node-port" label="Port" :error="errors.port">
-      <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="port" type="number" placeholder="62050" />
-      </template>
-    </KFormField>
+      <KFormField name="node-port" :label="t('label.port')" :error="errors.port">
+        <template #default="{ fieldId }">
+          <KInput :id="fieldId" v-model="port" type="number" placeholder="62050" />
+        </template>
+      </KFormField>
 
-    <KFormField name="node-api-key" label="API Key">
-      <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="apiKey" type="password" placeholder="API key for node authentication" />
-      </template>
-    </KFormField>
+      <KFormField name="node-api-key" :label="t('nodes.api_key')" :error="errors.apiKey" hint="Shown when knode is installed">
+        <template #default="{ fieldId }">
+          <KInput :id="fieldId" v-model="apiKey" type="password" placeholder="Paste from knode install output" />
+        </template>
+      </KFormField>
 
-    <KFormField name="node-client-cert" label="Client Certificate (PEM)" :error="errors.clientCertPem">
-      <template #default="{ fieldId }">
-        <KTextarea :id="fieldId" v-model="clientCertPem" :rows="4" placeholder="-----BEGIN CERTIFICATE-----" />
-      </template>
-    </KFormField>
+      <KFormField name="node-cert" :label="t('nodes.certificate')" :error="errors.certPem" hint="CA certificate from knode install output">
+        <template #default="{ fieldId }">
+          <KTextarea :id="fieldId" v-model="certPem" :rows="5" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" />
+        </template>
+      </KFormField>
 
-    <KFormField name="node-client-key" label="Client Key (PEM)" :error="errors.clientKeyPem">
-      <template #default="{ fieldId }">
-        <KTextarea :id="fieldId" v-model="clientKeyPem" :rows="4" placeholder="-----BEGIN PRIVATE KEY-----" />
-      </template>
-    </KFormField>
-
-    <KFormField name="node-ca-cert" label="CA Certificate (PEM)" :error="errors.caCertPem">
-      <template #default="{ fieldId }">
-        <KTextarea :id="fieldId" v-model="caCertPem" :rows="4" placeholder="-----BEGIN CERTIFICATE-----" />
-      </template>
-    </KFormField>
-
-    <KButton type="submit" variant="primary" :loading="saving" :disabled="!isValid">
-      Test &amp; Save
-    </KButton>
-  </form>
+      <div class="node-add-slide__actions">
+        <KButton type="submit" variant="primary" :loading="saving" :disabled="!isValid">
+          {{ t('nodes.test_and_save') }}
+        </KButton>
+        <KButton variant="ghost" @click="emit('close')">
+          {{ t('btn.cancel') }}
+        </KButton>
+      </div>
+    </form>
+  </div>
 </template>
 
 <style scoped>
-.node-add-form {
+.node-add-slide {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-4);
+  padding: var(--space-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  max-width: 520px;
+  max-width: 480px;
+  margin-bottom: var(--space-5);
 }
 
-.node-add-form__title {
+.node-add-slide__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.node-add-slide__title {
   margin: 0;
   font-size: var(--text-lg);
   font-weight: var(--font-semibold);
   color: var(--color-text);
+}
+
+.node-add-slide__hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.node-add-slide__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.node-add-slide__actions {
+  display: flex;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
 }
 </style>
