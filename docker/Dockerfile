@@ -4,7 +4,7 @@
 # ─── Build Stage ──────────────────────────────────────────────────────
 FROM golang:1.25-alpine AS builder
 
-RUN apk add --no-cache git nodejs npm
+RUN apk add --no-cache git nodejs npm && npm install -g pnpm@9
 
 WORKDIR /build
 
@@ -15,21 +15,12 @@ RUN go mod download
 # Copy source
 COPY . .
 
-# Install shared dependencies (admin/portal import from shared)
-WORKDIR /build/panel/web/shared
-RUN npm install
-
-# Build frontend - Admin
-WORKDIR /build/panel/web/admin
-RUN npm install && npm run build
-
-# Build frontend - Portal
-WORKDIR /build/panel/web/portal
-RUN npm install && npm run build
-
-# Build frontend - Landing
-WORKDIR /build/panel/web/landing
-RUN npm install && npm run build
+# Build frontend via pnpm workspace
+WORKDIR /build/panel/web
+RUN pnpm install --frozen-lockfile && \
+    pnpm --filter admin build && \
+    pnpm --filter portal build && \
+    pnpm --filter landing build
 
 # Build Go binary
 WORKDIR /build
