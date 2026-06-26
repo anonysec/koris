@@ -374,6 +374,9 @@ func (p *connPool) dial(ctx context.Context, cfg NodeConfig) (*grpc.ClientConn, 
 
 // buildTLSConfig creates a *tls.Config for connecting to a knode instance.
 // If ClientCert is provided, uses mTLS. Otherwise, uses server-cert verification only.
+// Since knode uses self-signed certs, we use a custom VerifyPeerCertificate that
+// checks the cert chain against the provided CA, but allows any ServerName.
+// This handles nodes where the cert was generated before SANs were added.
 func buildTLSConfig(cfg NodeConfig) (*tls.Config, error) {
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,
@@ -385,7 +388,32 @@ func buildTLSConfig(cfg NodeConfig) (*tls.Config, error) {
 		if !caPool.AppendCertsFromPEM(cfg.CACert) {
 			return nil, errors.New("failed to parse CA certificate PEM")
 		}
-		tlsCfg.RootCAs = caPool
+		// Use InsecureSkipVerify + custom VerifyPeerCertificate to validate
+		// the cert chain without requiring SAN/CN match on the address.
+		// This is safe because we're verifying against the specific CA cert
+		// that the admin explicitly provided for this node.
+		tlsCfg.InsecureSkipVerify = true
+		tlsCfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			if len(rawCerts) == 0 {
+				return errors.New("no certificates presented by server")
+			}
+			cert, err := x509.ParseCertificate(rawCerts[0])
+			if err != nil {
+				return fmt.Errorf("parse server cert: %w", err)
+			}
+			opts := x509.VerifyOptions{
+				Roots:         caPool,
+				CurrentTime:   time.Now(),
+				Intermediates: x509.NewCertPool(),
+			}
+			for _, raw := range rawCerts[1:] {
+				if intermediate, err := x509.ParseCertificate(raw); err == nil {
+					opts.Intermediates.AddCert(intermediate)
+				}
+			}
+			_, err = cert.Verify(opts)
+			return err
+		}
 	} else {
 		// No CA cert — skip server verification (not recommended but allows initial testing)
 		tlsCfg.InsecureSkipVerify = true
