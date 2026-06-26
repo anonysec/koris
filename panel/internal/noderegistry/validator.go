@@ -23,6 +23,7 @@ type Validator struct{}
 
 // Validate checks that a NodeRecord has valid fields.
 // Returns the first validation error encountered.
+// Client certificate and key are optional (API key + CA cert auth is sufficient).
 func (v Validator) Validate(r *NodeRecord) error {
 	if r.Name == "" {
 		return ErrEmptyName
@@ -33,17 +34,16 @@ func (v Validator) Validate(r *NodeRecord) error {
 	if r.Port < 1 || r.Port > 65535 {
 		return ErrInvalidPort
 	}
-	if len(r.ClientCertPEM) == 0 {
-		return ErrEmptyClientCert
+	// Client cert/key are optional — only validate PEM format if provided
+	if len(r.ClientCertPEM) > 0 {
+		if err := validatePEM(r.ClientCertPEM, "client certificate"); err != nil {
+			return err
+		}
 	}
-	if err := validatePEM(r.ClientCertPEM, "client certificate"); err != nil {
-		return err
-	}
-	if len(r.ClientKeyEnc) == 0 {
-		return ErrEmptyClientKey
-	}
-	if err := validatePEM(r.ClientKeyEnc, "client key"); err != nil {
-		return err
+	if len(r.ClientKeyEnc) > 0 {
+		if err := validatePEM(r.ClientKeyEnc, "client key"); err != nil {
+			return err
+		}
 	}
 	if len(r.CACertPEM) == 0 {
 		return ErrEmptyCACert
