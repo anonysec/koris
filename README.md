@@ -1,6 +1,6 @@
 # KorisPanel
 
-**Multi-protocol, multi-node VPN management panel** with customer billing, real-time monitoring, reseller system, and modern web UI.
+**Multi-protocol VPN management platform** with real-time node monitoring, customer billing, reseller system, and modern web UI.
 
 Manage your entire VPN infrastructure from a single dashboard: nodes, customers, subscriptions, payments, support tickets, and more.
 
@@ -9,120 +9,81 @@ Manage your entire VPN infrastructure from a single dashboard: nodes, customers,
 ## Key Features
 
 ### VPN & Networking
-- **Multi-Protocol** - OpenVPN, L2TP/IPSec, IKEv2, SSH Tunnel
-- **Multi-Node** - Manage unlimited VPN nodes from one panel
-- **Upstream Proxy** - Route node traffic through xray, SOCKS5, or HTTP proxy
-- **FreeRADIUS Integration** - Standards-based AAA with session accounting
-- **Real-Time Monitoring** - Live bandwidth charts, session tracking, node health
+- **Multi-Protocol** — OpenVPN, WireGuard, L2TP/IPsec, IKEv2, SSH Tunnel, MTProto
+- **Multi-Node** — Manage unlimited VPN nodes via gRPC with mTLS
+- **Outbound Tunnels** — VLESS+Reality, WireGuard, SSH, Rathole, GRE/IPIP
+- **FreeRADIUS Integration** — Standards-based AAA with session accounting
+- **Real-Time Monitoring** — Live metrics streaming, health checks, bandwidth tracking
 
 ### Business & Billing
-- **Subscription Plans** - Quota-based or pay-as-you-go pricing
-- **Wallet & Payments** - Per-user wallet, manual/crypto payments, payment methods
-- **Reseller System** - Sub-accounts with credit allocation and customer provisioning
+- **Subscription Plans** — Quota-based or pay-as-you-go pricing
+- **Wallet & Payments** — Per-user wallet, manual/crypto payments, payment gateways
+- **Reseller System** — Sub-accounts with credit allocation and customer provisioning
+- **Invoices** — Auto-generated invoices with PDF export
 
 ### Customer Experience
-- **Self-Service Portal** - Simple single-page UI for customers (usage, profiles, support)
-- **Download Apps** - Configurable app download links for iOS, Android, Windows, macOS
-- **Ticket System** - Customer support with admin/user messaging
-- **Telegram Bot** - Both admin management and customer self-service via inline buttons
+- **Self-Service Portal** — Single-page app for usage, profiles, VPN configs, support
+- **Telegram Bot** — Admin management and customer self-service via inline buttons
+- **Ticket System** — Customer support with canned responses and knowledge base
 
-### Admin Panel
-- **Dashboard** - Stats overview, usage graphs, recent activity
-- **Customer Management** - Accounts with data/speed limits, expiry, bulk actions
-- **Theming** - 5 built-in themes (Midnight, Kiro, GitHub, Soft Dark, Corporate)
-- **Dark/Light/System Mode** - Auto-detects OS preference
-- **Multi-Language** - English, Persian (RTL), Chinese, Russian
-- **Timezone Support** - Dates formatted per user locale and browser timezone
-- **Templates** - Pre-configured customer profiles for quick provisioning
+### Admin Dashboard
+- **Drag-and-Drop Sidebar** — Customizable navigation with category/item reordering
+- **Theming** — Multiple themes with 18 CSS tokens, dark/light/system mode
+- **Multi-Language** — English, Persian (RTL), Chinese, Russian
+- **Sliding Panels** — Consistent slide-over pattern for all entity creation forms
 
-## Screenshots
-
-> Screenshots will be added after initial release.
+### Infrastructure
+- **Two Editions** — Full and Lite from same codebase via Go build tags
+- **Docker Deploy** — TimescaleDB + pgAdmin + Panel in one compose file
+- **Auto-TLS** — Let's Encrypt (ACME), manual cert, or self-signed modes
+- **HTTPS Enforced** — External traffic requires TLS; HTTP restricted to loopback
+- **Decoy Landing Page** — Neutral business content with VPN blocklist validation
 
 ---
 
 ## Quick Install
 
-### Panel Server (one-liner)
+### Docker (recommended)
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
 ```
 
+Options:
+```bash
+install.sh --lite              # Lite edition
+install.sh --port=8080         # Custom port
+install.sh --domain=panel.example.com
+```
+
 ### Node Agent (on each VPN server)
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/node-install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/knode/master/install.sh)
 ```
-
-You will need the **Panel URL** and **Node Token** (generated in admin panel under Services > Nodes > Add Node).
-
----
-
-## Management CLI
-
-After installation, use the `koris` command:
-
-```bash
-koris              # Interactive menu
-koris status       # Service status + system info
-koris restart      # Restart panel & node
-koris update       # Pull latest & rebuild
-koris logs         # Recent logs
-koris follow       # Live log stream
-koris uninstall    # Remove everything
-```
-
----
-
-## Requirements
-
-### Panel Server
-
-| Component | Minimum |
-|-----------|---------|
-| OS | Ubuntu 20.04+ / Debian 11+ / CentOS 8+ |
-| RAM | 1 GB |
-| Disk | 10 GB |
-| Go | 1.22+ (installed automatically) |
-| MariaDB | 10.5+ (installed automatically) |
-| FreeRADIUS | 3.x (installed automatically) |
-| Nginx | Any (installed automatically) |
-| Node.js | 18+ (for frontend build, installed automatically) |
-
-### Node Server
-
-| Component | Minimum |
-|-----------|---------|
-| OS | Ubuntu 20.04+ / Debian 11+ |
-| RAM | 512 MB |
-| Network | Must reach panel URL |
-| Packages | OpenVPN, StrongSwan, xl2tpd (installed automatically) |
 
 ---
 
 ## Architecture
 
 ```
-                    Panel Server
+                    Panel Server (Docker)
  +-------------------------------------------------+
- |  Nginx (:80/443)                                |
+ |  Panel Binary (:443 HTTPS / :8080 HTTP local)   |
  |      |                                          |
  |      v                                          |
- |  Panel Backend (:8080)  -->  MariaDB            |
- |      |                       (radius DB)        |
- |      v                                          |
- |  FreeRADIUS (auth/acct)                         |
+ |  TimescaleDB (pg16)     pgAdmin (:5050)         |
+ |      (metrics + data)                           |
  +-------------------------------------------------+
-          |  WebSocket + REST API
+          |  gRPC + mTLS (bidirectional sync)
           v
  +-------------------------------------------------+
- |              Node Server(s)                      |
+ |              knode Server(s)                     |
  |                                                  |
- |  Node Agent --> OpenVPN (:1194)                  |
- |             --> StrongSwan (IKEv2/L2TP)          |
- |             --> SSH Tunnel                       |
- |             --> [Upstream Proxy] (optional)      |
+ |  gRPC/REST API --> OpenVPN, WireGuard, L2TP,    |
+ |                    IKEv2, SSH, MTProto           |
+ |                --> Outbound tunnels              |
+ |                --> Traffic shaping               |
  +-------------------------------------------------+
 ```
 
@@ -132,46 +93,13 @@ koris uninstall    # Remove everything
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.22+, Chi router, GORM |
-| Admin Frontend | Vue 3, TypeScript, Vite |
-| Portal Frontend | Vue 3, TypeScript, Vite |
-| Database | MariaDB 10.5+ |
-| AAA | FreeRADIUS 3.x |
-| VPN Protocols | OpenVPN, StrongSwan, xl2tpd |
-| Reverse Proxy | Nginx |
-| Bot | Telegram Bot API (inline keyboards) |
-
----
-
-## API
-
-All admin operations are available via REST API at `/api/`. Key endpoints:
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | Panel health check |
-| `GET /api/dashboard/stats` | Dashboard statistics |
-| `GET /api/customers` | List customers |
-| `POST /api/customers` | Create customer |
-| `GET /api/nodes` | List nodes |
-| `POST /api/nodes` | Register node |
-| `GET /api/payments` | List payments |
-| `WS /api/realtime` | WebSocket for live stats/sessions |
-
----
-
-## Configuration
-
-Panel config: `/etc/koris/panel.env`
-Node config: `/etc/knode/node.env`
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PANEL_ADDR` | Listen address | `127.0.0.1:8080` |
-| `PANEL_DB_DSN` | MariaDB connection string | - |
-| `PANEL_SETUP_KEY` | Initial admin setup key | auto-generated |
-| `PANEL_SESSION_SECRET` | Cookie signing secret | auto-generated |
-| `PANEL_VERSION` | Display version | from `VERSION` file |
+| Backend | Go 1.25+, `net/http` (no framework) |
+| Frontend | Vue 3, TypeScript, Vite, Pinia |
+| Database | TimescaleDB (PostgreSQL 16) |
+| Node Communication | gRPC with mTLS, protobuf |
+| Frontend Workspaces | pnpm monorepo (admin, portal, landing, shared) |
+| Testing | gopter (Go PBT), fast-check (TS PBT), vitest |
+| Containerization | Docker Compose |
 
 ---
 
@@ -185,30 +113,86 @@ cd panel
 # Backend
 go run ./panel/cmd/panel
 
-# Frontend (admin)
-cd panel/web/admin
-npm install && npm run dev
+# Frontend (pnpm workspace)
+cd panel/web
+pnpm install
+pnpm --filter admin dev     # Admin dashboard
+pnpm --filter portal dev    # Customer portal
 
-# Frontend (portal)
-cd panel/web/portal
-npm install && npm run dev
+# Build everything
+make build          # Frontend + full backend
+make build-lite     # Frontend + lite backend
+
+# Tests
+make test           # Go tests
+make test-frontend  # Vitest
 ```
 
 ---
 
-## Updating
+## Build Commands
 
-On your server:
 ```bash
-koris update
+make frontend       # Build all frontend apps (admin, portal, landing)
+make backend        # Build full Go binary
+make backend-lite   # Build lite Go binary (excludes premium features)
+make build          # frontend + backend
+make build-lite     # frontend + backend-lite
+make test           # go test ./panel/...
+make test-frontend  # pnpm test
+make clean          # Remove all build artifacts
 ```
 
-Or manually:
+---
+
+## Editions
+
+Both editions are built from this single repository using Go build tags:
+
+| Feature | Full | Lite |
+|---------|------|------|
+| Node management, users, VPN protocols | ✓ | ✓ |
+| gRPC sync, monitoring, health checks | ✓ | ✓ |
+| Backup, certificates, sessions | ✓ | ✓ |
+| Billing, invoices, payment gateways | ✓ | ✗ |
+| Xray, MTProto, AnyConnect | ✓ | ✗ |
+| Tickets, knowledge base, SLA | ✓ | ✗ |
+| Reseller, LDAP, reports, segments | ✓ | ✗ |
+
 ```bash
-cd /opt/KorisPanel
-git pull origin main
-bash deploy.sh
+go build ./panel/cmd/panel              # Full
+go build -tags lite ./panel/cmd/panel   # Lite
 ```
+
+The `/api/info` endpoint returns `{"edition": "full"}` or `{"edition": "lite"}`.
+
+---
+
+## Configuration
+
+Panel config: `/etc/koris/panel.env`
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PANEL_ADDR` | HTTP listen address | `127.0.0.1:8080` |
+| `PANEL_TLS_ADDR` | HTTPS listen address | `0.0.0.0:443` |
+| `PANEL_TLS_MODE` | TLS mode (acme/manual/selfsigned) | `selfsigned` |
+| `PANEL_TLS_CERT` | Cert path (manual mode) | — |
+| `PANEL_TLS_KEY` | Key path (manual mode) | — |
+| `PANEL_DOMAIN` | Domain for ACME | — |
+| `POSTGRES_DB` | Database name | `koris` |
+| `POSTGRES_USER` | Database user | `koris` |
+| `POSTGRES_PASSWORD` | Database password | — |
+
+---
+
+## Docker Services
+
+| Service | Image | Port |
+|---------|-------|------|
+| `koris` | Built from source | 443 (HTTPS), 80 (HTTP) |
+| `koris-db` | `timescale/timescaledb:latest-pg16` | 5432 (internal) |
+| `koris-pgadmin` | `dpage/pgadmin4` | 5050 |
 
 ---
 
