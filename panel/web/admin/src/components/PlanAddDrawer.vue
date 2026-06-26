@@ -71,7 +71,7 @@ async function handleSubmit() {
 
 <template>
   <KSlideOver :open="open" :title="t('plans.create_plan')" @close="handleClose">
-    <form class="entity-form" @submit.prevent="handleSubmit">
+    <form class="entity-form" autocomplete="off" @submit.prevent="handleSubmit">
       <KFormField name="plan-name" :label="t('plans.name')" required :error="validationError && !form.name ? validationError : ''">
         <template #default="{ fieldId }">
           <KInput :id="fieldId" v-model="form.name" :placeholder="t('plans.name_placeholder')" />

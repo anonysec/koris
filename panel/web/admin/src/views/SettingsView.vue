@@ -466,7 +466,7 @@ onMounted(async () => {
       <template #panel-settings>
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.panel_settings') }}</h4>
-          <form class="settings-form" @submit.prevent="savePanelSettings">
+          <form class="settings-form" autocomplete="off" @submit.prevent="savePanelSettings">
             <KFormField name="panel-name" :label="t('settings.panel_name')">
               <template #default="{ fieldId }">
                 <KInput
@@ -724,10 +724,10 @@ onMounted(async () => {
       <template #telegram>
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.telegram') }}</h4>
-          <form class="settings-form" @submit.prevent="saveTelegramSettings">
+          <form class="settings-form" autocomplete="off" @submit.prevent="saveTelegramSettings">
             <KFormField name="tg-token" :label="t('settings.telegram_token')" hint="Get this from @BotFather">
               <template #default="{ fieldId }">
-                <KInput :id="fieldId" v-model="telegramToken" placeholder="123456:ABC-DEF..." type="password" />
+                <KInput :id="fieldId" v-model="telegramToken" placeholder="123456:ABC-DEF..." type="password" autocomplete="new-password" />
               </template>
             </KFormField>
             <KFormField name="tg-chat" :label="t('settings.telegram_chat')">

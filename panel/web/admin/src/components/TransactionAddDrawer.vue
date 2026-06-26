@@ -61,7 +61,7 @@ async function handleSubmit() {
 
 <template>
   <KSlideOver :open="open" :title="t('payments.record_payment')" @close="handleClose">
-    <form class="entity-form" @submit.prevent="handleSubmit">
+    <form class="entity-form" autocomplete="off" @submit.prevent="handleSubmit">
       <KFormField name="txn-username" :label="t('payments.form_username')" required :error="validationError && !form.username ? validationError : ''">
         <template #default="{ fieldId }">
           <KInput :id="fieldId" v-model="form.username" placeholder="customer_username" />

@@ -65,7 +65,7 @@ async function handleSave() {
     <h3 class="settings-section__title">{{ t('settings.alerts') }}</h3>
     <p class="settings-section__desc">{{ t('settings.alerts_desc') }}</p>
 
-    <form class="alerts-form" @submit.prevent="handleSave">
+    <form class="alerts-form" autocomplete="off" @submit.prevent="handleSave">
       <div class="form-grid">
         <KFormField name="cpu-threshold" :label="t('settings.alert_cpu')" :error="errors.cpu">
           <template #default="{ fieldId }">

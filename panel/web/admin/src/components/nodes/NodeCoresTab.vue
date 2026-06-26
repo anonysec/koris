@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useNodesStore, type CoreStatus } from '@/stores/nodes'
-import { useEditionStore } from '@/stores/edition'
 import { useToast } from '@koris/composables/useToast'
 import CoreCard from './CoreCard.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
@@ -11,39 +10,17 @@ const props = defineProps<{
 }>()
 
 const nodesStore = useNodesStore()
-const edition = useEditionStore()
 const toast = useToast()
 
 const cores = ref<CoreStatus[]>([])
 const loading = ref(false)
 
-// All supported core types
-const ALL_CORE_TYPES = ['openvpn', 'wireguard', 'l2tp', 'ikev2', 'ssh', 'mtproto']
-const FULL_ONLY_CORES = ['xray']
-
-// Build the full list of cores, including those not returned by API (shown as stopped)
-function buildCoreList(apiCores: CoreStatus[]): CoreStatus[] {
-  const coreTypes = [...ALL_CORE_TYPES]
-  if (edition.isFull) {
-    coreTypes.push(...FULL_ONLY_CORES)
-  }
-
-  const coreMap = new Map<string, CoreStatus>()
-  for (const c of apiCores) {
-    coreMap.set(c.coreType, c)
-  }
-
-  return coreTypes.map((type) => {
-    const existing = coreMap.get(type)
-    if (existing) return existing
-    return { coreType: type, status: 'stopped' as const }
-  })
-}
-
 async function loadCores() {
   loading.value = true
   const apiCores = await nodesStore.listCores(props.nodeId)
-  cores.value = buildCoreList(apiCores)
+  // Only show cores actually returned by the API (installed/configured on the node)
+  // Filter out cores with status 'unknown' as those are not actually configured
+  cores.value = apiCores.filter((c) => c.status !== 'unknown')
   loading.value = false
 }
 

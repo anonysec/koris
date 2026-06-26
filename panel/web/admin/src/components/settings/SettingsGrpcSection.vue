@@ -54,7 +54,7 @@ async function handleSave() {
     <h3 class="settings-section__title">{{ t('settings.grpc') }}</h3>
     <p class="settings-section__desc">{{ t('settings.grpc_desc') }}</p>
 
-    <form class="grpc-form" @submit.prevent="handleSave">
+    <form class="grpc-form" autocomplete="off" @submit.prevent="handleSave">
       <div class="form-grid">
         <KFormField name="connect-timeout" :label="t('settings.grpc_connect_timeout')">
           <template #default="{ fieldId }">
