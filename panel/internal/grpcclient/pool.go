@@ -372,18 +372,31 @@ func (p *connPool) dial(ctx context.Context, cfg NodeConfig) (*grpc.ClientConn, 
 	return conn, nil
 }
 
-// buildTLSConfig creates a *tls.Config for mTLS to a knode instance.
+// buildTLSConfig creates a *tls.Config for connecting to a knode instance.
+// If ClientCert is provided, uses mTLS. Otherwise, uses server-cert verification only.
 func buildTLSConfig(cfg NodeConfig) (*tls.Config, error) {
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM(cfg.CACert) {
-		return nil, errors.New("failed to parse CA certificate PEM")
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
 	}
 
-	return &tls.Config{
-		Certificates: []tls.Certificate{cfg.ClientCert},
-		RootCAs:      caPool,
-		MinVersion:   tls.VersionTLS12,
-	}, nil
+	// CA cert for server verification
+	if len(cfg.CACert) > 0 {
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(cfg.CACert) {
+			return nil, errors.New("failed to parse CA certificate PEM")
+		}
+		tlsCfg.RootCAs = caPool
+	} else {
+		// No CA cert — skip server verification (not recommended but allows initial testing)
+		tlsCfg.InsecureSkipVerify = true
+	}
+
+	// Client cert for mTLS (optional)
+	if len(cfg.ClientCert.Certificate) > 0 {
+		tlsCfg.Certificates = []tls.Certificate{cfg.ClientCert}
+	}
+
+	return tlsCfg, nil
 }
 
 // apiKeyCredentials implements grpc.PerRPCCredentials to inject the API key as metadata.

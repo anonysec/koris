@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -342,20 +343,26 @@ func (s *Server) testNodeConnection(ctx context.Context, in knodeNodeRequest) er
 
 // buildNodeConfigFromInput constructs a grpcclient.NodeConfig from the JSON input.
 func (s *Server) buildNodeConfigFromInput(id int64, in knodeNodeRequest) (grpcclient.NodeConfig, error) {
-	clientCert, err := tls.X509KeyPair([]byte(in.ClientCertPEM), []byte(in.ClientKeyPEM))
-	if err != nil {
-		return grpcclient.NodeConfig{}, err
+	cfg := grpcclient.NodeConfig{
+		NodeID:  id,
+		Name:    in.Name,
+		Address: in.Address,
+		Port:    in.Port,
+		APIKey:  in.APIKey,
+		CACert:  []byte(in.CACertPEM),
 	}
 
-	return grpcclient.NodeConfig{
-		NodeID:     id,
-		Name:       in.Name,
-		Address:    in.Address,
-		Port:       in.Port,
-		APIKey:     in.APIKey,
-		ClientCert: clientCert,
-		CACert:     []byte(in.CACertPEM),
-	}, nil
+	// mTLS client cert is optional — if both client cert and key are provided, use them.
+	// Otherwise, connect with just server-cert verification + API key auth.
+	if in.ClientCertPEM != "" && in.ClientKeyPEM != "" {
+		clientCert, err := tls.X509KeyPair([]byte(in.ClientCertPEM), []byte(in.ClientKeyPEM))
+		if err != nil {
+			return grpcclient.NodeConfig{}, fmt.Errorf("invalid client cert/key pair: %w", err)
+		}
+		cfg.ClientCert = clientCert
+	}
+
+	return cfg, nil
 }
 
 // nodeRecordToResponse converts a NodeRecord to the API response format.

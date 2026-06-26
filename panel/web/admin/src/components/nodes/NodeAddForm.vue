@@ -26,10 +26,12 @@ const apiKey = ref('')
 const certPem = ref('')
 
 const saving = ref(false)
+const submitted = ref(false)
 const feedback = ref<{ type: 'success' | 'error'; message: string } | null>(null)
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 const errors = computed(() => {
+  if (!submitted.value) return {}
   const e: Record<string, string> = {}
   if (!address.value.trim()) e.address = t('nodes.validation_address')
   const p = Number(port.value)
@@ -39,10 +41,18 @@ const errors = computed(() => {
   return e
 })
 
-const isValid = computed(() => Object.keys(errors.value).length === 0)
+const isValid = computed(() => {
+  if (!address.value.trim()) return false
+  const p = Number(port.value)
+  if (!Number.isInteger(p) || p < 1 || p > 65535) return false
+  if (!apiKey.value.trim()) return false
+  if (!certPem.value.trim()) return false
+  return true
+})
 
 // ─── Actions ────────────────────────────────────────────────────────────────
 async function handleSubmit() {
+  submitted.value = true
   if (!isValid.value) return
 
   saving.value = true
