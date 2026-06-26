@@ -304,23 +304,33 @@ install_docker() {
   KEY_PATH="${CONFIG_DIR}/key.pem"
 
   if [[ "${TLS_MODE}" == "acme" ]]; then
-    # Install certbot and get real cert
-    log "Installing certbot for Let's Encrypt..."
-    apt-get install -y -qq certbot >/dev/null 2>&1 || true
-    log "Requesting certificate for ${DOMAIN}..."
-    if certbot certonly --standalone -d "${DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email; then
-      # Copy LE certs to /etc/koris/
+    # Check if Let's Encrypt cert already exists (reinstall scenario)
+    if [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" && -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]]; then
+      log "Existing Let's Encrypt certificate found for ${DOMAIN}"
       cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" "${CERT_PATH}"
       cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" "${KEY_PATH}"
       chmod 600 "${KEY_PATH}"
-      log "Let's Encrypt certificate obtained for ${DOMAIN}"
-      # Add cron for auto-renewal
-      { crontab -l 2>/dev/null || true; echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${CERT_PATH} && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${KEY_PATH} && docker restart koris'"; } | crontab -
+      log "Certificate copied to ${CERT_PATH}"
     else
-      warn "Let's Encrypt failed — falling back to self-signed"
-      openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
-        -subj "/CN=${cert_cn}" >/dev/null 2>&1
+      # No existing cert — request a new one
+      log "Installing certbot for Let's Encrypt..."
+      apt-get install -y -qq certbot >/dev/null 2>&1 || true
+      log "Requesting certificate for ${DOMAIN}..."
+      if certbot certonly --standalone -d "${DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email; then
+        cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" "${CERT_PATH}"
+        cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" "${KEY_PATH}"
+        chmod 600 "${KEY_PATH}"
+        log "Let's Encrypt certificate obtained for ${DOMAIN}"
+      else
+        warn "Let's Encrypt failed — falling back to self-signed"
+        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+          -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
+          -subj "/CN=${cert_cn}" >/dev/null 2>&1
+      fi
+    fi
+    # Ensure auto-renewal cron exists
+    if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
+      { crontab -l 2>/dev/null || true; echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${CERT_PATH} && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${KEY_PATH} && docker restart koris'"; } | crontab -
     fi
   elif [[ "${TLS_MODE}" == "manual" ]]; then
     # User provides cert — verify the files exist
