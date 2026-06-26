@@ -19,6 +19,12 @@ func RegisterReconnectSync(pool Pool, syncService *UserSyncService, store dbstor
 		if old == StatusOffline && new == StatusOnline {
 			log.Printf("[knode] Node %d reconnected (offline → online), triggering Health + AllCoreStatuses + full user sync", nodeID)
 			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[knode] RegisterReconnectSync: recovered panic for node %d: %v", nodeID, r)
+					}
+				}()
+
 				ctx := context.Background()
 
 				// 1. Call Health RPC to verify the node is responsive and get its status.
@@ -68,6 +74,12 @@ func checkNodeHealth(ctx context.Context, pool Pool, nodeID int64) error {
 // becoming reachable (Requirement 10.4).
 func InitialNodeSync(ctx context.Context, pool Pool, store dbstore.Store, nodeID int64) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[knode] InitialNodeSync: recovered panic for node %d: %v", nodeID, r)
+			}
+		}()
+
 		// Call Health RPC
 		if err := checkNodeHealth(ctx, pool, nodeID); err != nil {
 			log.Printf("[knode] Initial health check failed for node %d: %v", nodeID, err)
