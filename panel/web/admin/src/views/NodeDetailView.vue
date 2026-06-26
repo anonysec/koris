@@ -3,7 +3,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useNodesStore } from '@/stores/nodes'
 import { useMetricsStore } from '@/stores/metrics'
-import { useEditionStore } from '@/stores/edition'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
@@ -14,9 +13,6 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 import NodeMetricsPanel from '@/components/nodes/NodeMetricsPanel.vue'
 import NodeCoresTab from '@/components/nodes/NodeCoresTab.vue'
 import NodeSessionsTab from '@/components/nodes/NodeSessionsTab.vue'
-import NodeFirewallTab from '@/components/nodes/NodeFirewallTab.vue'
-import NodeTunnelsTab from '@/components/nodes/NodeTunnelsTab.vue'
-import NodeCertsTab from '@/components/nodes/NodeCertsTab.vue'
 import BandwidthChart from '@/components/metrics/BandwidthChart.vue'
 
 const props = defineProps<{ id: string; tab?: string }>()
@@ -26,7 +22,6 @@ const router = useRouter()
 const route = useRoute()
 const store = useNodesStore()
 const metrics = useMetricsStore()
-const edition = useEditionStore()
 const toast = useToast()
 const { get } = useApi()
 
@@ -41,12 +36,7 @@ const tabs = computed(() => {
     { key: 'overview', label: t('node_detail.tab_overview') },
     { key: 'cores', label: t('node_detail.tab_cores') },
     { key: 'sessions', label: t('node_detail.tab_sessions') },
-    { key: 'firewall', label: t('node_detail.tab_firewall') },
   ]
-  if (edition.isFull) {
-    list.push({ key: 'tunnels', label: t('node_detail.tab_tunnels') })
-  }
-  list.push({ key: 'certificates', label: t('node_detail.tab_certificates') })
   return list
 })
 
@@ -98,7 +88,6 @@ async function loadNodeDetail() {
 
 onMounted(async () => {
   await loadNodeDetail()
-  edition.fetchEdition()
 })
 </script>
 
@@ -180,15 +169,6 @@ onMounted(async () => {
 
         <!-- Sessions Tab -->
         <NodeSessionsTab v-else-if="activeTab === 'sessions'" :node-id="Number(id)" />
-
-        <!-- Firewall Tab -->
-        <NodeFirewallTab v-else-if="activeTab === 'firewall'" :node-id="Number(id)" />
-
-        <!-- Tunnels Tab (full edition only) -->
-        <NodeTunnelsTab v-else-if="activeTab === 'tunnels'" :node-id="Number(id)" />
-
-        <!-- Certificates Tab -->
-        <NodeCertsTab v-else-if="activeTab === 'certificates'" :node-id="Number(id)" />
       </div>
     </template>
 
