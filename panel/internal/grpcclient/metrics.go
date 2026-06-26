@@ -71,10 +71,15 @@ func (mc *MetricsConsumer) StartStreamWithInterval(ctx context.Context, nodeID i
 	if interval < MinMetricsInterval {
 		interval = MinMetricsInterval
 	}
+
+	if mc == nil || mc.pool == nil {
+		return
+	}
+
 	mc.pool.mu.RLock()
 	entry, ok := mc.pool.connections[nodeID]
 	mc.pool.mu.RUnlock()
-	if !ok {
+	if !ok || entry == nil || entry.conn == nil {
 		log.Printf("[grpc-client] StartStream: node %d not found in pool", nodeID)
 		return
 	}
@@ -85,20 +90,27 @@ func (mc *MetricsConsumer) StartStreamWithInterval(ctx context.Context, nodeID i
 		return
 	}
 
-	client := knodepb.NewKnodeServiceClient(conn.Conn)
-
-	intervalSec := int32(interval.Seconds())
-	stream, err := client.StreamMetrics(ctx, &knodepb.StreamMetricsRequest{
-		IntervalSeconds: intervalSec,
-	})
-	if err != nil {
-		log.Printf("[grpc-client] StartStream: failed to open StreamMetrics for node %d: %v", nodeID, err)
-		return
-	}
-
-	log.Printf("[grpc-client] StreamMetrics opened for node %d (interval: %s)", nodeID, interval)
-
+	// Run stream in a goroutine with panic recovery
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[grpc-client] StartStream: recovered panic for node %d: %v", nodeID, r)
+			}
+		}()
+
+		client := knodepb.NewKnodeServiceClient(conn.Conn)
+
+		intervalSec := int32(interval.Seconds())
+		stream, err := client.StreamMetrics(ctx, &knodepb.StreamMetricsRequest{
+			IntervalSeconds: intervalSec,
+		})
+		if err != nil {
+			log.Printf("[grpc-client] StartStream: failed to open StreamMetrics for node %d: %v", nodeID, err)
+			return
+		}
+
+		log.Printf("[grpc-client] StreamMetrics opened for node %d (interval: %s)", nodeID, interval)
+
 		for {
 			pbEvent, err := stream.Recv()
 			if err != nil {
