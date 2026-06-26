@@ -220,7 +220,7 @@ clean_reinstall() {
   log "Removing project images..."
   for img in koris:latest knode:latest koris-panel:latest; do
     if docker image inspect "${img}" &>/dev/null; then
-      docker rmi "${img}" 2>/dev/null || warn "Could not remove image: ${img}"
+      docker rmi -f "${img}" 2>/dev/null || true
     fi
   done
   # Also remove images built by compose (project prefix)
