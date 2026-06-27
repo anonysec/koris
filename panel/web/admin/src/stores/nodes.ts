@@ -161,6 +161,7 @@ export const useNodesStore = defineStore('nodes', () => {
   // ─── State ────────────────────────────────────────────────────────────────
   const list = ref<KnodeNode[]>([])
   const loading = ref(false)
+  const vpnConfigs = ref<Record<number, any[]>>({})
 
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, put, del, error } = useApi()
@@ -306,6 +307,34 @@ export const useNodesStore = defineStore('nodes', () => {
   async function restartCore(nodeId: number, coreName: string): Promise<boolean> {
     try {
       await post<NodeMutationResponse>(`/api/admin/knode/nodes/${nodeId}/cores/${coreName}/restart`, {})
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // ─── VPN Protocol Configs (per-node) ────────────────────────────────────────
+
+  /**
+   * Load VPN protocol configurations for a node.
+   * GET /api/nodes/vpn-config/{nodeId} → { ok, configs }
+   */
+  async function loadNodeVpnConfigs(nodeId: number): Promise<void> {
+    try {
+      const res = await get<{ ok: boolean; configs: any[] }>(`/api/nodes/vpn-config/${nodeId}`)
+      vpnConfigs.value[nodeId] = res.configs || []
+    } catch {
+      vpnConfigs.value[nodeId] = []
+    }
+  }
+
+  /**
+   * Save/update a VPN protocol configuration for a node.
+   * POST /api/nodes/vpn-config/{nodeId} → { ok }
+   */
+  async function saveNodeVpnConfig(nodeId: number, config: any): Promise<boolean> {
+    try {
+      await post<{ ok: boolean }>(`/api/nodes/vpn-config/${nodeId}`, config)
       return true
     } catch {
       return false
@@ -499,6 +528,7 @@ export const useNodesStore = defineStore('nodes', () => {
     loadNodes,
     createNode,
     updateNode,
+    editNode: updateNode,
     deleteNode,
     testConnection,
 
@@ -507,6 +537,11 @@ export const useNodesStore = defineStore('nodes', () => {
     enableCore,
     disableCore,
     restartCore,
+
+    // VPN Protocol Configs
+    vpnConfigs,
+    loadNodeVpnConfigs,
+    saveNodeVpnConfig,
 
     // Sessions
     listSessions,

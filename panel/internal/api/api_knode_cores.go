@@ -1,13 +1,15 @@
 package api
 
 import (
-	"KorisPanel/panel/internal/noderegistry"
 	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"KorisPanel/panel/internal/grpcclient"
+	"KorisPanel/panel/internal/noderegistry"
 )
 
 // dispatchKnodeCores handles routing for /api/admin/knode/nodes/{nodeID}/cores[/{coreType}/{action}].
@@ -35,112 +37,97 @@ func (s *Server) dispatchKnodeCores(w http.ResponseWriter, r *http.Request, node
 	}
 
 	switch {
-	// GET /api/admin/knode/nodes/{id}/cores/{coreType}/config — get core config
 	case action == "config" && r.Method == http.MethodGet:
 		s.getKnodeCoreConfig(w, r, nodeID, coreType)
-
-	// POST /api/admin/knode/nodes/{id}/cores/{coreType}/enable — enable a core
 	case action == "enable" && r.Method == http.MethodPost:
 		s.enableKnodeCore(w, r, nodeID, coreType)
-
-	// POST /api/admin/knode/nodes/{id}/cores/{coreType}/disable — disable a core
 	case action == "disable" && r.Method == http.MethodPost:
 		s.disableKnodeCore(w, r, nodeID, coreType)
-
-	// POST /api/admin/knode/nodes/{id}/cores/{coreType}/restart — force restart a core
 	case action == "restart" && r.Method == http.MethodPost:
 		s.restartKnodeCore(w, r, nodeID, coreType)
-
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
 }
 
 // listKnodeCores handles GET /api/admin/knode/nodes/{nodeID}/cores.
-// Returns all cores for the node with their live status from the knode via gRPC.
+// Always returns all 5 default protocols. Enriched with live gRPC data when available.
 func (s *Server) listKnodeCores(w http.ResponseWriter, r *http.Request, nodeID int64) {
-	if s.CoreMgr == nil {
-		writeJSONCode(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "grpc_not_configured"})
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-
-	statuses, err := s.CoreMgr.AllCoreStatuses(ctx, nodeID)
-	if err != nil {
-		log.Printf("[knode-cores] AllCoreStatuses failed for node %d: %v", nodeID, err)
-		// If the gRPC call fails (node offline or unreachable), fall back to DB state
-		statuses = nil
-	}
 
 	type coreResponse struct {
 		Type           string `json:"type"`
 		State          string `json:"state"`
 		ActiveSessions int    `json:"active_sessions"`
 		PID            int    `json:"pid"`
-		Port           int    `json:"port,omitempty"`
+		Port           int    `json:"port"`
 		LastError      string `json:"last_error,omitempty"`
 	}
 
-	cores := make([]coreResponse, 0, len(statuses))
+	// Default protocols — always show all 5
+	defaultProtocols := []struct {
+		protocol string
+		port     int
+	}{
+		{"openvpn", 1194},
+		{"wireguard", 51820},
+		{"l2tp", 1701},
+		{"ikev2", 500},
+		{"ssh", 2222},
+	}
 
-	if len(statuses) > 0 {
-		// Live data from knode
-		for _, cs := range statuses {
-			cr := coreResponse{
-				Type:           cs.Type,
-				State:          cs.State,
-				ActiveSessions: cs.ActiveSessions,
-				PID:            cs.PID,
+	// Try to get live statuses from knode via gRPC
+	liveMap := make(map[string]grpcclient.CoreStatus)
+	if s.CoreMgr != nil {
+		statuses, err := s.CoreMgr.AllCoreStatuses(ctx, nodeID)
+		if err != nil {
+			log.Printf("[knode-cores] AllCoreStatuses failed for node %d: %v", nodeID, err)
+		} else {
+			for _, cs := range statuses {
+				liveMap[cs.Type] = cs
 			}
-
-			// Enrich with port from node_vpn_configs if available
-			var port int
-			if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, cs.Type).Scan(&port); err == nil {
-				cr.Port = port
-			}
-
-			// Enrich with last_error from node_services if state is error/crashed
-			if cs.State == "crashed" || cs.State == "error" {
-				var lastErr string
-				if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(last_error, '') FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, cs.Type).Scan(&lastErr); err == nil {
-					cr.LastError = lastErr
-				}
-			}
-
-			cores = append(cores, cr)
 		}
-	} else {
-		// No live data — show all 5 protocols from DB or as "stopped" defaults
-		defaultProtocols := []struct {
-			protocol string
-			port     int
-		}{
-			{"openvpn", 1194},
-			{"wireguard", 51820},
-			{"l2tp", 1701},
-			{"ikev2", 500},
-			{"ssh", 2222},
+	}
+
+	// Build response: merge live data with defaults
+	cores := make([]coreResponse, 0, 5)
+	for _, dp := range defaultProtocols {
+		cr := coreResponse{
+			Type:  dp.protocol,
+			State: "stopped",
+			Port:  dp.port,
 		}
-		for _, dp := range defaultProtocols {
-			cr := coreResponse{
-				Type:  dp.protocol,
-				State: "stopped",
-				Port:  dp.port,
-			}
-			// Check if there's a saved status in node_services
+
+		if live, ok := liveMap[dp.protocol]; ok {
+			cr.State = live.State
+			cr.ActiveSessions = live.ActiveSessions
+			cr.PID = live.PID
+		}
+
+		// Check DB for saved status (fallback when no live data)
+		if _, ok := liveMap[dp.protocol]; !ok {
 			var dbStatus string
-			if err := s.DB.QueryRowContext(ctx, `SELECT status FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, dp.protocol).Scan(&dbStatus); err == nil {
+			if err := s.DB.QueryRowContext(ctx, `SELECT status FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, dp.protocol).Scan(&dbStatus); err == nil && dbStatus != "" {
 				cr.State = dbStatus
 			}
-			// Check if there's a saved port in node_vpn_configs
-			var savedPort int
-			if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, dp.protocol).Scan(&savedPort); err == nil && savedPort > 0 {
-				cr.Port = savedPort
-			}
-			cores = append(cores, cr)
 		}
+
+		// Check DB for saved port override
+		var savedPort int
+		if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, dp.protocol).Scan(&savedPort); err == nil && savedPort > 0 {
+			cr.Port = savedPort
+		}
+
+		// Enrich with last_error if crashed/error
+		if cr.State == "crashed" || cr.State == "error" {
+			var lastErr string
+			if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(last_error, '') FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, dp.protocol).Scan(&lastErr); err == nil {
+				cr.LastError = lastErr
+			}
+		}
+
+		cores = append(cores, cr)
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "cores": cores})
@@ -153,7 +140,6 @@ type enableCoreRequest struct {
 }
 
 // enableKnodeCore handles POST /api/admin/knode/nodes/{nodeID}/cores/{coreType}/enable.
-// Sends an EnableCore RPC to the knode with the provided configuration.
 func (s *Server) enableKnodeCore(w http.ResponseWriter, r *http.Request, nodeID int64, coreType string) {
 	if s.CoreMgr == nil {
 		writeJSONCode(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "grpc_not_configured"})
@@ -175,7 +161,7 @@ func (s *Server) enableKnodeCore(w http.ResponseWriter, r *http.Request, nodeID 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	// For IKEv2, inject the node's stored domain into Extra_Config (Requirement 9.1)
+	// For IKEv2, inject the node's stored domain into Extra_Config
 	extra := in.Extra
 	if coreType == "ikev2" {
 		extra = s.injectDomainForIKEv2(ctx, nodeID, extra)
@@ -201,7 +187,6 @@ func (s *Server) enableKnodeCore(w http.ResponseWriter, r *http.Request, nodeID 
 }
 
 // disableKnodeCore handles POST /api/admin/knode/nodes/{nodeID}/cores/{coreType}/disable.
-// Sends a DisableCore RPC to the knode.
 func (s *Server) disableKnodeCore(w http.ResponseWriter, r *http.Request, nodeID int64, coreType string) {
 	if s.CoreMgr == nil {
 		writeJSONCode(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "grpc_not_configured"})
@@ -217,15 +202,11 @@ func (s *Server) disableKnodeCore(w http.ResponseWriter, r *http.Request, nodeID
 		return
 	}
 
-	// Update local node_vpn_configs to mark as disabled
 	_, _ = s.DB.ExecContext(ctx, `UPDATE node_vpn_configs SET enabled=0 WHERE node_id=$1 AND protocol=$2`, nodeID, coreType)
-
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 // restartKnodeCore handles POST /api/admin/knode/nodes/{nodeID}/cores/{coreType}/restart.
-// Sends a Restart RPC directly to the knode, bypassing the auto-restart rate limit.
-// This is the "Force Restart" action referenced in Requirement 10.4.
 func (s *Server) restartKnodeCore(w http.ResponseWriter, r *http.Request, nodeID int64, coreType string) {
 	if s.CoreMgr == nil {
 		writeJSONCode(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "grpc_not_configured"})
@@ -245,7 +226,6 @@ func (s *Server) restartKnodeCore(w http.ResponseWriter, r *http.Request, nodeID
 }
 
 // getKnodeCoreConfig handles GET /api/admin/knode/nodes/{nodeID}/cores/{coreType}/config.
-// Returns the current configuration for a specific core from the local database.
 func (s *Server) getKnodeCoreConfig(w http.ResponseWriter, r *http.Request, nodeID int64, coreType string) {
 	ctx := r.Context()
 
@@ -263,7 +243,6 @@ func (s *Server) getKnodeCoreConfig(w http.ResponseWriter, r *http.Request, node
 		return
 	}
 
-	// Parse extra_json into a map for clean output
 	var extra map[string]any
 	if len(extraJSON) > 0 {
 		_ = json.Unmarshal(extraJSON, &extra)
@@ -285,9 +264,7 @@ func (s *Server) getKnodeCoreConfig(w http.ResponseWriter, r *http.Request, node
 }
 
 // injectDomainForIKEv2 reads the node's stored domain from knode_connections and
-// injects it into the Extra_Config JSON for the IKEv2 core. This ensures the IKEv2
-// backend receives the domain it needs for Let's Encrypt and server identity.
-// If no domain is set or the registry is unavailable, the extra config is returned unchanged.
+// injects it into the Extra_Config JSON for the IKEv2 core.
 func (s *Server) injectDomainForIKEv2(ctx context.Context, nodeID int64, extra json.RawMessage) json.RawMessage {
 	if s.NodeRegistry == nil {
 		return extra
@@ -303,7 +280,6 @@ func (s *Server) injectDomainForIKEv2(ctx context.Context, nodeID int64, extra j
 		return extra
 	}
 
-	// Parse existing extra config (or start with empty object)
 	var cfg map[string]any
 	if len(extra) > 0 {
 		if err := json.Unmarshal(extra, &cfg); err != nil {
@@ -313,7 +289,6 @@ func (s *Server) injectDomainForIKEv2(ctx context.Context, nodeID int64, extra j
 		cfg = make(map[string]any)
 	}
 
-	// Inject domain (don't overwrite if explicitly provided in the request)
 	if _, exists := cfg["domain"]; !exists {
 		cfg["domain"] = domain
 	}
