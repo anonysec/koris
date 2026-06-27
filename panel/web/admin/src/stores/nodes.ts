@@ -159,9 +159,11 @@ interface CertsInfoResponse {
  */
 export const useNodesStore = defineStore('nodes', () => {
   // ─── State ────────────────────────────────────────────────────────────────
+  // v2: includes vpnConfigs, restartCore, editNode
   const list = ref<KnodeNode[]>([])
   const loading = ref(false)
   const vpnConfigs = ref<Record<number, any[]>>({})
+  const _storeVersion = 'v2.1.0' // cache bust
 
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, put, del, error } = useApi()
@@ -529,6 +531,7 @@ export const useNodesStore = defineStore('nodes', () => {
     createNode,
     updateNode,
     editNode: updateNode,
+    _storeVersion,
     deleteNode,
     testConnection,
 
