@@ -154,6 +154,10 @@ func (cm *CoreManager) callEnableCore(ctx context.Context, nodeID int64, coreTyp
 		return fmt.Errorf("node %q is %s, cannot enable core", node.NodeName, node.Status)
 	}
 
+	if node.Conn == nil {
+		return fmt.Errorf("node %q has no active gRPC connection", node.NodeName)
+	}
+
 	client := knodepb.NewKnodeServiceClient(node.Conn)
 
 	req := &knodepb.EnableCoreRequest{
@@ -195,6 +199,10 @@ func (cm *CoreManager) callDisableCore(ctx context.Context, nodeID int64, coreTy
 		return fmt.Errorf("node %q is %s, cannot disable core", node.NodeName, node.Status)
 	}
 
+	if node.Conn == nil {
+		return fmt.Errorf("node %q has no active gRPC connection", node.NodeName)
+	}
+
 	client := knodepb.NewKnodeServiceClient(node.Conn)
 
 	req := &knodepb.DisableCoreRequest{
@@ -230,6 +238,10 @@ func (cm *CoreManager) callAllCoreStatuses(ctx context.Context, nodeID int64) ([
 
 	if node.Status != StatusOnline {
 		return nil, fmt.Errorf("node %q is %s, cannot query core statuses", node.NodeName, node.Status)
+	}
+
+	if node.Conn == nil {
+		return nil, fmt.Errorf("node %q has no active gRPC connection", node.NodeName)
 	}
 
 	client := knodepb.NewKnodeServiceClient(node.Conn)
@@ -304,6 +316,10 @@ func (cm *CoreManager) RestartCore(ctx context.Context, nodeID int64, coreType s
 
 	if node.Status != StatusOnline {
 		return fmt.Errorf("node %q is %s, cannot restart core", node.NodeName, node.Status)
+	}
+
+	if node.Conn == nil {
+		return fmt.Errorf("node %q has no active gRPC connection", node.NodeName)
 	}
 
 	client := knodepb.NewKnodeServiceClient(node.Conn)
