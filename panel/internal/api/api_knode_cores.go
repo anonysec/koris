@@ -70,8 +70,8 @@ func (s *Server) listKnodeCores(w http.ResponseWriter, r *http.Request, nodeID i
 	statuses, err := s.CoreMgr.AllCoreStatuses(ctx, nodeID)
 	if err != nil {
 		log.Printf("[knode-cores] AllCoreStatuses failed for node %d: %v", nodeID, err)
-		writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
-		return
+		// If the gRPC call fails (node offline or unreachable), fall back to DB state
+		statuses = nil
 	}
 
 	type coreResponse struct {
@@ -84,29 +84,63 @@ func (s *Server) listKnodeCores(w http.ResponseWriter, r *http.Request, nodeID i
 	}
 
 	cores := make([]coreResponse, 0, len(statuses))
-	for _, cs := range statuses {
-		cr := coreResponse{
-			Type:           cs.Type,
-			State:          cs.State,
-			ActiveSessions: cs.ActiveSessions,
-			PID:            cs.PID,
-		}
 
-		// Enrich with port from node_vpn_configs if available
-		var port int
-		if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, cs.Type).Scan(&port); err == nil {
-			cr.Port = port
-		}
-
-		// Enrich with last_error from node_services if state is error/crashed
-		if cs.State == "crashed" || cs.State == "error" {
-			var lastErr string
-			if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(last_error, '') FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, cs.Type).Scan(&lastErr); err == nil {
-				cr.LastError = lastErr
+	if len(statuses) > 0 {
+		// Live data from knode
+		for _, cs := range statuses {
+			cr := coreResponse{
+				Type:           cs.Type,
+				State:          cs.State,
+				ActiveSessions: cs.ActiveSessions,
+				PID:            cs.PID,
 			}
-		}
 
-		cores = append(cores, cr)
+			// Enrich with port from node_vpn_configs if available
+			var port int
+			if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, cs.Type).Scan(&port); err == nil {
+				cr.Port = port
+			}
+
+			// Enrich with last_error from node_services if state is error/crashed
+			if cs.State == "crashed" || cs.State == "error" {
+				var lastErr string
+				if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(last_error, '') FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, cs.Type).Scan(&lastErr); err == nil {
+					cr.LastError = lastErr
+				}
+			}
+
+			cores = append(cores, cr)
+		}
+	} else {
+		// No live data — show all 5 protocols from DB or as "stopped" defaults
+		defaultProtocols := []struct {
+			protocol string
+			port     int
+		}{
+			{"openvpn", 1194},
+			{"wireguard", 51820},
+			{"l2tp", 1701},
+			{"ikev2", 500},
+			{"ssh", 2222},
+		}
+		for _, dp := range defaultProtocols {
+			cr := coreResponse{
+				Type:  dp.protocol,
+				State: "stopped",
+				Port:  dp.port,
+			}
+			// Check if there's a saved status in node_services
+			var dbStatus string
+			if err := s.DB.QueryRowContext(ctx, `SELECT status FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, dp.protocol).Scan(&dbStatus); err == nil {
+				cr.State = dbStatus
+			}
+			// Check if there's a saved port in node_vpn_configs
+			var savedPort int
+			if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, dp.protocol).Scan(&savedPort); err == nil && savedPort > 0 {
+				cr.Port = savedPort
+			}
+			cores = append(cores, cr)
+		}
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "cores": cores})

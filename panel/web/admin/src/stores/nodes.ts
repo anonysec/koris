@@ -22,7 +22,7 @@ export interface KnodeNode {
  */
 export interface CoreStatus {
   coreType: string
-  status: 'running' | 'stopped' | 'error'
+  status: 'running' | 'stopped' | 'error' | 'crashed' | 'unknown'
   port?: number
   sessions?: number
   pid?: number

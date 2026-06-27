@@ -110,7 +110,15 @@ func (s *Server) listKnodeNodes(w http.ResponseWriter, r *http.Request) {
 
 	nodes := make([]knodeNodeResponse, 0, len(records))
 	for _, rec := range records {
-		nodes = append(nodes, nodeRecordToResponse(rec))
+		resp := nodeRecordToResponse(rec)
+		// Enrich with live pool status (overrides DB if pool is available)
+		if s.GRPCPool != nil {
+			poolStatus := s.GRPCPool.Status(rec.ID)
+			if poolStatus != "" {
+				resp.Status = string(poolStatus)
+			}
+		}
+		nodes = append(nodes, resp)
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "nodes": nodes})
@@ -167,8 +175,13 @@ func (s *Server) createKnodeNode(w http.ResponseWriter, r *http.Request) {
 	nodeCfg, cfgErr := s.buildNodeConfigFromInput(id, in)
 	if cfgErr == nil {
 		connCtx, connCancel := context.WithTimeout(r.Context(), 10*time.Second)
-		_ = s.GRPCPool.Connect(connCtx, nodeCfg)
+		connErr := s.GRPCPool.Connect(connCtx, nodeCfg)
 		connCancel()
+
+		// Update DB status to match pool status after connect
+		if connErr == nil {
+			_ = s.NodeRegistry.UpdateStatus(r.Context(), id, "online")
+		}
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "id": id})
