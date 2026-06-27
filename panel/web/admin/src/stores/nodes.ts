@@ -256,8 +256,15 @@ export const useNodesStore = defineStore('nodes', () => {
    */
   async function listCores(nodeId: number): Promise<CoreStatus[]> {
     try {
-      const res = await get<CoresListResponse>(`/api/admin/knode/nodes/${nodeId}`)
-      return res.cores || []
+      const res = await get<CoresListResponse>(`/api/admin/knode/nodes/${nodeId}/cores`)
+      // Map API response fields to CoreStatus interface
+      return (res.cores || []).map((c: any) => ({
+        coreType: c.type || c.coreType,
+        status: c.state === 'crashed' ? 'error' : c.state || c.status,
+        port: c.port,
+        sessions: c.active_sessions ?? c.sessions,
+        pid: c.pid,
+      }))
     } catch {
       return []
     }
@@ -269,9 +276,9 @@ export const useNodesStore = defineStore('nodes', () => {
    */
   async function enableCore(nodeId: number, coreName: string, port: number): Promise<boolean> {
     try {
-      await post<NodeMutationResponse>(`/api/nodes/${nodeId}/cores/install`, {
-        name: coreName,
-        port,
+      await post<NodeMutationResponse>(`/api/admin/knode/nodes/${nodeId}/cores/${coreName}/enable`, {
+        listen_port: port,
+        extra: {},
       })
       return true
     } catch {
@@ -280,12 +287,25 @@ export const useNodesStore = defineStore('nodes', () => {
   }
 
   /**
-   * Disable/remove a core from a node.
-   * DELETE /api/nodes/{id}/cores/{name} → { ok }
+   * Disable a core on a node.
+   * POST /api/admin/knode/nodes/{id}/cores/{name}/disable → { ok }
    */
   async function disableCore(nodeId: number, coreName: string): Promise<boolean> {
     try {
-      await del<NodeMutationResponse>(`/api/nodes/${nodeId}/cores/${coreName}`)
+      await post<NodeMutationResponse>(`/api/admin/knode/nodes/${nodeId}/cores/${coreName}/disable`, {})
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Force restart a core on a node (bypasses auto-restart rate limit).
+   * POST /api/admin/knode/nodes/{id}/cores/{name}/restart → { ok }
+   */
+  async function restartCore(nodeId: number, coreName: string): Promise<boolean> {
+    try {
+      await post<NodeMutationResponse>(`/api/admin/knode/nodes/${nodeId}/cores/${coreName}/restart`, {})
       return true
     } catch {
       return false
@@ -486,6 +506,7 @@ export const useNodesStore = defineStore('nodes', () => {
     listCores,
     enableCore,
     disableCore,
+    restartCore,
 
     // Sessions
     listSessions,

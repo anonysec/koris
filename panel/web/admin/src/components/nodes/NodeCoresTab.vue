@@ -59,7 +59,7 @@ async function handleDisable(coreType: string) {
 
 async function handleRestart(coreType: string) {
   // Force restart bypasses auto-restart limit
-  const ok = await nodesStore.enableCore(props.nodeId, coreType, 0)
+  const ok = await nodesStore.restartCore(props.nodeId, coreType)
   if (ok) {
     toast.success(`${coreType} restarting`)
     await loadCores()
