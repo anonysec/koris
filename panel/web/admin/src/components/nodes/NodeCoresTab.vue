@@ -18,9 +18,15 @@ const loading = ref(false)
 
 /** Map store CoreStatus to the component CoreInfo interface. */
 function toCoreInfo(c: CoreStatus): CoreInfo {
+  let state: CoreInfo['state'] = 'stopped'
+  if (c.status === 'running') state = 'running'
+  else if (c.status === 'error' || c.status === 'crashed') state = 'crashed'
+  else if (c.status === 'stopped') state = 'stopped'
+  else state = 'unknown'
+
   return {
     type: c.coreType,
-    state: c.status === 'error' ? 'crashed' : c.status === 'running' ? 'running' : 'stopped',
+    state,
     port: c.port ?? 0,
     activeSessions: c.sessions ?? 0,
   }
@@ -29,11 +35,7 @@ function toCoreInfo(c: CoreStatus): CoreInfo {
 async function loadCores() {
   loading.value = true
   const apiCores = await nodesStore.listCores(props.nodeId)
-  // Only show cores actually returned by the API (installed/configured on the node)
-  // Filter out cores with unrecognized status (e.g. not yet configured)
-  cores.value = apiCores
-    .filter((c) => ['running', 'stopped', 'error'].includes(c.status))
-    .map(toCoreInfo)
+  cores.value = apiCores.map(toCoreInfo)
   loading.value = false
 }
 
