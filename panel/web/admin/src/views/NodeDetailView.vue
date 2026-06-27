@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useNodesStore } from '@/stores/nodes'
 import { useMetricsStore } from '@/stores/metrics'
 import { useToast } from '@koris/composables/useToast'
+import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
 import KButton from '@koris/ui/KButton.vue'
@@ -23,6 +24,7 @@ const route = useRoute()
 const store = useNodesStore()
 const metrics = useMetricsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const { get } = useApi()
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -71,6 +73,26 @@ function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString()
 }
 
+// ─── Delete Node ─────────────────────────────────────────────────────────────
+async function handleDeleteNode() {
+  if (!node.value) return
+  const name = node.value.name || `Node ${props.id}`
+  const confirmed = await confirm({
+    title: t('nodes.confirm_delete_title'),
+    message: t('nodes.confirm_delete_msg').replace('{name}', name),
+    variant: 'danger',
+    confirmText: 'Delete',
+  })
+  if (!confirmed) return
+  const ok = await store.deleteNode(Number(props.id))
+  if (ok) {
+    toast.success(t('nodes.deleted_success').replace('{name}', name))
+    router.push({ name: 'nodes' })
+  } else {
+    toast.error('Failed to delete node')
+  }
+}
+
 // ─── Data Loading ────────────────────────────────────────────────────────────
 async function loadNodeDetail() {
   loading.value = true
@@ -112,6 +134,15 @@ onMounted(async () => {
         <div class="node-summary__info">
           <h2 class="node-summary__name">{{ node.name }}</h2>
           <KStatusPill :status="node.status" size="sm" />
+          <KButton
+            variant="danger"
+            size="sm"
+            class="node-summary__delete-btn"
+            aria-label="Delete node"
+            @click="handleDeleteNode"
+          >
+            Delete
+          </KButton>
         </div>
         <div class="node-summary__meta">
           <span class="text-muted">{{ node.address }}</span>
@@ -217,6 +248,7 @@ onMounted(async () => {
   font-weight: var(--font-semibold);
   color: var(--color-text);
   margin: 0;
+  flex: 1;
 }
 
 .node-summary__meta {
