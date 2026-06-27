@@ -198,13 +198,12 @@ func (p *connPool) Connect(ctx context.Context, node NodeConfig) error {
 
 	entry := &nodeEntry{
 		conn: &NodeConnection{
-			NodeID:      node.NodeID,
-			NodeName:    node.Name,
-			Address:     node.Address,
-			Port:        node.Port,
-			Status:      StatusOnline,
-			LastMetrics: time.Now(),
-			Conn:        conn,
+			NodeID:   node.NodeID,
+			NodeName: node.Name,
+			Address:  node.Address,
+			Port:     node.Port,
+			Status:   StatusOnline,
+			Conn:     conn,
 		},
 		nodeConfig: node,
 	}
@@ -291,7 +290,8 @@ func (p *connPool) Reconnect(nodeID int64) error {
 	if e, ok := p.connections[nodeID]; ok {
 		e.conn.Conn = conn
 		e.conn.Status = StatusOnline
-		e.conn.LastMetrics = time.Now()
+		// Don't set LastMetrics here — let actual StreamMetrics events set it.
+		// This prevents status monitor from marking as stale when no stream exists.
 	}
 	p.mu.Unlock()
 
@@ -484,7 +484,7 @@ func (p *connPool) startReconnect(entry *nodeEntry) {
 				oldStatus := e.conn.Status
 				e.conn.Conn = conn
 				e.conn.Status = StatusOnline
-				e.conn.LastMetrics = time.Now()
+				// Don't set LastMetrics — let StreamMetrics events handle it
 				e.cancelReco = nil
 				p.mu.Unlock()
 

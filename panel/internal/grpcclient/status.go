@@ -143,7 +143,8 @@ func (sm *StatusMonitor) evaluateNode(nodeID int64, status NodeStatus, lastMetri
 	}
 
 	// If lastMetrics is zero (never received metrics), skip evaluation.
-	// The node just connected and hasn't streamed yet.
+	// The node is connected but StreamMetrics hasn't been established yet.
+	// Don't mark as stale — the node is still reachable via Health RPC.
 	if lastMetrics.IsZero() {
 		return
 	}
