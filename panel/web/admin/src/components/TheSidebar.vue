@@ -249,14 +249,9 @@ const navGroups = computed<NavGroup[]>(() => {
   if (!isReseller) {
     manageItems.push(
       {
-        route: 'nodes',
+        route: 'services',
         label: t('nav.services'),
         icon: 'services',
-      },
-      {
-        route: 'cores',
-        label: 'Cores',
-        icon: 'cores',
       },
     )
   }
@@ -354,11 +349,8 @@ function isActive(route: string): boolean {
   if (route === 'users') {
     return ['users', 'user-detail', 'customers', 'customer-detail', 'resellers'].includes(props.currentRoute)
   }
-  if (route === 'nodes') {
-    return ['nodes', 'node-detail', 'node-compare'].includes(props.currentRoute)
-  }
-  if (route === 'cores') {
-    return props.currentRoute === 'cores'
+  if (route === 'services') {
+    return ['services', 'nodes', 'node-detail', 'node-compare'].includes(props.currentRoute)
   }
   if (route === 'tickets') {
     return ['tickets', 'ticket-detail'].includes(props.currentRoute)
