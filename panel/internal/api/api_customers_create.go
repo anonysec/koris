@@ -296,6 +296,10 @@ func (s *Server) customerByID(w http.ResponseWriter, r *http.Request) {
 		s.handleCustomerTags(w, r, id)
 		return
 	}
+	if action == "connections" {
+		s.getCustomerConnections(w, r, id)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return

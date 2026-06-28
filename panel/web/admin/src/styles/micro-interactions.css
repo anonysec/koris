@@ -1,0 +1,257 @@
+/* ─── Micro-Interactions ──────────────────────────────────────────────────────
+ * Utility classes for micro-interactions across the Users tab redesign.
+ * All animations respect prefers-reduced-motion via the block at the bottom.
+ * Requirements: 8.2, 8.3, 8.4, 8.5, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/* ─── 1. Hover Scale on Action Buttons (Req 9.1) ─────────────────────────── */
+.micro-scale-hover {
+  transition: transform var(--transition-hover, 100ms ease-out);
+  will-change: transform;
+}
+.micro-scale-hover:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.micro-scale-hover:disabled {
+  transform: none;
+}
+
+/* ─── 2. Checkbox Scale-Bounce on Selection (Req 9.2) ─────────────────────── */
+@keyframes micro-bounce-check {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.micro-bounce-checkbox {
+  animation: none;
+}
+.micro-bounce-checkbox.is-checked {
+  animation: micro-bounce-check 200ms ease-out;
+}
+
+/* ─── 3. Bulk Action Toolbar Slide (Req 9.3) ──────────────────────────────── */
+@keyframes micro-toolbar-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes micro-toolbar-slide-up {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+.micro-toolbar-slide-enter-active {
+  animation: micro-toolbar-slide-down 200ms ease-out forwards;
+}
+.micro-toolbar-slide-leave-active {
+  animation: micro-toolbar-slide-up 200ms ease-out forwards;
+}
+
+/* Vue transition classes for <Transition name="micro-toolbar-slide"> */
+.micro-toolbar-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+.micro-toolbar-slide-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+.micro-toolbar-slide-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+.micro-toolbar-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+/* ─── 4. Success Field Flash (Req 9.4) ────────────────────────────────────── */
+@keyframes micro-field-success-flash {
+  0% {
+    background-color: rgba(52, 211, 153, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.micro-field-success {
+  animation: micro-field-success-flash 400ms ease-out forwards;
+}
+
+/* ─── 5. Error Field Flash (Req 9.6) ──────────────────────────────────────── */
+@keyframes micro-field-error-flash {
+  0% {
+    background-color: rgba(248, 113, 113, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.micro-field-error {
+  animation: micro-field-error-flash 400ms ease-out forwards;
+}
+
+/* ─── 6. Status Pill Pulse (Req 8.2, 9.5) ─────────────────────────────────── */
+@keyframes micro-status-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.micro-status-pulse {
+  animation: micro-status-pulse 300ms ease-out;
+}
+
+/* Status pill color transition on status change (Req 8.2) */
+.micro-status-transition {
+  transition: background-color var(--transition-status, 200ms ease-out),
+              color var(--transition-status, 200ms ease-out);
+}
+
+/* ─── 7. Row Hover Background Transition (Req 8.4) ────────────────────────── */
+.micro-row-hover {
+  transition: background-color var(--transition-hover, 100ms ease-out);
+}
+.micro-row-hover:hover {
+  background-color: rgba(91, 157, 255, 0.04);
+}
+
+/* ─── 8. Row Fade on Filter Changes (Req 8.3) ─────────────────────────────── */
+/* Vue transition classes for <TransitionGroup name="micro-row-fade"> */
+.micro-row-fade-enter-active {
+  transition: opacity var(--transition-row-fade, 150ms ease-out);
+}
+.micro-row-fade-leave-active {
+  transition: opacity var(--transition-row-fade, 150ms ease-out);
+}
+.micro-row-fade-enter-from,
+.micro-row-fade-leave-to {
+  opacity: 0;
+}
+.micro-row-fade-enter-to,
+.micro-row-fade-leave-from {
+  opacity: 1;
+}
+
+/* ─── 9. Toast Slide-In from Top-Right (Req 8.5) ──────────────────────────── */
+@keyframes micro-toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes micro-toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.micro-toast-slide-enter-active {
+  animation: micro-toast-slide-in var(--transition-toast, 200ms ease-out) forwards;
+}
+.micro-toast-slide-leave-active {
+  animation: micro-toast-slide-out var(--transition-toast, 200ms ease-out) forwards;
+}
+
+/* Vue transition classes for <Transition name="micro-toast-slide"> */
+.micro-toast-slide-enter-from {
+  opacity: 0;
+  transform: translateX(100%);
+}
+.micro-toast-slide-enter-to {
+  opacity: 1;
+  transform: translateX(0);
+}
+.micro-toast-slide-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+.micro-toast-slide-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+/* ─── Accessibility: Reduced Motion ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .micro-scale-hover,
+  .micro-scale-hover:hover:not(:disabled) {
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .micro-bounce-checkbox,
+  .micro-bounce-checkbox.is-checked {
+    animation: none !important;
+  }
+
+  .micro-toolbar-slide-enter-active,
+  .micro-toolbar-slide-leave-active {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .micro-field-success,
+  .micro-field-error {
+    animation: none !important;
+  }
+
+  .micro-status-pulse {
+    animation: none !important;
+  }
+
+  .micro-status-transition {
+    transition: none !important;
+  }
+
+  .micro-row-hover {
+    transition: none !important;
+  }
+
+  .micro-row-fade-enter-active,
+  .micro-row-fade-leave-active {
+    transition: none !important;
+  }
+
+  .micro-toast-slide-enter-active,
+  .micro-toast-slide-leave-active {
+    animation: none !important;
+    transition: none !important;
+  }
+}
