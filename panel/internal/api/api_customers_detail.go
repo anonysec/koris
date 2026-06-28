@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -287,9 +288,11 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 
 	sets := []string{}
 	args := []any{}
+	argN := 0
 	if in.DisplayName != nil {
+		argN++
 		displayName := strings.TrimSpace(*in.DisplayName)
-		sets = append(sets, "display_name=$1")
+		sets = append(sets, fmt.Sprintf("display_name=$%d", argN))
 		args = append(args, displayName)
 	}
 	if in.Status != nil {
@@ -298,11 +301,13 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_status"})
 			return
 		}
-		sets = append(sets, "status=$1")
+		argN++
+		sets = append(sets, fmt.Sprintf("status=$%d", argN))
 		args = append(args, status)
 	}
 	if in.PlanID != nil {
-		sets = append(sets, "plan_id=$1")
+		argN++
+		sets = append(sets, fmt.Sprintf("plan_id=$%d", argN))
 		if *in.PlanID == 0 {
 			args = append(args, nil)
 		} else {
@@ -310,11 +315,13 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		}
 	}
 	if in.Notes != nil {
-		sets = append(sets, "notes=$1")
+		argN++
+		sets = append(sets, fmt.Sprintf("notes=$%d", argN))
 		args = append(args, strings.TrimSpace(*in.Notes))
 	}
 	if in.Avatar != nil {
-		sets = append(sets, "avatar=$1")
+		argN++
+		sets = append(sets, fmt.Sprintf("avatar=$%d", argN))
 		if *in.Avatar == "" {
 			args = append(args, nil)
 		} else {
@@ -327,7 +334,8 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_billing_mode"})
 			return
 		}
-		sets = append(sets, "billing_mode=$1")
+		argN++
+		sets = append(sets, fmt.Sprintf("billing_mode=$%d", argN))
 		if bm == "" {
 			args = append(args, nil) // inherit from reseller
 		} else {
@@ -335,8 +343,9 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		}
 	}
 	if len(sets) > 0 {
+		argN++
 		args = append(args, id)
-		if _, err := s.DB.Exec(`UPDATE customers SET `+strings.Join(sets, ",")+` WHERE id=$1 AND deleted_at IS NULL`, args...); err != nil {
+		if _, err := s.DB.Exec(`UPDATE customers SET `+strings.Join(sets, ",")+fmt.Sprintf(` WHERE id=$%d AND deleted_at IS NULL`, argN), args...); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
