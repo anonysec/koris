@@ -986,15 +986,15 @@ onMounted(async () => {
 
     <!-- New User Slide-Over -->
     <KSlideOver :open="showUserSlideOver" :title="t('customers.new_user')" @close="showUserSlideOver = false">
-      <form class="slide-form" @submit.prevent="handleCreateUser">
+      <form class="slide-form" autocomplete="off" @submit.prevent="handleCreateUser">
         <KFormField name="user-username" :label="t('user.username')" required>
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="userForm.username" placeholder="username" />
+            <KInput :id="fieldId" v-model="userForm.username" autocomplete="off" placeholder="username" />
           </template>
         </KFormField>
         <KFormField name="user-password" :label="t('user.password')" required>
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="userForm.password" type="password" placeholder="••••••" />
+            <KInput :id="fieldId" v-model="userForm.password" type="password" autocomplete="new-password" placeholder="••••••" />
           </template>
         </KFormField>
         <KFormField name="user-display-name" :label="t('user.display_name')">
@@ -1059,7 +1059,7 @@ onMounted(async () => {
       :title="editingResellerId ? t('resellers.edit') : t('resellers.new')"
       @close="showResellerSlideOver = false"
     >
-      <form class="slide-form" @submit.prevent="handleResellerSubmit">
+      <form class="slide-form" autocomplete="off" @submit.prevent="handleResellerSubmit">
         <KFormField name="reseller-username" :label="t('resellers.username')" required>
           <template #default="{ fieldId }">
             <KInput :id="fieldId" v-model="resellerForm.username" autocomplete="off" placeholder="reseller_name" :disabled="!!editingResellerId" />
