@@ -11,7 +11,7 @@ export interface MenuItem {
 
 export interface KThreeDotMenuProps {
   items: MenuItem[]
-  placement?: 'bottom-end' | 'bottom-start'
+  placement?: 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start'
 }
 
 const props = withDefaults(defineProps<KThreeDotMenuProps>(), {
@@ -169,7 +169,6 @@ onUnmounted(() => {
 
 .k-three-dot-menu__dropdown {
   position: absolute;
-  top: calc(100% + 4px);
   z-index: var(--z-dropdown, 100);
   min-width: 180px;
   padding: var(--space-1, 4px);
@@ -180,10 +179,22 @@ onUnmounted(() => {
 }
 
 .k-three-dot-menu__dropdown--bottom-end {
+  top: calc(100% + 4px);
   right: 0;
 }
 
 .k-three-dot-menu__dropdown--bottom-start {
+  top: calc(100% + 4px);
+  left: 0;
+}
+
+.k-three-dot-menu__dropdown--top-end {
+  bottom: calc(100% + 4px);
+  right: 0;
+}
+
+.k-three-dot-menu__dropdown--top-start {
+  bottom: calc(100% + 4px);
   left: 0;
 }
 

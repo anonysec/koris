@@ -67,10 +67,9 @@ onUnmounted(() => {
 
 // ─── Three-dot menu items ───────────────────────────────────────────────────
 const menuItems: MenuItem[] = [
-  { key: 'reset-traffic', label: 'Reset Traffic', icon: '🔄' },
-  { key: 'reset-usage', label: 'Reset Usage', icon: '📊' },
-  { key: 'copy-sub-link', label: 'Copy Subscription Link', icon: '🔗' },
-  { key: 'qr-code', label: 'QR Code', icon: '📱' },
+  { key: 'clients', label: 'Connected Clients', icon: '📡' },
+  { key: 'transactions', label: 'Transactions', icon: '💳' },
+  { key: 'reset-usage', label: 'Reset Usage', icon: '🔄' },
 ]
 
 // ─── Derived form data for ProfileFields ────────────────────────────────────
@@ -80,9 +79,12 @@ const profileFormData = computed<ProfileFormData>({
       return {
         username: '',
         status: 'active',
+        data_limit: '',
+        data_limit_unit: 'GB',
         expiry_date: '',
         note: '',
         allowed_protocols: [],
+        protocol_options: {},
       }
     }
     // Extract expiry from radius_checks (Expiration attribute)
@@ -94,12 +96,32 @@ const profileFormData = computed<ProfileFormData>({
       ?.filter((r) => r.attribute === 'Allowed-Protocol')
       .map((r) => r.value) ?? []
 
+    // Data limit
+    let dataLimit = ''
+    let dataLimitUnit = 'GB'
+    if (customer.value.subscription?.data_limit_gb) {
+      const limitGb = customer.value.subscription.data_limit_gb
+      if (limitGb >= 1024) {
+        dataLimit = String(Math.round(limitGb / 1024))
+        dataLimitUnit = 'TB'
+      } else if (limitGb < 1) {
+        dataLimit = String(Math.round(limitGb * 1024))
+        dataLimitUnit = 'MB'
+      } else {
+        dataLimit = String(limitGb)
+        dataLimitUnit = 'GB'
+      }
+    }
+
     return {
       username: customer.value.username,
       status: customer.value.status,
+      data_limit: dataLimit,
+      data_limit_unit: dataLimitUnit,
       expiry_date: expirationCheck?.value ?? '',
       note: customer.value.notes ?? '',
       allowed_protocols: protocols,
+      protocol_options: {},
     }
   },
   set(value: ProfileFormData) {
@@ -211,9 +233,24 @@ function handleModify(): void {
 }
 
 function handleMenuSelect(key: string): void {
-  // Emit edit to open the modal for these actions
-  // The parent (CustomersView) handles routing to the correct modal
-  emit('edit')
+  // Handle each action in context — these show relevant sections or perform actions
+  if (key === 'clients') {
+    // Scroll to connected clients section
+    const el = document.querySelector('.connected-clients')
+    el?.scrollIntoView({ behavior: 'smooth' })
+  } else if (key === 'transactions') {
+    // Scroll to transactions section
+    const el = document.querySelector('.transaction-list')
+    el?.scrollIntoView({ behavior: 'smooth' })
+  } else if (key === 'reset-usage') {
+    // Reset usage — call API
+    if (props.userId) {
+      const { post } = useApi({ showErrorToast: true })
+      post(`/api/customers/${props.userId}/traffic-reset`, {}).then(() => {
+        refresh()
+      })
+    }
+  }
 }
 
 function handleTopUp(): void {
@@ -339,17 +376,19 @@ onUnmounted(() => {
 
           <!-- Action Bar -->
           <div class="user-detail-panel__action-bar">
-            <KButton variant="ghost" @click="handleClose">
-              Cancel
-            </KButton>
-            <KButton variant="primary" @click="handleModify">
-              Modify
-            </KButton>
             <KThreeDotMenu
               :items="menuItems"
-              placement="bottom-end"
+              placement="top-start"
               @select="handleMenuSelect"
             />
+            <div class="user-detail-panel__action-bar-right">
+              <KButton variant="ghost" @click="handleClose">
+                Cancel
+              </KButton>
+              <KButton variant="primary" @click="handleModify">
+                Modify
+              </KButton>
+            </div>
           </div>
         </div>
       </aside>
@@ -492,6 +531,7 @@ onUnmounted(() => {
 .user-detail-panel__action-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2, 8px);
   padding: var(--space-4, 16px);
   border-top: 1px solid var(--color-border, #28333f);
@@ -500,8 +540,10 @@ onUnmounted(() => {
   margin-top: auto;
 }
 
-.user-detail-panel__action-bar > :last-child {
-  margin-left: auto;
+.user-detail-panel__action-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
 }
 
 /* ─── Panel Slide Transition (280ms ease-out) ─────────────────────────────── */
