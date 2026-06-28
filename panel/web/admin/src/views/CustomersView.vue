@@ -557,7 +557,7 @@ async function handleCreateUser() {
     username: userForm.value.username,
     password: userForm.value.password,
     display_name: userForm.value.display_name,
-    plan_id: userForm.value.plan_id ? Number(userForm.value.plan_id) : 0,
+    plan_id: newUserProfileData.value.plan_id ? Number(newUserProfileData.value.plan_id) : 0,
     data_gb: newUserProfileData.value.data_limit ? Number(newUserProfileData.value.data_limit) : 0,
     speed_mbps: userForm.value.speed_mbps ? Number(userForm.value.speed_mbps) : 0,
     days: userForm.value.days ? Number(userForm.value.days) : 0,
@@ -1314,15 +1314,10 @@ onMounted(async () => {
             </template>
           </KFormField>
         </div>
-        <!-- Plan select -->
-        <KFormField name="user-plan" :label="t('user.plan')">
-          <template #default="{ fieldId }">
-            <KSelect :id="fieldId" v-model="userForm.plan_id" :options="planOptions" :placeholder="t('resellers.select_plan')" />
-          </template>
-        </KFormField>
         <!-- ProfileFields for the rest (data limit, expiry, protocols, note, billing) -->
         <ProfileFields
           :model-value="newUserProfileData"
+          mode="create"
           @update:model-value="newUserProfileData = $event"
         />
         <KFormField v-if="!isReseller" name="user-avatar" :label="t('user.avatar')">
