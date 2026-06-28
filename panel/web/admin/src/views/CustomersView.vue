@@ -1925,8 +1925,13 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: var(--space-2);
   padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
   border-top: 1px solid var(--color-border);
   margin-top: var(--space-2);
+  position: sticky;
+  bottom: 0;
+  background: var(--color-surface, #0b1120);
+  z-index: 1;
 }
 
 .slide-form__row {
