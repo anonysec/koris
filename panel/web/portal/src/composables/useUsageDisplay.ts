@@ -32,8 +32,11 @@ export function useUsageDisplay(
   })
 
   const daysRemaining = computed(() => {
+    const exp = toValue(expiresAt)
+    if (!exp) return Infinity
     const now = new Date()
-    const expiry = new Date(toValue(expiresAt))
+    const expiry = new Date(exp)
+    if (isNaN(expiry.getTime())) return Infinity
     const diff = expiry.getTime() - now.getTime()
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
   })

@@ -318,8 +318,8 @@ async function handleRate() {
         </div>
         <div class="sp__account-item">
           <span class="sp__account-label">{{ t('portal.account.daysLeft') }}</span>
-          <span class="sp__account-value" :class="{ 'sp__account-value--warn': daysRemaining <= 7 }">
-            {{ daysRemaining }} {{ t('portal.account.days') }}
+          <span class="sp__account-value" :class="{ 'sp__account-value--warn': daysRemaining !== Infinity && daysRemaining <= 7 }">
+            {{ daysRemaining === Infinity ? '∞' : daysRemaining }} {{ t('portal.account.days') }}
           </span>
         </div>
         <div class="sp__account-item">
@@ -349,7 +349,7 @@ async function handleRate() {
             <div class="sp__progress-bar-fill" :style="{ width: `${Math.min(100, usagePercent)}%`, backgroundColor: progressBarColor }"></div>
           </div>
           <div class="sp__usage-compact-footer">
-            <span>{{ daysRemaining }} days remaining</span>
+            <span>{{ daysRemaining === Infinity ? '∞' : daysRemaining }} days remaining</span>
             <span>Expires {{ formattedExpiry }}</span>
           </div>
         </div>
@@ -365,20 +365,8 @@ async function handleRate() {
 
       <KSkeleton v-if="profilesLoading && !profiles.length" type="card" :count="2" />
       <template v-else>
-        <!-- Subscription URL -->
-        <div v-if="subUrl" class="sp__sub-url">
-          <label class="sp__sub-url-label">{{ t('portal.vpn.subUrl') }}</label>
-          <p class="sp__sub-url-desc">{{ t('portal.vpn.subUrlDesc') }}</p>
-          <div class="sp__sub-url-row">
-            <input type="text" :value="subUrl" class="sp__sub-url-input" readonly />
-            <KButton variant="primary" size="sm" @click="handleCopySubUrl">
-              {{ copied ? t('portal.vpn.copied') : t('portal.vpn.copy') }}
-            </KButton>
-          </div>
-        </div>
-
         <!-- Node selector -->
-        <div class="sp__node-selector">
+        <div v-if="availableNodes.length > 1" class="sp__node-selector">
           <label class="sp__node-label">{{ t('portal.vpn.preferredNode') }}</label>
           <select class="sp__node-select" :value="preferredNodeId" @change="handleNodeChange($event)">
             <option value="0">{{ t('portal.vpn.autoRandom') }}</option>
@@ -390,23 +378,23 @@ async function handleRate() {
 
         <!-- Profile list -->
         <KEmptyState
-          v-if="!profiles.length"
+          v-if="!profiles.filter(p => p.available).length && !peers.length"
           :title="t('portal.vpn.noProfiles')"
           :description="t('portal.vpn.noProfilesDesc')"
           icon="📡"
         />
 
         <div v-else class="sp__profiles-list">
-          <div v-for="profile in profiles" :key="profile.type" class="sp__profile-card">
+          <div v-for="profile in profiles.filter(p => p.available)" :key="profile.type" class="sp__profile-card">
             <div class="sp__profile-icon">{{ getProfileIcon(profile.type) }}</div>
             <div class="sp__profile-info">
-              <div class="sp__profile-name">{{ profile.name }}</div>
+              <div class="sp__profile-name">{{ profile.node ? profile.name : profile.name.replace(/ —.*$/, '') }}</div>
               <div class="sp__profile-meta">
                 <span v-if="profile.description" class="sp__profile-desc">{{ profile.description }}</span>
-                <span v-else>{{ profile.node }}</span>
+                <span v-else-if="profile.node">{{ profile.node }}</span>
               </div>
             </div>
-            <div v-if="profile.available" class="sp__profile-actions">
+            <div class="sp__profile-actions">
               <a :href="profile.download" download class="sp__profile-dl">
                 <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
               </a>
@@ -419,7 +407,6 @@ async function handleRate() {
                 {{ copiedProfileUrl === profile.download ? '✓' : '📋' }} URL
               </KButton>
             </div>
-            <KButton v-else variant="ghost" size="sm" :disabled="true">{{ t('portal.vpn.unavailable') }}</KButton>
           </div>
           <!-- WireGuard peers inline with other profiles -->
           <div v-for="peer in peers" :key="'wg-' + peer.id" class="sp__profile-card">
