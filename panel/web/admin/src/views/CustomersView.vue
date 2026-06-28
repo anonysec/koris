@@ -1918,6 +1918,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-height: 100%;
 }
 
 .slide-form__footer {
@@ -1927,7 +1928,7 @@ onMounted(async () => {
   padding-top: var(--space-4);
   padding-bottom: var(--space-4);
   border-top: 1px solid var(--color-border);
-  margin-top: var(--space-2);
+  margin-top: auto;
   position: sticky;
   bottom: 0;
   background: var(--color-surface, #0b1120);
