@@ -25,32 +25,33 @@
       </template>
     </KFormField>
 
-    <!-- Expiry Date -->
+    <!-- Data Limit -->
+    <KFormField name="data-limit" :label="t('customer.data_limit')">
+      <template #default="{ fieldId }">
+        <div class="profile-fields__data-limit">
+          <KInput
+            :id="fieldId"
+            :model-value="modelValue.data_limit"
+            type="number"
+            placeholder="0 = unlimited"
+            @update:model-value="updateField('data_limit', $event)"
+          />
+          <KSelect
+            :model-value="modelValue.data_limit_unit"
+            :options="dataLimitUnitOptions"
+            class="profile-fields__unit-select"
+            @update:model-value="updateField('data_limit_unit', $event)"
+          />
+        </div>
+      </template>
+    </KFormField>
+
+    <!-- Expiry Date — always show date input + chips below -->
     <KFormField name="expiry" :label="t('customer.expiry_date')">
       <template #default="{ fieldId }">
         <div class="profile-fields__expiry">
-          <!-- Input mode toggle -->
-          <div class="profile-fields__expiry-toggle" role="group" :aria-label="t('customer.expiry_input_mode')">
-            <button
-              type="button"
-              :class="['profile-fields__toggle-btn', { 'profile-fields__toggle-btn--active': expiryMode === 'date' }]"
-              :aria-pressed="expiryMode === 'date'"
-              @click="expiryMode = 'date'"
-            >
-              {{ t('customer.expiry_mode_date') }}
-            </button>
-            <button
-              type="button"
-              :class="['profile-fields__toggle-btn', { 'profile-fields__toggle-btn--active': expiryMode === 'days' }]"
-              :aria-pressed="expiryMode === 'days'"
-              @click="expiryMode = 'days'"
-            >
-              {{ t('customer.expiry_mode_days') }}
-            </button>
-          </div>
-
-          <!-- Date-type input: calendar picker -->
-          <div v-if="expiryMode === 'date'" class="profile-fields__expiry-date">
+          <!-- Date input with calendar icon -->
+          <div class="profile-fields__date-wrapper">
             <input
               :id="fieldId"
               type="date"
@@ -60,24 +61,29 @@
             />
           </div>
 
-          <!-- Days-type input: shortcut chips -->
-          <div v-else class="profile-fields__expiry-chips">
-            <KExpiryChips
-              :model-value="modelValue.expiry_date"
-              @update:model-value="updateField('expiry_date', $event)"
-            />
+          <!-- Quick-set chips (always visible, minimal style) -->
+          <div class="profile-fields__quick-chips">
+            <button
+              v-for="chip in expiryChips"
+              :key="chip"
+              type="button"
+              class="profile-fields__chip"
+              @click="applyChip(chip)"
+            >
+              {{ chip }}
+            </button>
           </div>
 
           <!-- "Expires in X days" display -->
           <p v-if="expiresInDays !== null" class="profile-fields__expiry-info">
             <span v-if="expiresInDays > 0">
-              {{ t('customer.expires_in_days').replace('{days}', String(expiresInDays)) }}
+              Expires in {{ expiresInDays }} day{{ expiresInDays === 1 ? '' : 's' }}
             </span>
             <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-info--warning">
-              {{ t('customer.expires_today') }}
+              Expires today
             </span>
             <span v-else class="profile-fields__expiry-info--expired">
-              {{ t('customer.expired_days_ago').replace('{days}', String(Math.abs(expiresInDays))) }}
+              Expired {{ Math.abs(expiresInDays) }} day{{ Math.abs(expiresInDays) === 1 ? '' : 's' }} ago
             </span>
           </p>
         </div>
@@ -91,33 +97,69 @@
           :id="fieldId"
           :model-value="modelValue.note"
           :aria-describedby="describedBy"
-          :placeholder="t('customer.note_placeholder')"
+          placeholder="Note..."
           :rows="3"
           @update:model-value="updateField('note', $event)"
         />
       </template>
     </KFormField>
 
-    <!-- Proxy settings (allowed protocols) -->
+    <!-- Proxy settings — dropdown style -->
     <KFormField name="proxy-settings" :label="t('customer.proxy_settings')">
       <template #default>
-        <div class="profile-fields__protocols">
-          <label
-            v-for="protocol in availableProtocols"
-            :key="protocol.value"
-            class="profile-fields__protocol-item"
+        <div class="profile-fields__proxy">
+          <button
+            type="button"
+            class="profile-fields__proxy-toggle"
+            :aria-expanded="proxyOpen"
+            @click="proxyOpen = !proxyOpen"
           >
-            <input
-              type="checkbox"
-              :value="protocol.value"
-              :checked="isProtocolEnabled(protocol.value)"
-              @change="toggleProtocol(protocol.value)"
-            />
-            <span class="profile-fields__protocol-label">{{ protocol.label }}</span>
-          </label>
-          <p v-if="availableProtocols.length === 0" class="profile-fields__no-protocols">
-            {{ t('customer.no_protocols_available') }}
-          </p>
+            <span>{{ proxyButtonLabel }}</span>
+            <svg
+              class="profile-fields__proxy-chevron"
+              :class="{ 'profile-fields__proxy-chevron--open': proxyOpen }"
+              width="14" height="14" viewBox="0 0 14 14" fill="none"
+            >
+              <path d="M4 5.5L7 8.5L10 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+
+          <!-- Dropdown panel -->
+          <div v-if="proxyOpen" class="profile-fields__proxy-panel">
+            <div
+              v-for="protocol in availableProtocols"
+              :key="protocol.value"
+              class="profile-fields__proxy-item"
+            >
+              <div class="profile-fields__proxy-item-header">
+                <label class="profile-fields__proxy-label">
+                  <input
+                    type="checkbox"
+                    :checked="isProtocolEnabled(protocol.value)"
+                    @change="toggleProtocol(protocol.value)"
+                  />
+                  <span>{{ protocol.label }}</span>
+                </label>
+              </div>
+              <!-- Protocol sub-options (shown when enabled) -->
+              <div v-if="isProtocolEnabled(protocol.value) && protocol.options" class="profile-fields__proxy-options">
+                <label
+                  v-for="opt in protocol.options"
+                  :key="opt.value"
+                  class="profile-fields__proxy-option"
+                >
+                  <input
+                    type="radio"
+                    :name="`proto-opt-${protocol.value}`"
+                    :value="opt.value"
+                    :checked="getProtocolOption(protocol.value) === opt.value"
+                    @change="setProtocolOption(protocol.value, opt.value)"
+                  />
+                  <span>{{ opt.label }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
     </KFormField>
@@ -131,20 +173,22 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
-import KExpiryChips from '@koris/ui/KExpiryChips.vue'
+import { computeExpiryDate, type ExpiryOffset } from '@/utils/computeExpiryDate'
 
 const { t } = useI18n()
 
 /**
  * Form data shape for user profile editing.
- * Matches the fields managed by the detail panel.
  */
 export interface ProfileFormData {
   username: string
   status: string
+  data_limit: string
+  data_limit_unit: string
   expiry_date: string
   note: string
   allowed_protocols: string[]
+  protocol_options: Record<string, string>
 }
 
 export interface ProfileFieldsProps {
@@ -157,8 +201,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: ProfileFormData]
 }>()
 
-// ─── Expiry Mode Toggle ─────────────────────────────────────────────────────
-const expiryMode = ref<'date' | 'days'>('date')
+// ─── Proxy dropdown state ───────────────────────────────────────────────────
+const proxyOpen = ref(false)
 
 // ─── Status Options ─────────────────────────────────────────────────────────
 const statusOptions = [
@@ -168,21 +212,49 @@ const statusOptions = [
   { label: t('customer.status_limited'), value: 'limited' },
 ]
 
-// ─── Available Protocols ────────────────────────────────────────────────────
-const availableProtocols = [
-  { label: 'OpenVPN', value: 'openvpn' },
-  { label: 'WireGuard', value: 'wireguard' },
-  { label: 'IKEv2', value: 'ikev2' },
-  { label: 'L2TP', value: 'l2tp' },
-  { label: 'SSH', value: 'ssh' },
-  { label: 'MTProto', value: 'mtproto' },
+// ─── Data Limit Unit Options ────────────────────────────────────────────────
+const dataLimitUnitOptions = [
+  { label: 'MB', value: 'MB' },
+  { label: 'GB', value: 'GB' },
+  { label: 'TB', value: 'TB' },
 ]
 
-// ─── Computed Values ────────────────────────────────────────────────────────
+// ─── Expiry Chips ───────────────────────────────────────────────────────────
+const expiryChips: ExpiryOffset[] = ['+7d', '+1m', '+2m', '+3m', '+6m', '+1y']
 
-/**
- * Formats the expiry ISO string to YYYY-MM-DD for the native date input.
- */
+// ─── Available Protocols with sub-options ───────────────────────────────────
+const availableProtocols = [
+  {
+    label: 'OpenVPN',
+    value: 'openvpn',
+    options: [
+      { label: 'Password + Certificate', value: 'auth' },
+      { label: 'Passwordless (cert only)', value: 'noauth' },
+    ],
+  },
+  { label: 'WireGuard', value: 'wireguard', options: null },
+  { label: 'IKEv2', value: 'ikev2', options: null },
+  {
+    label: 'L2TP',
+    value: 'l2tp',
+    options: [
+      { label: 'L2TP/IPsec', value: 'ipsec' },
+      { label: 'L2TP (plain)', value: 'plain' },
+    ],
+  },
+  { label: 'SSH Tunnel', value: 'ssh', options: null },
+  { label: 'MTProto', value: 'mtproto', options: null },
+]
+
+// ─── Computed ───────────────────────────────────────────────────────────────
+
+const proxyButtonLabel = computed(() => {
+  const count = props.modelValue.allowed_protocols.length
+  if (count === 0) return 'No protocols selected'
+  if (count === availableProtocols.length) return 'All protocols'
+  return `${count} protocol${count > 1 ? 's' : ''} selected`
+})
+
 const expiryDateValue = computed(() => {
   if (!props.modelValue.expiry_date) return ''
   try {
@@ -194,17 +266,12 @@ const expiryDateValue = computed(() => {
   }
 })
 
-/**
- * Calculates "Expires in X days" from the expiry_date field.
- * Returns null if no expiry date is set.
- */
 const expiresInDays = computed<number | null>(() => {
   if (!props.modelValue.expiry_date) return null
   try {
     const expiry = new Date(props.modelValue.expiry_date)
     if (isNaN(expiry.getTime())) return null
     const now = new Date()
-    // Compare date-only (strip time)
     const expiryDay = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate())
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const diffMs = expiryDay.getTime() - today.getTime()
@@ -223,12 +290,16 @@ function updateField(field: keyof ProfileFormData, value: any) {
 function onDateInput(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.value) {
-    // Convert YYYY-MM-DD to ISO string
     const date = new Date(target.value + 'T00:00:00')
     updateField('expiry_date', date.toISOString())
   } else {
     updateField('expiry_date', '')
   }
+}
+
+function applyChip(chip: ExpiryOffset) {
+  const result = computeExpiryDate(new Date(), chip)
+  updateField('expiry_date', result.toISOString())
 }
 
 function isProtocolEnabled(protocol: string): boolean {
@@ -245,6 +316,15 @@ function toggleProtocol(protocol: string) {
   }
   updateField('allowed_protocols', current)
 }
+
+function getProtocolOption(protocol: string): string {
+  return props.modelValue.protocol_options?.[protocol] ?? ''
+}
+
+function setProtocolOption(protocol: string, value: string) {
+  const opts = { ...(props.modelValue.protocol_options || {}), [protocol]: value }
+  updateField('protocol_options', opts)
+}
 </script>
 
 <style scoped>
@@ -254,6 +334,17 @@ function toggleProtocol(protocol: string) {
   gap: var(--space-4, 16px);
 }
 
+/* ─── Data Limit ──────────────────────────────────────────────────────────── */
+.profile-fields__data-limit {
+  display: grid;
+  grid-template-columns: 1fr 80px;
+  gap: var(--space-2, 8px);
+}
+
+.profile-fields__unit-select {
+  width: 80px;
+}
+
 /* ─── Expiry Section ──────────────────────────────────────────────────────── */
 .profile-fields__expiry {
   display: flex;
@@ -261,41 +352,8 @@ function toggleProtocol(protocol: string) {
   gap: var(--space-2, 8px);
 }
 
-.profile-fields__expiry-toggle {
-  display: inline-flex;
-  border-radius: var(--radius-md, 6px);
-  border: 1px solid var(--color-border);
-  overflow: hidden;
-}
-
-.profile-fields__toggle-btn {
-  padding: var(--space-1, 4px) var(--space-3, 12px);
-  border: none;
-  background: var(--color-surface-2, #f5f5f5);
-  color: var(--color-text);
-  font-size: var(--text-sm, 13px);
-  font-family: var(--font-family);
-  cursor: pointer;
-  transition: background var(--duration-fast, 100ms) var(--ease-out, ease-out),
-    color var(--duration-fast, 100ms) var(--ease-out, ease-out);
-}
-
-.profile-fields__toggle-btn:not(:last-child) {
-  border-right: 1px solid var(--color-border);
-}
-
-.profile-fields__toggle-btn:hover:not(.profile-fields__toggle-btn--active) {
-  background: var(--color-surface-3, #ebebeb);
-}
-
-.profile-fields__toggle-btn--active {
-  background: var(--color-primary, #2563eb);
-  color: #fff;
-}
-
-.profile-fields__expiry-date,
-.profile-fields__expiry-chips {
-  margin-top: var(--space-1, 4px);
+.profile-fields__date-wrapper {
+  position: relative;
 }
 
 .profile-fields__date-input {
@@ -303,21 +361,45 @@ function toggleProtocol(protocol: string) {
   width: 100%;
   height: 36px;
   padding: 0 var(--space-3, 12px);
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface, #0b1120);
+  border: 1px solid var(--color-border, #28333f);
   border-radius: var(--radius-md, 6px);
-  color: var(--color-text);
+  color: var(--color-text, #e6edf3);
   font-family: var(--font-family);
   font-size: var(--text-base, 14px);
   line-height: var(--leading-normal);
   outline: none;
-  transition: border-color var(--duration-normal, 150ms) var(--ease-default, ease),
-    box-shadow var(--duration-normal, 150ms) var(--ease-default, ease);
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .profile-fields__date-input:focus-visible {
   border-color: var(--color-primary, #2563eb);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+/* Quick-set chips — minimal, no bg/border */
+.profile-fields__quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+}
+
+.profile-fields__chip {
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-primary, #2563eb);
+  font-size: var(--text-sm, 13px);
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  transition: background 100ms ease;
+}
+
+.profile-fields__chip:hover {
+  background: rgba(37, 99, 235, 0.1);
 }
 
 .profile-fields__expiry-info {
@@ -328,44 +410,110 @@ function toggleProtocol(protocol: string) {
 
 .profile-fields__expiry-info--warning {
   color: var(--color-warning, #d97706);
-  font-weight: var(--font-medium, 500);
+  font-weight: 500;
 }
 
 .profile-fields__expiry-info--expired {
   color: var(--color-danger, #dc2626);
-  font-weight: var(--font-medium, 500);
+  font-weight: 500;
 }
 
-/* ─── Proxy / Protocol Settings ───────────────────────────────────────────── */
-.profile-fields__protocols {
+/* ─── Proxy Settings Dropdown ─────────────────────────────────────────────── */
+.profile-fields__proxy {
+  position: relative;
+}
+
+.profile-fields__proxy-toggle {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3, 12px);
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--space-3, 12px);
+  background: var(--color-surface, #0b1120);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 6px);
+  color: var(--color-text, #e6edf3);
+  font-size: var(--text-sm, 13px);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: border-color 150ms ease;
 }
 
-.profile-fields__protocol-item {
+.profile-fields__proxy-toggle:hover {
+  border-color: var(--color-primary, #2563eb);
+}
+
+.profile-fields__proxy-chevron {
+  transition: transform 150ms ease;
+}
+
+.profile-fields__proxy-chevron--open {
+  transform: rotate(180deg);
+}
+
+.profile-fields__proxy-panel {
+  margin-top: var(--space-2, 8px);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface, #0b1120);
+  padding: var(--space-2, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.profile-fields__proxy-item {
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+}
+
+.profile-fields__proxy-item:hover {
+  background: var(--color-surface-2, #1e2630);
+}
+
+.profile-fields__proxy-item-header {
+  display: flex;
+  align-items: center;
+}
+
+.profile-fields__proxy-label {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2, 8px);
   cursor: pointer;
   font-size: var(--text-sm, 13px);
+  color: var(--color-text, #e6edf3);
 }
 
-.profile-fields__protocol-item input[type="checkbox"] {
+.profile-fields__proxy-label input[type="checkbox"] {
   width: 16px;
   height: 16px;
   accent-color: var(--color-primary, #2563eb);
   cursor: pointer;
 }
 
-.profile-fields__protocol-label {
-  color: var(--color-text);
-  user-select: none;
+.profile-fields__proxy-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  padding-left: 24px;
+  margin-top: var(--space-1, 4px);
 }
 
-.profile-fields__no-protocols {
-  margin: 0;
-  font-size: var(--text-sm, 13px);
-  color: var(--color-muted, #6b7280);
+.profile-fields__proxy-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--color-muted, #8b98a5);
+}
+
+.profile-fields__proxy-option input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-primary, #2563eb);
+  cursor: pointer;
 }
 </style>

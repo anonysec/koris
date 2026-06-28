@@ -95,8 +95,23 @@ function onDetailPanelEdit() {
   openEditModal(selectedUserId.value)
 }
 
-// ─── Expandable Rows (Requirements: 6.1, 6.2, 6.5, 6.7) ───────────────────
+// ─── Expandable Rows — MOBILE ONLY (Requirements: 6.1, 6.2, 6.5, 6.7) ─────
 const { expandedIds, toggle: toggleExpandRow, isExpanded: isRowExpanded, collapseAll } = useExpandableRows()
+
+/** Whether we're on mobile (expandable rows active) */
+const isMobileView = ref(window.innerWidth <= 1024)
+
+function checkMobileView() {
+  isMobileView.value = window.innerWidth <= 1024
+}
+
+onMounted(() => {
+  window.addEventListener('resize', checkMobileView)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobileView)
+})
 
 // ─── Quick Actions (Requirements: 13.1, 13.5, 13.6) ────────────────────────
 const quickActions = useQuickActions()
