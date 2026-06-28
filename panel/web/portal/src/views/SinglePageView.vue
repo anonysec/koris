@@ -76,6 +76,7 @@ interface TelegramProxy {
 const telegramProxies = ref<TelegramProxy[]>([])
 const teleProxiesLoading = ref(false)
 const copiedProxyId = ref<number | null>(null)
+const copiedProfileUrl = ref<string | null>(null)
 
 async function fetchTelegramProxies() {
   teleProxiesLoading.value = true
@@ -95,6 +96,17 @@ function copyProxyLink(proxy: TelegramProxy) {
   setTimeout(() => {
     if (copiedProxyId.value === proxy.id) {
       copiedProxyId.value = null
+    }
+  }, 2000)
+}
+
+function copyProfileUrl(downloadPath: string) {
+  const fullUrl = `${window.location.origin}${downloadPath}`
+  copy(fullUrl)
+  copiedProfileUrl.value = downloadPath
+  setTimeout(() => {
+    if (copiedProfileUrl.value === downloadPath) {
+      copiedProfileUrl.value = null
     }
   }, 2000)
 }
@@ -394,14 +406,19 @@ async function handleRate() {
                 <span v-else>{{ profile.node }}</span>
               </div>
             </div>
-            <a
-              v-if="profile.available"
-              :href="profile.download"
-              download
-              class="sp__profile-dl"
-            >
-              <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
-            </a>
+            <div v-if="profile.available" class="sp__profile-actions">
+              <a :href="profile.download" download class="sp__profile-dl">
+                <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
+              </a>
+              <KButton
+                v-if="profile.type.startsWith('openvpn')"
+                variant="ghost"
+                size="sm"
+                @click="copyProfileUrl(profile.download)"
+              >
+                {{ copiedProfileUrl === profile.download ? '✓' : '📋' }} URL
+              </KButton>
+            </div>
             <KButton v-else variant="ghost" size="sm" :disabled="true">{{ t('portal.vpn.unavailable') }}</KButton>
           </div>
           <!-- WireGuard peers inline with other profiles -->
@@ -847,6 +864,12 @@ async function handleRate() {
 .sp__profile-dl {
   text-decoration: none;
   flex-shrink: 0;
+}
+.sp__profile-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  align-items: center;
 }
 
 /* Cisco IPSec Instructions */

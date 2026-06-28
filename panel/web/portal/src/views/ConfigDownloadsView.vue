@@ -1,67 +1,58 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
+import { useClipboard } from '@koris/composables/useClipboard'
+import KButton from '@koris/ui/KButton.vue'
 
-interface ProtocolConfig {
-  protocol: string
-  label: string
+interface VpnProfile {
+  type: string
+  name: string
   available: boolean
+  download: string
+  description?: string
+  node: string
 }
 
 const { get } = useApi()
-const protocols = ref<ProtocolConfig[]>([])
+const { copy, copied } = useClipboard()
+const profiles = ref<VpnProfile[]>([])
 const loading = ref(false)
 const downloading = ref<string | null>(null)
-
-const protocolLabels: Record<string, string> = {
-  openvpn: 'OpenVPN',
-  wireguard: 'WireGuard',
-  l2tp: 'L2TP/IPsec',
-  ikev2: 'IKEv2',
-  ssh: 'SSH Tunnel',
-}
+const copiedUrl = ref<string | null>(null)
 
 const protocolIcons: Record<string, string> = {
-  openvpn: '🔐',
-  wireguard: '⚡',
-  l2tp: '🔒',
-  ikev2: '🛡️',
-  ssh: '🖥️',
+  'openvpn-udp': '⚡',
+  'openvpn-tcp': '🔐',
+  'openvpn': '🔐',
+  'l2tp': '🔒',
+  'ikev2': '🛡️',
+  'cisco-ipsec': '🔑',
 }
 
 async function loadProtocols() {
   loading.value = true
   try {
-    const res = await get<{ ok: boolean; protocols: string[] }>('/api/portal/available-protocols')
-    if (res?.ok && res.protocols) {
-      protocols.value = res.protocols.map(p => ({
-        protocol: p,
-        label: protocolLabels[p] || p,
-        available: true,
-      }))
+    const res = await get<{ ok: boolean; profiles: VpnProfile[] }>('/api/portal/profiles')
+    if (res?.ok && res.profiles) {
+      profiles.value = res.profiles.filter(p => p.available)
     }
   } catch {
-    // Fallback: show common protocols
-    protocols.value = ['openvpn', 'wireguard', 'ikev2'].map(p => ({
-      protocol: p,
-      label: protocolLabels[p] || p,
-      available: true,
-    }))
+    profiles.value = []
   } finally {
     loading.value = false
   }
 }
 
-async function downloadConfig(protocol: string) {
-  downloading.value = protocol
+async function downloadConfig(profile: VpnProfile) {
+  downloading.value = profile.type
   try {
-    const res = await fetch(`/api/portal/configs/${protocol}`, { credentials: 'include' })
+    const res = await fetch(profile.download, { credentials: 'include' })
     if (!res.ok) throw new Error('Download failed')
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${protocol}-config.${protocol === 'wireguard' ? 'conf' : 'ovpn'}`
+    a.download = profile.name.replace(/[^a-zA-Z0-9_.-]/g, '_') + (profile.type.startsWith('openvpn') ? '.ovpn' : '.conf')
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -71,6 +62,15 @@ async function downloadConfig(protocol: string) {
   } finally {
     downloading.value = null
   }
+}
+
+function copyUrl(downloadPath: string) {
+  const fullUrl = `${window.location.origin}${downloadPath}`
+  copy(fullUrl)
+  copiedUrl.value = downloadPath
+  setTimeout(() => {
+    if (copiedUrl.value === downloadPath) copiedUrl.value = null
+  }, 2000)
 }
 
 onMounted(loadProtocols)
@@ -83,24 +83,38 @@ onMounted(loadProtocols)
 
     <div v-if="loading" class="loading-text">Loading available protocols...</div>
 
-    <div v-else-if="protocols.length === 0" class="empty-state">
+    <div v-else-if="profiles.length === 0" class="empty-state">
       <p>No configurations available at this time.</p>
     </div>
 
     <div v-else class="protocols-grid">
-      <button
-        v-for="proto in protocols"
-        :key="proto.protocol"
+      <div
+        v-for="profile in profiles"
+        :key="profile.type"
         class="download-card"
-        :disabled="downloading === proto.protocol"
-        @click="downloadConfig(proto.protocol)"
       >
-        <span class="download-card__icon">{{ protocolIcons[proto.protocol] || '📄' }}</span>
-        <span class="download-card__label">{{ proto.label }}</span>
-        <span class="download-card__action">
-          {{ downloading === proto.protocol ? 'Downloading...' : 'Download' }}
-        </span>
-      </button>
+        <span class="download-card__icon">{{ protocolIcons[profile.type] || '📄' }}</span>
+        <span class="download-card__label">{{ profile.name }}</span>
+        <span v-if="profile.description" class="download-card__desc">{{ profile.description }}</span>
+        <div class="download-card__actions">
+          <KButton
+            variant="primary"
+            size="sm"
+            :loading="downloading === profile.type"
+            @click="downloadConfig(profile)"
+          >
+            Download
+          </KButton>
+          <KButton
+            v-if="profile.type.startsWith('openvpn')"
+            variant="ghost"
+            size="sm"
+            @click="copyUrl(profile.download)"
+          >
+            {{ copiedUrl === profile.download ? '✓ Copied' : '📋 Copy URL' }}
+          </KButton>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -139,7 +153,7 @@ onMounted(loadProtocols)
 
 .protocols-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-3);
 }
 
@@ -152,18 +166,6 @@ onMounted(loadProtocols)
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-
-.download-card:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-}
-
-.download-card:disabled {
-  opacity: 0.6;
-  cursor: wait;
 }
 
 .download-card__icon {
@@ -174,11 +176,18 @@ onMounted(loadProtocols)
   font-size: var(--text-md);
   font-weight: var(--font-semibold);
   color: var(--color-text);
+  text-align: center;
 }
 
-.download-card__action {
+.download-card__desc {
   font-size: var(--text-xs);
-  color: var(--color-primary);
-  font-weight: var(--font-medium);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.download-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 </style>

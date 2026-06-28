@@ -148,12 +148,12 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
   }
 
   /**
-   * Update profile data.
-   * PATCH /api/portal/profile → { ok }
+   * Update profile data (password change).
+   * POST /api/portal/password → { ok }
    */
   async function updateProfile(params: { display_name?: string; password?: string; current_password?: string }): Promise<boolean> {
     try {
-      await post<{ ok: boolean }>('/api/portal/profile', params)
+      await post<{ ok: boolean }>('/api/portal/password', params)
       // Reload user data
       await checkAuth()
       return true

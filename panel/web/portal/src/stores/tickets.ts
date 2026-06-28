@@ -116,16 +116,12 @@ export const usePortalTicketsStore = defineStore('portal-tickets', () => {
 
   /**
    * Load a single ticket's detail with messages.
-   * Uses GET /api/customer/tickets (list) to find the ticket, then fetches detail.
-   * Note: The customer API returns ticket + messages together via adminGetTicket pattern.
-   * We use a workaround: get ticket from list and load messages via reply endpoint check.
+   * GET /api/customer/tickets/:id → { ok, ticket, messages }
    */
   async function loadTicketDetail(id: number): Promise<void> {
     loading.value = true
     try {
-      // The customer API doesn't have a dedicated GET /api/customer/tickets/:id endpoint
-      // but we can use the portal endpoint which still works for backwards compat
-      const res = await get<TicketDetailResponse>(`/api/portal/tickets/${id}`)
+      const res = await get<TicketDetailResponse>(`/api/customer/tickets/${id}`)
       detail.value = {
         ...(res.ticket as any),
         messages: (res.messages || (res as any).ticket?.messages || []).map((m: any) => ({
@@ -210,12 +206,12 @@ export const usePortalTicketsStore = defineStore('portal-tickets', () => {
 
   /**
    * Close a ticket.
-   * POST /api/portal/tickets/:id/close → { ok }
+   * POST /api/customer/tickets/:id/close → { ok }
    */
   async function closeTicket(id: number): Promise<boolean> {
     loading.value = true
     try {
-      await post<{ ok: boolean }>(`/api/portal/tickets/${id}/close`)
+      await post<{ ok: boolean }>(`/api/customer/tickets/${id}/close`)
       await loadTicketDetail(id)
       await loadTickets()
       return true
