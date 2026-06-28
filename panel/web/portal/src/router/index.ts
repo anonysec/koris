@@ -16,7 +16,6 @@ const router = createRouter({
         { path: 'configs', name: 'portal-configs', component: () => import('@/views/ConfigDownloadsView.vue') },
         { path: 'xray', name: 'portal-xray', component: () => import('@/views/XrayConfigsView.vue') },
         { path: 'xray/subscription', name: 'portal-xray-subscription', component: () => import('@/views/XraySubscriptionView.vue') },
-        { path: 'anyconnect', name: 'portal-anyconnect', component: () => import('@/views/AnyConnectView.vue') },
         { path: 'invoices', name: 'portal-invoices', component: () => import('@/views/InvoicesView.vue'), meta: { requiresBilling: true } },
         { path: 'kb', name: 'portal-kb', component: () => import('@/views/KnowledgeBaseView.vue') },
         { path: 'payment', name: 'portal-payment', component: () => import('@/views/PaymentView.vue'), meta: { requiresBilling: true } },
@@ -27,6 +26,7 @@ const router = createRouter({
     // Redirect old routes to home
     { path: '/usage', redirect: '/' },
     { path: '/vpn-profiles', redirect: '/' },
+    { path: '/anyconnect', redirect: '/' },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ]
 })

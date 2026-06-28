@@ -65,7 +65,7 @@ const appLinks = [
 
 onMounted(async () => {
   try {
-    const res = await get<XrayConfigsResponse>('/api/customer/xray/configs')
+    const res = await get<XrayConfigsResponse>('/api/portal/xray/links')
     configs.value = res.configs || []
     subscriptionUrl.value = res.subscription_url || ''
   } catch {
