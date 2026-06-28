@@ -104,15 +104,17 @@
 
     <!-- Billing Toggle -->
     <div class="profile-fields__toggle-field">
-      <label class="profile-fields__toggle-label">
-        <input
-          type="checkbox"
-          class="profile-fields__toggle-checkbox"
-          :checked="modelValue.billing_enabled"
-          @change="updateField('billing_enabled', ($event.target as HTMLInputElement).checked)"
-        />
-        <span class="profile-fields__toggle-text">Enable Billing</span>
-      </label>
+      <button
+        type="button"
+        class="profile-fields__toggle-switch"
+        :class="{ 'profile-fields__toggle-switch--on': modelValue.billing_enabled }"
+        role="switch"
+        :aria-checked="String(modelValue.billing_enabled)"
+        @click="updateField('billing_enabled', !modelValue.billing_enabled)"
+      >
+        <span class="profile-fields__toggle-switch-knob" />
+      </button>
+      <span class="profile-fields__toggle-text">Enable Billing</span>
     </div>
 
     <!-- Note -->
@@ -151,20 +153,16 @@
           class="profile-fields__protocol-options"
         >
           <span class="profile-fields__protocol-options-label">{{ protocol.label }}:</span>
-          <label
+          <button
             v-for="opt in protocol.options"
             :key="opt.value"
-            class="profile-fields__protocol-option"
+            type="button"
+            class="profile-fields__option-pill"
+            :class="{ 'profile-fields__option-pill--active': getProtocolOption(protocol.value) === opt.value }"
+            @click="setProtocolOption(protocol.value, opt.value)"
           >
-            <input
-              type="radio"
-              :name="`proto-opt-${protocol.value}`"
-              :value="opt.value"
-              :checked="getProtocolOption(protocol.value) === opt.value"
-              @change="setProtocolOption(protocol.value, opt.value)"
-            />
-            <span>{{ opt.label }}</span>
-          </label>
+            {{ opt.label }}
+          </button>
         </div>
       </template>
     </KFormField>
@@ -244,7 +242,7 @@ const availableProtocols = [
       { label: 'L2TP (plain)', value: 'plain' },
     ],
   },
-  { label: 'SSH Tunnel', value: 'ssh', options: null },
+  { label: 'SSH', value: 'ssh', options: null },
   { label: 'MTProto', value: 'mtproto', options: null },
 ]
 
@@ -305,11 +303,11 @@ function applyChip(chip: ExpiryOffset) {
 }
 
 function isProtocolEnabled(protocol: string): boolean {
-  return props.modelValue.allowed_protocols.includes(protocol)
+  return props.modelValue.allowed_protocols?.includes(protocol) ?? false
 }
 
 function toggleProtocol(protocol: string) {
-  const current = [...props.modelValue.allowed_protocols]
+  const current = [...(props.modelValue.allowed_protocols || [])]
   const index = current.indexOf(protocol)
   if (index >= 0) {
     current.splice(index, 1)
@@ -475,21 +473,38 @@ function setProtocolOption(protocol: string, value: string) {
 .profile-fields__toggle-field {
   display: flex;
   align-items: center;
-}
-
-.profile-fields__toggle-label {
-  display: inline-flex;
-  align-items: center;
   gap: var(--space-2, 8px);
-  cursor: pointer;
 }
 
-.profile-fields__toggle-checkbox {
+.profile-fields__toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-border, #28333f);
+  cursor: pointer;
+  padding: 0;
+  transition: background 150ms ease;
+}
+
+.profile-fields__toggle-switch--on {
+  background: var(--color-primary, #2563eb);
+}
+
+.profile-fields__toggle-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
   width: 16px;
   height: 16px;
-  accent-color: var(--color-primary, #2563eb);
-  cursor: pointer;
-  margin: 0;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 150ms ease;
+}
+
+.profile-fields__toggle-switch--on .profile-fields__toggle-switch-knob {
+  transform: translateX(16px);
 }
 
 .profile-fields__toggle-text {
@@ -536,7 +551,7 @@ function setProtocolOption(protocol: string, value: string) {
   pointer-events: none;
 }
 
-/* Protocol sub-options */
+/* Protocol sub-options — pill buttons */
 .profile-fields__protocol-options {
   display: flex;
   flex-wrap: wrap;
@@ -552,20 +567,30 @@ function setProtocolOption(protocol: string, value: string) {
   font-weight: 500;
 }
 
-.profile-fields__protocol-option {
+.profile-fields__option-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: 9999px;
+  background: var(--color-surface, #0b1120);
   cursor: pointer;
   font-size: 12px;
+  font-family: var(--font-family);
   color: var(--color-muted, #8b98a5);
+  transition: border-color 100ms ease, background 100ms ease, color 100ms ease;
+  user-select: none;
 }
 
-.profile-fields__protocol-option input[type="radio"] {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--color-primary, #2563eb);
-  cursor: pointer;
-  margin: 0;
+.profile-fields__option-pill:hover {
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-text, #e6edf3);
+}
+
+.profile-fields__option-pill--active {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-primary, #2563eb);
+  font-weight: 500;
 }
 </style>

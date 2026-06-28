@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
 import type { Customer } from '@koris/types'
 
 export interface RowQuickActionsProps {
@@ -26,22 +25,15 @@ const { t } = useI18n()
 
 /**
  * Determine whether to show Enable or Disable based on user status.
- * If the user is disabled, show Enable; otherwise show Disable.
  */
 const isDisabled = computed(() => props.user.status === 'disabled')
 
-/**
- * Toggle label and icon based on current status.
- */
 const toggleLabel = computed(() =>
   isDisabled.value ? t('customers.enable') : t('customers.disable')
 )
 
 const toggleIcon = computed(() => (isDisabled.value ? '✓' : '⏸'))
 
-/**
- * Whether all actions should be disabled (loading state).
- */
 const actionsDisabled = computed(() => props.loading)
 
 function handleToggleStatus() {
@@ -85,40 +77,34 @@ function handleDelete() {
       </svg>
     </div>
 
-    <!-- Action buttons — icon-only, always visible -->
+    <!-- Action buttons — plain, minimal -->
     <template v-else>
-      <KButton
-        size="sm"
-        variant="ghost"
-        :icon="toggleIcon"
+      <button
+        type="button"
+        class="row-quick-actions__btn"
         :disabled="actionsDisabled"
         :aria-label="toggleLabel"
         :title="toggleLabel"
-        class="row-quick-actions__btn"
         @click.stop="handleToggleStatus"
-      />
+      >{{ toggleIcon }}</button>
 
-      <KButton
-        size="sm"
-        variant="ghost"
-        icon="↺"
+      <button
+        type="button"
+        class="row-quick-actions__btn"
         :disabled="actionsDisabled"
         :aria-label="t('customers.traffic_reset')"
         :title="t('customers.traffic_reset')"
-        class="row-quick-actions__btn"
         @click.stop="handleResetTraffic"
-      />
+      >↺</button>
 
-      <KButton
-        size="sm"
-        variant="danger"
-        icon="🗑"
+      <button
+        type="button"
+        class="row-quick-actions__btn row-quick-actions__btn--danger"
         :disabled="actionsDisabled"
         :aria-label="t('customers.delete')"
         :title="t('customers.delete')"
-        class="row-quick-actions__btn row-quick-actions__btn--danger"
         @click.stop="handleDelete"
-      />
+      >🗑</button>
     </template>
   </div>
 </template>
@@ -131,15 +117,35 @@ function handleDelete() {
 }
 
 .row-quick-actions__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 28px;
   width: 28px;
   height: 28px;
-  padding: 0;
-  transition: transform var(--transition-hover, 100ms ease-out);
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--color-muted, #8b98a5);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  transition: color 100ms ease, background 100ms ease;
 }
 
 .row-quick-actions__btn:hover:not(:disabled) {
-  transform: scale(1.05);
+  color: var(--color-text, #e6edf3);
+  background: var(--color-surface-2, #1e2630);
+}
+
+.row-quick-actions__btn--danger:hover:not(:disabled) {
+  color: var(--color-danger, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.row-quick-actions__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .row-quick-actions__spinner {
