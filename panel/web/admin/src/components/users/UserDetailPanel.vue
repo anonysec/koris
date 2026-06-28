@@ -222,9 +222,8 @@ function handleModify(): void {
   saving.value = true
   const payload: Record<string, unknown> = {
     status: profileFormData.value.status,
-    note: profileFormData.value.note,
-    expiry_date: profileFormData.value.expiry_date || null,
-    data_limit_gb: profileFormData.value.data_limit ? Number(profileFormData.value.data_limit) : 0,
+    notes: profileFormData.value.note,
+    data_gb: profileFormData.value.data_limit ? Number(profileFormData.value.data_limit) : 0,
     plan_id: profileFormData.value.plan_id ? Number(profileFormData.value.plan_id) : undefined,
   }
   patch(`/api/customers/${props.userId}`, payload)

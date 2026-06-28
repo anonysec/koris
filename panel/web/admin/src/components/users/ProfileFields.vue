@@ -1,7 +1,7 @@
 <template>
   <div class="profile-fields">
-    <!-- Row 1: Username + Status side by side -->
-    <div class="profile-fields__row">
+    <!-- Row 1: Username + Status side by side (hidden in create mode) -->
+    <div v-if="mode !== 'create'" class="profile-fields__row">
       <KFormField v-if="showUsername" name="username" :label="t('customer.username')">
         <template #default="{ fieldId, describedBy }">
           <KInput
