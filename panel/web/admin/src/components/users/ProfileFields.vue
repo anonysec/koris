@@ -2,7 +2,7 @@
   <div class="profile-fields">
     <!-- Row 1: Username + Status side by side -->
     <div class="profile-fields__row">
-      <KFormField name="username" :label="t('customer.username')">
+      <KFormField v-if="showUsername" name="username" :label="t('customer.username')">
         <template #default="{ fieldId, describedBy }">
           <KInput
             :id="fieldId"
@@ -44,13 +44,14 @@
       <!-- Data Limit (GB only, decimals supported) -->
       <KFormField name="data-limit" :label="t('customer.data_limit')">
         <template #default="{ fieldId }">
-          <div class="profile-fields__data-limit">
+          <div class="profile-fields__data-limit-wrapper">
             <KInput
               :id="fieldId"
               :model-value="modelValue.data_limit"
               type="number"
               step="0.1"
               min="0"
+              class="profile-fields__data-limit-input"
               placeholder="0 = unlimited"
               @update:model-value="updateField('data_limit', $event)"
             />
@@ -193,6 +194,7 @@ export interface ProfileFormData {
 
 export interface ProfileFieldsProps {
   modelValue: ProfileFormData
+  mode?: 'edit' | 'create'
 }
 
 const props = defineProps<ProfileFieldsProps>()
@@ -201,6 +203,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: ProfileFormData]
 }>()
 
+/** Whether to show the username field (hidden in 'create' mode where parent handles it) */
+const showUsername = computed(() => props.mode !== 'create')
 // ─── Status Options ─────────────────────────────────────────────────────────
 const statusOptions = [
   { label: t('customer.status_active'), value: 'active' },
@@ -211,7 +215,7 @@ const statusOptions = [
 
 // ─── Plan Options ───────────────────────────────────────────────────────────
 const planOptions = computed(() => {
-  return plansStore.activePlans.map((p: any) => ({
+  return plansStore.list.filter((p: any) => p.is_active).map((p: any) => ({
     value: String(p.id),
     label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d)`,
   }))
@@ -355,18 +359,24 @@ function setProtocolOption(protocol: string, value: string) {
 }
 
 /* ─── Data Limit ──────────────────────────────────────────────────────────── */
-.profile-fields__data-limit {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2, 8px);
+.profile-fields__data-limit-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.profile-fields__data-limit-wrapper :deep(input) {
+  padding-right: 36px;
 }
 
 .profile-fields__data-limit-suffix {
-  font-size: var(--text-sm, 13px);
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-muted, #8b98a5);
-  white-space: nowrap;
-  padding-right: var(--space-1, 4px);
+  pointer-events: none;
 }
 
 /* ─── Custom label for expiry (since KFormField doesn't support #label slot) */
