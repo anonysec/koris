@@ -1,5 +1,18 @@
 /* KorisPanel Shared Transition & Animation Classes */
 
+/* ─── Animation Custom Properties ─────────────────────────────────── */
+
+:root {
+  --transition-panel: 280ms ease-out;
+  --transition-modal-in: 200ms ease-out;
+  --transition-modal-out: 150ms ease-out;
+  --transition-row-expand: 200ms ease-out;
+  --transition-hover: 100ms ease-out;
+  --transition-status: 200ms ease-out;
+  --transition-row-fade: 150ms ease-out;
+  --transition-toast: 200ms ease-out;
+}
+
 /* ─── Page Transitions ────────────────────────────────────────────── */
 
 /* Fade */
@@ -120,6 +133,17 @@ button:active {
 /* ─── Accessibility: Reduced Motion ───────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-panel: 0ms;
+    --transition-modal-in: 0ms;
+    --transition-modal-out: 0ms;
+    --transition-row-expand: 0ms;
+    --transition-hover: 0ms;
+    --transition-status: 0ms;
+    --transition-row-fade: 0ms;
+    --transition-toast: 0ms;
+  }
+
   *,
   *::before,
   *::after {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useCustomersStore } from '@/stores/customers'
 import { useResellersStore } from '@/stores/resellers'
 import { usePlansStore } from '@/stores/plans'
@@ -10,21 +9,29 @@ import type { BulkActionRequest } from '@/stores/customers'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
-import KAvatar from '@koris/ui/KAvatar.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KSlideOver from '@koris/ui/KSlideOver.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
+import KSkeleton from '@koris/ui/KSkeleton.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
 import { formatDate } from '@koris/composables/useFormatDate'
+import { useVirtualScroll } from '@koris/composables/useVirtualScroll'
+import { useDetailPanel } from '@/composables/useDetailPanel'
+import { useExpandableRows } from '@/composables/useExpandableRows'
+import { useQuickActions } from '@/composables/useQuickActions'
+import UserDetailPanel from '@/components/users/UserDetailPanel.vue'
+import WalletActions from '@/components/users/WalletActions.vue'
+import UserEditModal from '@/components/users/UserEditModal.vue'
+import ExpandableRow from '@/components/users/ExpandableRow.vue'
+import RowQuickActions from '@/components/users/RowQuickActions.vue'
 
 const { t } = useI18n()
-const router = useRouter()
 const store = useCustomersStore()
 const resellersStore = useResellersStore()
 const plansStore = usePlansStore()
@@ -35,6 +42,149 @@ const toast = useToast()
 const api = useApi()
 
 const isReseller = computed(() => authStore.user?.role === 'reseller')
+
+// ─── Detail Panel (CSS Grid layout) ────────────────────────────────────────
+const { selectedUserId, isOpen: detailPanelOpen, open: openDetailPanel, close: closeDetailPanel, switchUser } = useDetailPanel()
+const detailPanelRef = ref<InstanceType<typeof UserDetailPanel> | null>(null)
+
+// ─── Wallet Modal State ─────────────────────────────────────────────────────
+const walletModalOpen = ref(false)
+const walletMode = ref<'top-up' | 'deduct'>('top-up')
+const walletUsername = ref('')
+const walletBalance = ref(0)
+
+function openWalletModal(mode: 'top-up' | 'deduct', username: string, balance: number) {
+  walletMode.value = mode
+  walletUsername.value = username
+  walletBalance.value = balance
+  walletModalOpen.value = true
+}
+
+function closeWalletModal() {
+  walletModalOpen.value = false
+}
+
+function onWalletSuccess() {
+  walletModalOpen.value = false
+  // Refresh the detail panel data to reflect updated balance and transactions
+  detailPanelRef.value?.refresh()
+}
+
+// ─── Edit Modal State ───────────────────────────────────────────────────────
+const editModalOpen = ref(false)
+const editModalUserId = ref<number | null>(null)
+
+function openEditModal(userId: number | null = selectedUserId.value) {
+  editModalUserId.value = userId
+  editModalOpen.value = true
+}
+
+function closeEditModal() {
+  editModalOpen.value = false
+  editModalUserId.value = null
+}
+
+function onEditModalSaved() {
+  editModalOpen.value = false
+  editModalUserId.value = null
+  // Refresh the customers list after edit
+  store.loadCustomers()
+}
+
+function onDetailPanelEdit() {
+  openEditModal(selectedUserId.value)
+}
+
+// ─── Expandable Rows (Requirements: 6.1, 6.2, 6.5, 6.7) ───────────────────
+const { expandedIds, toggle: toggleExpandRow, isExpanded: isRowExpanded, collapseAll } = useExpandableRows()
+
+// ─── Quick Actions (Requirements: 13.1, 13.5, 13.6) ────────────────────────
+const quickActions = useQuickActions()
+
+/** Tracks which row is currently hovered (for RowQuickActions visibility) */
+const hoveredRowId = ref<number | null>(null)
+
+function onRowMouseEnter(rowId: number) {
+  hoveredRowId.value = rowId
+}
+
+function onRowMouseLeave() {
+  hoveredRowId.value = null
+}
+
+/** Handle expand row edit icon → opens UserEditModal (not detail panel) (Req 6.5) */
+function handleExpandedRowEdit(userId: number) {
+  openEditModal(userId)
+}
+
+/** Handle quick action: toggle status (Req 13.1, 13.2) */
+function handleQuickToggleStatus(user: any) {
+  quickActions.toggleStatus(user.id, user.status)
+}
+
+/** Handle quick action: reset traffic (Req 13.1, 13.2) */
+function handleQuickResetTraffic(userId: number) {
+  quickActions.resetTraffic(userId)
+}
+
+/** Handle quick action: delete with confirmation (Req 13.3) */
+async function handleQuickDelete(user: any) {
+  const confirmed = await confirm({
+    title: t('customers.confirm_delete_title'),
+    message: t('customers.confirm_delete_msg').replace('{name}', user.username),
+    variant: 'danger',
+    icon: '\u26A0',
+    confirmText: t('btn.delete'),
+    cancelText: t('btn.cancel'),
+  })
+  if (!confirmed) return
+  quickActions.deleteUser(user.id)
+}
+
+// ─── Virtual Scroll ─────────────────────────────────────────────────────────
+const VIRTUAL_SCROLL_THRESHOLD = 100
+const ROW_HEIGHT = 44
+const tableContainerRef = ref<HTMLElement | null>(null)
+const containerHeight = ref(600)
+
+/** Whether virtual scrolling is active (list > 100 items) */
+const virtualScrollEnabled = computed(() => tableData.value.length > VIRTUAL_SCROLL_THRESHOLD)
+
+const totalItems = computed(() => tableData.value.length)
+
+const {
+  startIndex,
+  endIndex,
+  offsetY,
+  totalHeight,
+  onScroll: handleVirtualScroll,
+} = useVirtualScroll({
+  totalItems,
+  rowHeight: ROW_HEIGHT,
+  containerHeight,
+  bufferSize: 5,
+})
+
+/** The data slice rendered in the virtual scroll viewport */
+const visibleTableData = computed(() => {
+  if (!virtualScrollEnabled.value) return tableData.value
+  return tableData.value.slice(startIndex.value, endIndex.value + 1)
+})
+
+// Observe container height for virtual scroll
+let resizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      containerHeight.value = entry.contentRect.height
+    }
+  })
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+})
 
 const searchQuery = ref('')
 const activeStatusTab = ref<string>('all')
@@ -232,6 +382,7 @@ const statusTabs = computed(() => [
 
 const columns = computed(() => {
   const allCols = [
+    { key: 'expand', label: '', sortable: false, width: '40px' } as any,
     { key: 'username', label: t('user.username'), sortable: true },
     { key: 'display_name', label: t('user.display_name'), sortable: true },
     { key: 'status', label: t('user.status'), sortable: true },
@@ -243,11 +394,11 @@ const columns = computed(() => {
   }
   allCols.push(
     { key: 'created_at', label: t('user.created'), sortable: true },
-    { key: 'actions', label: '', sortable: false, align: 'center' as const, width: '80px' } as any,
+    { key: 'actions', label: '', sortable: false, align: 'right' as const, width: '200px' } as any,
   )
   // Filter by visibility
   const visibleKeys = new Set(columnVisibility.value.filter(c => c.visible).map(c => c.key))
-  return allCols.filter(col => col.key === 'actions' || visibleKeys.has(col.key))
+  return allCols.filter(col => col.key === 'actions' || col.key === 'expand' || visibleKeys.has(col.key))
 })
 
 /** Set of usernames currently online (from live sessions) */
@@ -310,6 +461,22 @@ function onSearchInput(val: string | number) {
   debouncedSearch(strVal)
 }
 
+/** Whether no results match the current search/filter criteria */
+const noResultsMatch = computed(() => {
+  return !store.loading && tableData.value.length === 0 && (searchQuery.value.trim() !== '' || activeStatusTab.value !== 'all' || filterPlanId.value !== '')
+})
+
+/** Reset all active search and filter values */
+function resetFilters() {
+  searchQuery.value = ''
+  store.filters.search = ''
+  activeStatusTab.value = 'all'
+  store.filters.status = 'all'
+  filterPlanId.value = ''
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+}
+
 // ─── Tab Navigation ─────────────────────────────────────────────────────────
 
 function setMainTab(tabKey: string) {
@@ -329,7 +496,11 @@ function setStatusFilter(status: string) {
 // ─── User Actions ───────────────────────────────────────────────────────────
 
 function handleRowClick(row: any) {
-  router.push({ name: 'user-detail', params: { id: String(row.id) } })
+  if (detailPanelOpen.value) {
+    switchUser(row.id)
+  } else {
+    openDetailPanel(row.id)
+  }
 }
 
 function openNewUserSlideOver() {
@@ -449,15 +620,6 @@ const showBulkTagSlide = ref(false)
 const bulkTagId = ref('')
 const availableTags = ref<{ id: number; name: string; color: string }[]>([])
 
-// Import
-const showImportSlide = ref(false)
-const importMode = ref<'file' | 'paste'>('file')
-const importFileInput = ref<HTMLInputElement | null>(null)
-const importCsvText = ref('')
-const importPreview = ref<{ rows: any[]; errors: string[] } | null>(null)
-const importLoading = ref(false)
-const importResult = ref<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null)
-
 async function executeBulkExtend() {
   if (!bulkExtendDays.value || selectedIds.value.length === 0) return
   saving.value = true
@@ -565,79 +727,6 @@ async function executeBulkAssignTag() {
     showBulkTagSlide.value = false
     bulkTagId.value = ''
   }
-}
-
-// ─── CSV Import ─────────────────────────────────────────────────────────────
-
-function openImportSlide() {
-  importMode.value = 'file'
-  importCsvText.value = ''
-  importPreview.value = null
-  importResult.value = null
-  showImportSlide.value = true
-}
-
-function handleFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement
-  if (!input.files?.length) return
-  const file = input.files[0]
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    importCsvText.value = e.target?.result as string
-    previewImport()
-  }
-  reader.readAsText(file)
-}
-
-async function previewImport() {
-  if (!importCsvText.value.trim()) {
-    toast.error(t('customers.import_empty'))
-    return
-  }
-  importLoading.value = true
-  try {
-    const data = await api.post<{ ok: boolean; rows: any[]; errors: string[] }>('/api/customers/import/preview', {
-      csv_data: importCsvText.value,
-    })
-    if (data?.ok) {
-      importPreview.value = { rows: data.rows || [], errors: data.errors || [] }
-    }
-  } catch {
-    // error toast handled by useApi
-  } finally {
-    importLoading.value = false
-  }
-}
-
-async function executeImport() {
-  if (!importCsvText.value.trim()) return
-  importLoading.value = true
-  try {
-    const data = await api.post<{ ok: boolean; created: number; updated: number; skipped: number; errors: string[] }>('/api/customers/import', {
-      csv_data: importCsvText.value,
-    })
-    if (data?.ok) {
-      importResult.value = {
-        created: data.created || 0,
-        updated: data.updated || 0,
-        skipped: data.skipped || 0,
-        errors: data.errors || [],
-      }
-      toast.success(t('customers.import_success'))
-      store.loadCustomers()
-    }
-  } catch {
-    // error toast handled by useApi
-  } finally {
-    importLoading.value = false
-  }
-}
-
-function closeImport() {
-  showImportSlide.value = false
-  importPreview.value = null
-  importResult.value = null
-  importCsvText.value = ''
 }
 
 // ─── Reseller Actions ───────────────────────────────────────────────────────
@@ -763,7 +852,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page customers-view">
+  <div :class="['page', 'customers-view', { 'customers-view--panel-open': detailPanelOpen }]">
+    <!-- Main content area (table side) -->
+    <div class="customers-view__main">
     <!-- Header -->
     <header class="page-header">
       <div class="page-header__actions">
@@ -779,12 +870,6 @@ onMounted(async () => {
           size="sm"
           @click="showColumnToggle = !showColumnToggle"
         >{{ t('customers.columns') }}</KButton>
-        <KButton
-          v-if="currentMainTab === 'users'"
-          variant="ghost"
-          size="sm"
-          @click="openImportSlide"
-        >{{ t('customers.import_csv') }}</KButton>
       </div>
       <KButton
         v-if="currentMainTab === 'users'"
@@ -896,51 +981,191 @@ onMounted(async () => {
       </div>
 
       <!-- Users Data Table -->
-      <KDataTable
-        :columns="columns"
-        :data="tableData"
-        :loading="store.loading"
-        :page-size="store.pagination.pageSize"
-        row-key="id"
-        selectable
-        @row-click="handleRowClick"
-        @selection-change="onSelectionChange"
+      <!-- Loading state: KSkeleton rows (Req 12.3) -->
+      <div v-if="store.loading && tableData.length === 0" class="skeleton-table" aria-busy="true" aria-label="Loading users">
+        <KSkeleton variant="table-row" :count="store.pagination.pageSize" />
+      </div>
+
+      <!-- Empty state: no results match (Req 12.6) -->
+      <KEmptyState
+        v-else-if="noResultsMatch"
+        icon="🔍"
+        :title="t('customers.no_results_title') || 'No results found'"
+        :description="t('customers.no_results_desc') || 'No users match the current search or filter criteria.'"
+        :action-text="t('customers.reset_filters') || 'Reset filters'"
+        @action="resetFilters"
+      />
+
+      <!-- Virtual scroll table container (Req 12.4) -->
+      <div
+        v-else
+        ref="tableContainerRef"
+        :class="['table-scroll-container', { 'table-scroll-container--virtual': virtualScrollEnabled }]"
+        @scroll="virtualScrollEnabled ? handleVirtualScroll($event) : undefined"
       >
-        <template #cell-username="{ row, value }">
-          <div class="username-cell">
-            <KAvatar :name="row.display_name || value" size="sm" :emoji="row.avatar || undefined" />
-            <span class="username-cell__text">{{ value }}</span>
-            <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" />
+        <!-- Virtual scroll spacer for correct scrollbar height -->
+        <div
+          v-if="virtualScrollEnabled"
+          class="virtual-scroll-spacer"
+          :style="{ height: totalHeight + 'px' }"
+        >
+          <div class="virtual-scroll-content" :style="{ transform: `translateY(${offsetY}px)` }">
+            <KDataTable
+              :columns="columns"
+              :data="visibleTableData"
+              :loading="false"
+              :page-size="visibleTableData.length"
+              row-key="id"
+              selectable
+              @row-click="handleRowClick"
+              @selection-change="onSelectionChange"
+            >
+              <template #cell-expand="{ row }">
+                <button
+                  class="expand-chevron"
+                  :class="{ 'expand-chevron--expanded': isRowExpanded(row.id) }"
+                  :aria-label="isRowExpanded(row.id) ? 'Collapse row' : 'Expand row'"
+                  :aria-expanded="isRowExpanded(row.id)"
+                  @click.stop="toggleExpandRow(row.id)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </template>
+              <template #cell-username="{ row, value }">
+                <div class="username-cell">
+                  <span class="username-cell__emoji" aria-hidden="true">{{ row.avatar || '👤' }}</span>
+                  <span class="username-cell__text">{{ value }}</span>
+                  <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" aria-label="Online" />
+                </div>
+              </template>
+              <template #cell-status="{ value }">
+                <KStatusPill :status="value" size="sm" />
+              </template>
+              <template #cell-credit="{ value }">
+                <span :class="{ 'text-success': value > 0, 'text-danger': value < 0 }">
+                  ${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}
+                </span>
+              </template>
+              <template #cell-created_by="{ value }">
+                <span class="created-by-cell">{{ value || '—' }}</span>
+              </template>
+              <template #cell-created_at="{ value }">
+                {{ formatDate(value) }}
+              </template>
+              <template #cell-actions="{ row }">
+                <div
+                  class="row-actions-cell"
+                  @mouseenter="onRowMouseEnter(row.id)"
+                  @mouseleave="onRowMouseLeave"
+                >
+                  <RowQuickActions
+                    :user="row"
+                    :visible="hoveredRowId === row.id"
+                    :loading="quickActions.isRowLoading(row.id)"
+                    :active-action="quickActions.getRowAction(row.id)"
+                    @enable="handleQuickToggleStatus(row)"
+                    @disable="handleQuickToggleStatus(row)"
+                    @reset-traffic="handleQuickResetTraffic(row.id)"
+                    @delete="handleQuickDelete(row)"
+                  />
+                </div>
+              </template>
+            </KDataTable>
+            <!-- Expanded rows (virtual scroll) -->
+            <template v-for="row in visibleTableData" :key="'expand-' + row.id">
+              <div v-if="isRowExpanded(row.id)" class="expanded-row-wrapper">
+                <ExpandableRow
+                  :user="row"
+                  :expanded="true"
+                  @toggle="toggleExpandRow(row.id)"
+                  @row-click="handleRowClick(row)"
+                  @edit="handleExpandedRowEdit(row.id)"
+                />
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Normal (non-virtual) table when items ≤ 100 -->
+        <KDataTable
+          v-if="!virtualScrollEnabled"
+          :columns="columns"
+          :data="tableData"
+          :loading="store.loading"
+          :page-size="store.pagination.pageSize"
+          row-key="id"
+          selectable
+          @row-click="handleRowClick"
+          @selection-change="onSelectionChange"
+        >
+          <template #cell-expand="{ row }">
+            <button
+              class="expand-chevron"
+              :class="{ 'expand-chevron--expanded': isRowExpanded(row.id) }"
+              :aria-label="isRowExpanded(row.id) ? 'Collapse row' : 'Expand row'"
+              :aria-expanded="isRowExpanded(row.id)"
+              @click.stop="toggleExpandRow(row.id)"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </template>
+          <template #cell-username="{ row, value }">
+            <div class="username-cell">
+              <span class="username-cell__emoji" aria-hidden="true">{{ row.avatar || '👤' }}</span>
+              <span class="username-cell__text">{{ value }}</span>
+              <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" aria-label="Online" />
+            </div>
+          </template>
+          <template #cell-status="{ value }">
+            <KStatusPill :status="value" size="sm" />
+          </template>
+          <template #cell-credit="{ value }">
+            <span :class="{ 'text-success': value > 0, 'text-danger': value < 0 }">
+              ${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}
+            </span>
+          </template>
+          <template #cell-created_by="{ value }">
+            <span class="created-by-cell">{{ value || '—' }}</span>
+          </template>
+          <template #cell-created_at="{ value }">
+            {{ formatDate(value) }}
+          </template>
+          <template #cell-actions="{ row }">
+            <div
+              class="row-actions-cell"
+              @mouseenter="onRowMouseEnter(row.id)"
+              @mouseleave="onRowMouseLeave"
+            >
+              <RowQuickActions
+                :user="row"
+                :visible="hoveredRowId === row.id"
+                :loading="quickActions.isRowLoading(row.id)"
+                :active-action="quickActions.getRowAction(row.id)"
+                @enable="handleQuickToggleStatus(row)"
+                @disable="handleQuickToggleStatus(row)"
+                @reset-traffic="handleQuickResetTraffic(row.id)"
+                @delete="handleQuickDelete(row)"
+              />
+            </div>
+          </template>
+        </KDataTable>
+        <!-- Expanded rows (normal mode) -->
+        <template v-for="row in tableData" :key="'expand-' + row.id">
+          <div v-if="isRowExpanded(row.id)" class="expanded-row-wrapper">
+            <ExpandableRow
+              :user="row"
+              :expanded="true"
+              @toggle="toggleExpandRow(row.id)"
+              @row-click="handleRowClick(row)"
+              @edit="handleExpandedRowEdit(row.id)"
+            />
           </div>
         </template>
-        <template #cell-status="{ value }">
-          <KStatusPill :status="value" size="sm" />
-        </template>
-        <template #cell-credit="{ value }">
-          <span :class="{ 'text-success': value > 0, 'text-danger': value < 0 }">
-            ${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}
-          </span>
-        </template>
-        <template #cell-created_by="{ value }">
-          <span class="created-by-cell">{{ value || '—' }}</span>
-        </template>
-        <template #cell-created_at="{ value }">
-          {{ formatDate(value) }}
-        </template>
-        <template #cell-actions="{ row }">
-          <button
-            class="action-btn action-btn--delete"
-            :title="t('btn.delete')"
-            :aria-label="t('btn.delete')"
-            @click.stop="deleteCustomer(row.id, row.username)"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 011.334-1.334h2.666a1.333 1.333 0 011.334 1.334V4m2 0v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4h9.334z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M6.667 7.333v4M9.333 7.333v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </template>
-      </KDataTable>
+      </div>
     </template>
 
     <!-- ═══════════════ RESELLERS TAB ═══════════════ -->
@@ -981,6 +1206,41 @@ onMounted(async () => {
         </template>
       </KDataTable>
     </template>
+
+    </div><!-- /.customers-view__main -->
+
+    <!-- Detail Panel (slides in from right, Requirements: 2.1, 2.2, 2.3, 2.9) -->
+    <aside v-if="detailPanelOpen" class="customers-view__panel" aria-label="User detail panel">
+      <!-- Spacer element to push table via grid; actual panel uses Teleport -->
+    </aside>
+    <UserDetailPanel
+      ref="detailPanelRef"
+      :user-id="selectedUserId"
+      :open="detailPanelOpen"
+      @close="closeDetailPanel"
+      @edit="onDetailPanelEdit"
+      @updated="store.loadCustomers()"
+      @top-up="(username: string, balance: number) => openWalletModal('top-up', username, balance)"
+      @deduct="(username: string, balance: number) => openWalletModal('deduct', username, balance)"
+    />
+
+    <!-- Wallet Actions Modal (Top Up / Deduct — Requirements: 11.2, 11.4, 11.6, 11.8, 11.10) -->
+    <WalletActions
+      :open="walletModalOpen"
+      :mode="walletMode"
+      :username="walletUsername"
+      :current-balance="walletBalance"
+      @close="closeWalletModal"
+      @success="onWalletSuccess"
+    />
+
+    <!-- Edit Modal (Requirements: 5.1, 5.2, 5.5, 5.6) -->
+    <UserEditModal
+      :open="editModalOpen"
+      :user-id="editModalUserId"
+      @close="closeEditModal"
+      @saved="onEditModalSaved"
+    />
 
     <!-- ═══════════════ SLIDE-OVERS ═══════════════ -->
 
@@ -1226,131 +1486,46 @@ onMounted(async () => {
       </form>
     </KSlideOver>
 
-    <!-- CSV Import Slide-Over -->
-    <KSlideOver :open="showImportSlide" :title="t('customers.import_title')" width="600px" @close="closeImport">
-      <div class="slide-form">
-        <!-- Mode Toggle -->
-        <div class="import-mode-toggle">
-          <button
-            type="button"
-            class="mode-btn"
-            :class="{ 'mode-btn--active': importMode === 'file' }"
-            @click="importMode = 'file'"
-          >{{ t('customers.import_file') }}</button>
-          <button
-            type="button"
-            class="mode-btn"
-            :class="{ 'mode-btn--active': importMode === 'paste' }"
-            @click="importMode = 'paste'"
-          >{{ t('customers.import_paste') }}</button>
-        </div>
-
-        <!-- File Upload -->
-        <div v-if="importMode === 'file'" class="import-file-section">
-          <label class="import-file-label">
-            <input
-              ref="importFileInput"
-              type="file"
-              accept=".csv,text/csv"
-              class="import-file-input"
-              @change="handleFileSelect"
-            />
-            <span class="import-file-btn">{{ t('customers.import_choose_file') }}</span>
-          </label>
-          <p class="import-hint">{{ t('customers.import_format_hint') }}</p>
-        </div>
-
-        <!-- CSV Paste -->
-        <div v-if="importMode === 'paste'" class="import-paste-section">
-          <KFormField name="import-csv" :label="t('customers.import_csv_data')">
-            <template #default="{ fieldId }">
-              <textarea
-                :id="fieldId"
-                v-model="importCsvText"
-                class="import-textarea"
-                rows="8"
-                :placeholder="t('customers.import_csv_placeholder')"
-              />
-            </template>
-          </KFormField>
-          <KButton variant="ghost" size="sm" @click="previewImport" :loading="importLoading">
-            {{ t('customers.import_preview') }}
-          </KButton>
-        </div>
-
-        <!-- Preview Results -->
-        <div v-if="importPreview" class="import-preview">
-          <h4 class="import-preview__title">{{ t('customers.import_preview_title') }}</h4>
-          <p class="import-preview__count">
-            {{ importPreview.rows.length }} {{ t('customers.import_rows_valid') }}
-          </p>
-          <div v-if="importPreview.errors.length > 0" class="import-errors">
-            <p class="import-errors__title">{{ t('customers.import_errors') }}:</p>
-            <ul class="import-errors__list">
-              <li v-for="(err, idx) in importPreview.errors.slice(0, 10)" :key="idx">{{ err }}</li>
-              <li v-if="importPreview.errors.length > 10">
-                ... {{ t('customers.import_more_errors').replace('{count}', String(importPreview.errors.length - 10)) }}
-              </li>
-            </ul>
-          </div>
-          <div v-if="importPreview.rows.length > 0" class="import-preview-table">
-            <table class="preview-table">
-              <thead>
-                <tr>
-                  <th>{{ t('user.username') }}</th>
-                  <th>{{ t('user.status') }}</th>
-                  <th>{{ t('user.plan') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, idx) in importPreview.rows.slice(0, 5)" :key="idx">
-                  <td>{{ row.username }}</td>
-                  <td>{{ row.status || 'active' }}</td>
-                  <td>{{ row.plan || '—' }}</td>
-                </tr>
-                <tr v-if="importPreview.rows.length > 5">
-                  <td colspan="3" class="preview-more">
-                    ... {{ importPreview.rows.length - 5 }} {{ t('customers.import_more_rows') }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Import Result -->
-        <div v-if="importResult" class="import-result">
-          <h4 class="import-result__title">{{ t('customers.import_complete') }}</h4>
-          <div class="import-result__stats">
-            <span class="stat stat--success">{{ importResult.created }} {{ t('customers.import_created') }}</span>
-            <span class="stat stat--info">{{ importResult.updated }} {{ t('customers.import_updated') }}</span>
-            <span class="stat stat--warn">{{ importResult.skipped }} {{ t('customers.import_skipped') }}</span>
-          </div>
-          <div v-if="importResult.errors.length > 0" class="import-errors">
-            <ul class="import-errors__list">
-              <li v-for="(err, idx) in importResult.errors.slice(0, 10)" :key="idx">{{ err }}</li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Actions -->
-        <div class="slide-form__footer">
-          <KButton type="button" variant="ghost" @click="closeImport">{{ t('btn.cancel') }}</KButton>
-          <KButton
-            v-if="importPreview && !importResult"
-            variant="primary"
-            :loading="importLoading"
-            :disabled="!importPreview.rows.length"
-            @click="executeImport"
-          >{{ t('customers.import_execute') }}</KButton>
-        </div>
-      </div>
-    </KSlideOver>
   </div>
 </template>
 
 <style scoped>
-.customers-view { display: flex; flex-direction: column; gap: var(--space-4); }
+/* ─── CSS Grid Layout (table + panel side-by-side) ─── */
+.customers-view {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  height: 100%;
+  overflow: hidden;
+  transition: grid-template-columns var(--transition-panel, 280ms ease-out);
+}
+
+.customers-view--panel-open {
+  grid-template-columns: 1fr auto;
+}
+
+.customers-view__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: hidden;
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.customers-view__panel {
+  width: 480px;
+  max-width: 480px;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  overflow-y: auto;
+  animation: panel-slide-in 280ms ease-out;
+}
+
+@keyframes panel-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 
 .page-header { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 .page-header__actions { display: flex; gap: var(--space-2); margin-right: auto; }
@@ -1569,11 +1744,17 @@ onMounted(async () => {
   padding: 8px 12px;
 }
 
-/* Username cell with avatar */
+/* Username cell with avatar emoji */
 .username-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.username-cell__emoji {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .username-cell__text {
@@ -1592,6 +1773,38 @@ onMounted(async () => {
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* ─── Virtual Scroll Container ─── */
+.table-scroll-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.table-scroll-container--virtual {
+  overflow-y: auto;
+  position: relative;
+}
+
+.virtual-scroll-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.virtual-scroll-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* ─── Skeleton Loading ─── */
+.skeleton-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
 }
 
 /* Per-row action buttons */
@@ -1690,6 +1903,30 @@ onMounted(async () => {
   }
   .online-dot {
     animation: none;
+  }
+  .customers-view {
+    transition: none;
+  }
+  .customers-view__panel {
+    animation: none;
+  }
+}
+
+/* Panel responsive: full width overlay on ≤ 1024px (Req 2.7) */
+@media (max-width: 1024px) {
+  .customers-view--panel-open {
+    grid-template-columns: 1fr;
+  }
+
+  .customers-view__panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    z-index: 100;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -1853,205 +2090,73 @@ onMounted(async () => {
   color: var(--color-text);
 }
 
-/* Import Slide-Over */
-.import-mode-toggle {
-  display: flex;
-  gap: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.mode-btn {
-  flex: 1;
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.mode-btn:not(:last-child) {
-  border-right: 1px solid var(--color-border);
-}
-
-.mode-btn--active {
-  background: var(--color-primary);
-  color: white;
-}
-
-.import-file-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.import-file-label {
-  display: block;
-  cursor: pointer;
-}
-
-.import-file-input {
-  display: none;
-}
-
-.import-file-btn {
+/* ─── Expand Chevron (Req 6.1) ─── */
+.expand-chevron {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-surface-2);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  transition: border-color 0.15s;
-}
-
-.import-file-btn:hover {
-  border-color: var(--color-primary);
-}
-
-.import-hint {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.import-paste-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.import-textarea {
-  width: 100%;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-family: monospace;
-  font-size: var(--text-xs);
-  resize: vertical;
-}
-
-.import-textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-subtle);
-}
-
-.import-preview {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-}
-
-.import-preview__title {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  margin: 0 0 var(--space-2);
-}
-
-.import-preview__count {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  margin: 0 0 var(--space-2);
-}
-
-.import-errors {
-  margin-top: var(--space-2);
-}
-
-.import-errors__title {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--color-danger, #ef4444);
-  margin: 0 0 var(--space-1);
-}
-
-.import-errors__list {
-  list-style: none;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--color-danger, #ef4444);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-muted, #8b98a5);
+  cursor: pointer;
+  transition: transform var(--transition-row-expand, 200ms ease-out), color 100ms ease-out, background 100ms ease-out;
 }
 
-.import-errors__list li {
-  padding: 2px 0;
+.expand-chevron:hover {
+  background: var(--color-surface-2, #1e2630);
+  color: var(--color-text, #e6edf3);
 }
 
-.import-preview-table {
-  margin-top: var(--space-3);
-  overflow-x: auto;
+.expand-chevron:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
 }
 
-.preview-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-xs);
+.expand-chevron--expanded {
+  transform: rotate(90deg);
+  color: var(--color-primary, #2563eb);
 }
 
-.preview-table th,
-.preview-table td {
-  padding: 4px 8px;
-  border: 1px solid var(--color-border);
-  text-align: left;
-}
-
-.preview-table th {
-  background: var(--color-surface);
-  font-weight: 600;
-}
-
-.preview-more {
-  text-align: center;
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.import-result {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-}
-
-.import-result__title {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  margin: 0 0 var(--space-2);
-}
-
-.import-result__stats {
+/* ─── Row Actions Cell (Quick Actions on hover, Req 13.1) ─── */
+.row-actions-cell {
   display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 180px;
+  min-height: 32px;
+  position: relative;
 }
 
-.stat {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
+/* ─── Expanded Row Wrapper ─── */
+.expanded-row-wrapper {
+  padding: 0 var(--space-4, 16px);
+  animation: expand-row-in var(--transition-row-expand, 200ms ease-out);
 }
 
-.stat--success {
-  color: var(--color-success, #22c55e);
-  background: rgba(34, 197, 94, 0.1);
+@keyframes expand-row-in {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 200px;
+    overflow: visible;
+  }
 }
 
-.stat--info {
-  color: var(--color-primary);
-  background: rgba(37, 99, 235, 0.1);
-}
+@media (prefers-reduced-motion: reduce) {
+  .expand-chevron {
+    transition: none;
+  }
 
-.stat--warn {
-  color: var(--color-warning, #f59e0b);
-  background: rgba(245, 158, 11, 0.1);
+  .expanded-row-wrapper {
+    animation: none;
+  }
 }
 </style>

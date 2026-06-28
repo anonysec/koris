@@ -49,6 +49,21 @@ export interface WalletTransaction {
   created_at: string
 }
 
+/** Connected client session (live) */
+export interface ConnectedClient {
+  ip: string
+  device: string | null
+  user_agent: string | null
+  connected_at: string
+  protocol: string
+}
+
+/** Wallet adjustment request */
+export interface WalletAdjustRequest {
+  amount: number        // positive for top-up, negative for deduct
+  description: string
+}
+
 export interface CustomerDetail extends Customer {
   notes: string
   sub_token: string
