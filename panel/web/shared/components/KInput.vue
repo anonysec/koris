@@ -5,6 +5,7 @@
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"
+    :autocomplete="autocomplete"
     :aria-describedby="ariaDescribedby"
     :aria-disabled="disabled"
     class="k-input"
@@ -20,6 +21,7 @@ export interface KInputProps {
   placeholder?: string
   disabled?: boolean
   id?: string
+  autocomplete?: string
   ariaDescribedby?: string
 }
 
