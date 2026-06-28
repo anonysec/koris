@@ -30,6 +30,8 @@ import WalletActions from '@/components/users/WalletActions.vue'
 import UserEditModal from '@/components/users/UserEditModal.vue'
 import ExpandableRow from '@/components/users/ExpandableRow.vue'
 import RowQuickActions from '@/components/users/RowQuickActions.vue'
+import ProfileFields from '@/components/users/ProfileFields.vue'
+import type { ProfileFormData } from '@/components/users/ProfileFields.vue'
 
 const { t } = useI18n()
 const store = useCustomersStore()
@@ -297,6 +299,17 @@ const userForm = ref({
   avatar: '',
 })
 
+const newUserProfileData = ref<ProfileFormData>({
+  username: '',
+  status: 'active',
+  data_limit: '',
+  expiry_date: '',
+  note: '',
+  allowed_protocols: [],
+  protocol_options: {},
+  billing_enabled: false,
+})
+
 const resellerForm = ref({
   username: '',
   password: '',
@@ -522,6 +535,16 @@ function openNewUserSlideOver() {
   // Default to the first plan (typically "Pay as Go")
   const defaultPlanId = planOptions.value.length > 0 ? String(planOptions.value[0].value) : ''
   userForm.value = { username: '', password: '', display_name: '', plan_id: defaultPlanId, data_gb: '', speed_mbps: '', days: '', template_id: '', avatar: '' }
+  newUserProfileData.value = {
+    username: '',
+    status: 'active',
+    data_limit: '',
+    expiry_date: '',
+    note: '',
+    allowed_protocols: [],
+    protocol_options: {},
+    billing_enabled: false,
+  }
   showUserSlideOver.value = true
 }
 
@@ -533,11 +556,16 @@ async function handleCreateUser() {
     password: userForm.value.password,
     display_name: userForm.value.display_name,
     plan_id: userForm.value.plan_id ? Number(userForm.value.plan_id) : 0,
-    data_gb: userForm.value.data_gb ? Number(userForm.value.data_gb) : 0,
+    data_gb: newUserProfileData.value.data_limit ? Number(newUserProfileData.value.data_limit) : 0,
     speed_mbps: userForm.value.speed_mbps ? Number(userForm.value.speed_mbps) : 0,
     days: userForm.value.days ? Number(userForm.value.days) : 0,
     template_id: userForm.value.template_id ? Number(userForm.value.template_id) : undefined,
     avatar: userForm.value.avatar || undefined,
+    status: newUserProfileData.value.status || 'active',
+    expiry_date: newUserProfileData.value.expiry_date || undefined,
+    note: newUserProfileData.value.note || undefined,
+    allowed_protocols: newUserProfileData.value.allowed_protocols || [],
+    protocol_options: newUserProfileData.value.protocol_options || {},
   })
   saving.value = false
   if (success) {
@@ -1271,49 +1299,30 @@ onMounted(async () => {
     <!-- New User Slide-Over -->
     <KSlideOver :open="showUserSlideOver" :title="t('customers.new_user')" @close="showUserSlideOver = false">
       <form class="slide-form" autocomplete="off" @submit.prevent="handleCreateUser">
-        <!-- Row: Username + Plan side by side -->
+        <!-- Row: Username + Password side by side -->
         <div class="slide-form__row">
           <KFormField name="user-username" :label="t('user.username')" required>
             <template #default="{ fieldId }">
               <KInput :id="fieldId" v-model="userForm.username" autocomplete="off" placeholder="username" />
             </template>
           </KFormField>
-          <KFormField name="user-plan" :label="t('user.plan')">
-            <template #default="{ fieldId }">
-              <KSelect :id="fieldId" v-model="userForm.plan_id" :options="planOptions" :placeholder="t('resellers.select_plan')" />
-            </template>
-          </KFormField>
-        </div>
-        <!-- Row: Password + Display Name side by side -->
-        <div class="slide-form__row">
           <KFormField name="user-password" :label="t('user.password')" required>
             <template #default="{ fieldId }">
               <KInput :id="fieldId" v-model="userForm.password" type="password" autocomplete="new-password" placeholder="••••••" />
             </template>
           </KFormField>
-          <KFormField name="user-display-name" :label="t('user.display_name')">
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="userForm.display_name" :placeholder="t('customer.placeholder_display_name')" />
-            </template>
-          </KFormField>
         </div>
-        <div class="form-row-3">
-          <KFormField name="user-data" :label="t('plans.data_gb')">
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="userForm.data_gb" type="number" :placeholder="t('customer.placeholder_plan_default')" />
-            </template>
-          </KFormField>
-          <KFormField name="user-speed" :label="t('plans.speed')">
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="userForm.speed_mbps" type="number" :placeholder="t('customer.placeholder_plan_default')" />
-            </template>
-          </KFormField>
-          <KFormField name="user-days" :label="t('plans.duration_days')">
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="userForm.days" type="number" :placeholder="t('customer.placeholder_plan_default')" />
-            </template>
-          </KFormField>
-        </div>
+        <!-- Plan select -->
+        <KFormField name="user-plan" :label="t('user.plan')">
+          <template #default="{ fieldId }">
+            <KSelect :id="fieldId" v-model="userForm.plan_id" :options="planOptions" :placeholder="t('resellers.select_plan')" />
+          </template>
+        </KFormField>
+        <!-- ProfileFields for the rest (data limit, expiry, protocols, note, billing) -->
+        <ProfileFields
+          :model-value="newUserProfileData"
+          @update:model-value="newUserProfileData = $event"
+        />
         <KFormField v-if="!isReseller" name="user-avatar" :label="t('user.avatar')">
           <template #default>
             <div class="emoji-picker">
@@ -1537,10 +1546,10 @@ onMounted(async () => {
 .customers-view__main {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-2);
   overflow: hidden;
   min-width: 0;
-  padding: var(--space-4);
+  padding: var(--space-2) var(--space-4);
 }
 
 .customers-view__panel {
@@ -1559,7 +1568,7 @@ onMounted(async () => {
   to { transform: translateX(0); opacity: 1; }
 }
 
-.page-header { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); padding: var(--space-1) 0; }
 .page-header__actions { display: flex; gap: var(--space-2); margin-right: auto; }
 
 /* Advanced Filters Panel */
@@ -1649,10 +1658,11 @@ onMounted(async () => {
   display: flex;
   gap: 0;
   border-bottom: 2px solid var(--color-border);
+  margin-bottom: 0;
 }
 
 .main-tab {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   border: none;
   background: none;
   color: var(--color-muted);
