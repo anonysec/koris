@@ -29,7 +29,7 @@ CREATE INDEX idx_domain_ip_history_domain
 -- Protocol-to-domain bindings with failover priority
 CREATE TABLE IF NOT EXISTS vpn_protocol_bindings (
     id         BIGSERIAL PRIMARY KEY,
-    node_id    BIGINT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    node_id    BIGINT NOT NULL REFERENCES knode_connections(id) ON DELETE CASCADE,
     protocol   VARCHAR(20) NOT NULL
         CHECK (protocol IN ('openvpn-udp', 'openvpn-tcp', 'l2tp', 'ikev2', 'wireguard', 'ssh', 'mtproto')),
     domain_id  BIGINT NOT NULL REFERENCES vpn_domains(id) ON DELETE RESTRICT,
@@ -51,7 +51,7 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS mtproto_conn_limit INT NOT NULL D
 -- IKEv2 certificate lifecycle
 CREATE TABLE IF NOT EXISTS vpn_certificates (
     id          BIGSERIAL PRIMARY KEY,
-    node_id     BIGINT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    node_id     BIGINT NOT NULL REFERENCES knode_connections(id) ON DELETE CASCADE,
     domain_id   BIGINT REFERENCES vpn_domains(id) ON DELETE SET NULL,
     cert_type   VARCHAR(20) NOT NULL DEFAULT 'ikev2',
     status      VARCHAR(20) NOT NULL DEFAULT 'pending'
