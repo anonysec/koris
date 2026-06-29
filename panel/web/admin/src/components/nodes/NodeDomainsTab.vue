@@ -192,7 +192,7 @@ function isValidDomain(name: string): boolean {
     <div class="add-domain-form">
       <KInput
         v-model="newDomain"
-        placeholder="Enter domain name (e.g. tr.koris.space)"
+        placeholder="Enter domain name (e.g. vpn.example.com)"
         @keyup.enter="addDomain"
       />
       <KButton variant="primary" :loading="adding" @click="addDomain">
