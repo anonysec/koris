@@ -347,10 +347,6 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/domains", s.requireFullAdmin(s.adminDomains))
 	mux.HandleFunc("/api/admin/domains/", s.requireFullAdmin(s.adminDomainByID))
 
-	// MTProto secret management (per-customer)
-	// Catches /api/admin/customers/{id}/mtproto-secret and /api/admin/customers/{id}/mtproto-secret/regenerate
-	mux.HandleFunc("/api/admin/customers/", s.requireFullAdmin(s.adminCustomerMTProtoSecret))
-
 	// Firewall management via gRPC (knode)
 	mux.HandleFunc("/api/admin/nodes/firewall", s.requireFullAdmin(s.handleNodeFirewall))
 
