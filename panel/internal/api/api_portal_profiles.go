@@ -225,8 +225,15 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	if nodeName == "" {
 		nodeName = host
 	}
-	caBlock := inlineOpenVPNBlockFromContent("ca", s.openVPNCACert(nodeID))
-	tlsCryptBlock := inlineOpenVPNBlockFromContent("tls-crypt", s.openVPNTLSCryptKey(nodeID))
+
+	// Resolve actual nodeID if 0 was passed (picks the first available node)
+	resolvedNodeID := nodeID
+	if resolvedNodeID <= 0 {
+		_ = s.DB.QueryRow(`SELECT id FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&resolvedNodeID)
+	}
+
+	caBlock := inlineOpenVPNBlockFromContent("ca", s.openVPNCACert(resolvedNodeID))
+	tlsCryptBlock := inlineOpenVPNBlockFromContent("tls-crypt", s.openVPNTLSCryptKey(resolvedNodeID))
 
 	authLine := "auth-user-pass\n"
 	authComment := "# Login with your VPN username/password when OpenVPN asks for credentials."
@@ -239,9 +246,9 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	remoteLines := fmt.Sprintf("remote %s %d %s", host, port, proto)
 
 	// Add backup domains from this node's backup_domains field (comma-separated domains)
-	if nodeID > 0 {
+	if resolvedNodeID > 0 {
 		var backupDomains *string
-		_ = s.DB.QueryRow(`SELECT backup_domains FROM knode_connections WHERE id=$1`, nodeID).Scan(&backupDomains)
+		_ = s.DB.QueryRow(`SELECT backup_domains FROM knode_connections WHERE id=$1`, resolvedNodeID).Scan(&backupDomains)
 		if backupDomains != nil && strings.TrimSpace(*backupDomains) != "" {
 			for _, d := range strings.Split(*backupDomains, ",") {
 				d = strings.TrimSpace(d)
@@ -258,7 +265,7 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 		FROM knode_connections n
 		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
 		WHERE n.enabled = TRUE AND n.id <> $1
-		ORDER BY n.id`, nodeID)
+		ORDER BY n.id`, resolvedNodeID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
