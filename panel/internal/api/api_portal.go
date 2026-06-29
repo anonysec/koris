@@ -147,12 +147,20 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 	}
 
 	if nodeID > 0 {
-		// Get node name and address from knode_connections
+		// Get node name, address, and domain from knode_connections
 		var address string
-		_ = s.DB.QueryRow(`SELECT name, address FROM knode_connections WHERE id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&nodeName, &address)
+		var nodeDomain *string
+		_ = s.DB.QueryRow(`SELECT name, address, domain FROM knode_connections WHERE id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&nodeName, &address, &nodeDomain)
 
 		if host == "" {
-			// Priority 1: Check for active failover domain pointing to this node
+			// Priority 1: Node's domain (allows DNS rotation when IPs get blocked)
+			if nodeDomain != nil && strings.TrimSpace(*nodeDomain) != "" {
+				host = strings.TrimSpace(*nodeDomain)
+			}
+		}
+
+		if host == "" {
+			// Priority 2: Check for active failover domain pointing to this node
 			var failoverDomain string
 			if err := s.DB.QueryRow(
 				`SELECT domain FROM failover_domains WHERE current_node_id = $1 AND is_active = TRUE LIMIT 1`, nodeID,
@@ -162,15 +170,20 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 		}
 
 		if host == "" {
-			// Priority 2: Node's address (IP)
+			// Priority 3: Node's raw IP address
 			host = strings.TrimSpace(address)
 		}
 	}
 	if host == "" {
 		// Fallback: pick any online enabled node from knode_connections
 		var address string
-		_ = s.DB.QueryRow(`SELECT name, address FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &address)
-		host = strings.TrimSpace(address)
+		var nodeDomain *string
+		_ = s.DB.QueryRow(`SELECT name, address, domain FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &address, &nodeDomain)
+		if nodeDomain != nil && strings.TrimSpace(*nodeDomain) != "" {
+			host = strings.TrimSpace(*nodeDomain)
+		} else {
+			host = strings.TrimSpace(address)
+		}
 	}
 	if host == "" {
 		host = r.Host

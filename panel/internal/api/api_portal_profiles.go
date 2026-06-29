@@ -235,12 +235,26 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 		authComment = "# Passwordless mode — no credentials required."
 	}
 
-	// Build remote lines: primary + backup nodes for failover
+	// Build remote lines: primary endpoint first
 	remoteLines := fmt.Sprintf("remote %s %d %s", host, port, proto)
 
-	// Add backup remotes: all other active nodes with OpenVPN enabled
+	// Add backup domains from this node's backup_domains field (comma-separated domains)
+	if nodeID > 0 {
+		var backupDomains *string
+		_ = s.DB.QueryRow(`SELECT backup_domains FROM knode_connections WHERE id=$1`, nodeID).Scan(&backupDomains)
+		if backupDomains != nil && strings.TrimSpace(*backupDomains) != "" {
+			for _, d := range strings.Split(*backupDomains, ",") {
+				d = strings.TrimSpace(d)
+				if d != "" && d != host {
+					remoteLines += fmt.Sprintf("\nremote %s %d %s", d, port, proto)
+				}
+			}
+		}
+	}
+
+	// Add backup remotes from other nodes (prefer domain over IP)
 	rows, err := s.DB.Query(`
-		SELECT n.address
+		SELECT COALESCE(NULLIF(TRIM(n.domain),''), n.address) AS endpoint
 		FROM knode_connections n
 		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
 		WHERE n.enabled = TRUE AND n.id <> $1
@@ -248,18 +262,15 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var ip string
-			if rows.Scan(&ip) == nil {
-				backupHost := strings.TrimSpace(ip)
-				if backupHost != "" && backupHost != host {
-					remoteLines += fmt.Sprintf("\nremote %s %d %s", backupHost, port, proto)
+			var endpoint string
+			if rows.Scan(&endpoint) == nil {
+				endpoint = strings.TrimSpace(endpoint)
+				if endpoint != "" && endpoint != host {
+					remoteLines += fmt.Sprintf("\nremote %s %d %s", endpoint, port, proto)
 				}
 			}
 		}
 	}
-
-	// Add remote-random only if explicitly configured (disabled by default)
-	// Load balancing is handled by smart proxy, not client-side randomization
 
 	return fmt.Sprintf(`# KorisPanel generated OpenVPN profile
 # User: %s
