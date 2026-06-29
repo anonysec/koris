@@ -104,6 +104,7 @@ export const useTicketsStore = defineStore('tickets', () => {
   const list = ref<Ticket[]>([])
   const detail = ref<TicketDetail | null>(null)
   const cannedResponses = ref<CannedResponse[]>([])
+  const adminsList = ref<string[]>([])
   const loading = ref(false)
   const total = ref(0)
   const filters = ref<TicketFilters>({})
@@ -178,10 +179,15 @@ export const useTicketsStore = defineStore('tickets', () => {
     loading.value = true
     try {
       const res = await get<any>(`/api/admin/tickets/${id}`)
-      // API returns { ok, ticket, messages } — merge messages onto ticket object
+      // API returns { ok, ticket, messages, customer_username, admins }
       detail.value = {
         ...res.ticket,
         messages: res.messages || res.ticket?.messages || [],
+        username: res.customer_username || res.ticket?.username || '',
+      }
+      // Store admins list for assignment dropdown
+      if (res.admins) {
+        adminsList.value = res.admins
       }
     } catch {
       // Preserve existing detail on error
@@ -280,6 +286,7 @@ export const useTicketsStore = defineStore('tickets', () => {
     list,
     detail,
     cannedResponses,
+    adminsList,
     loading,
     total,
     filters,
