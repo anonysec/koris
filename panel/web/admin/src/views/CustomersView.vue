@@ -101,10 +101,10 @@ function onDetailPanelEdit() {
 const { expandedIds, toggle: toggleExpandRow, isExpanded: isRowExpanded, collapseAll } = useExpandableRows()
 
 /** Whether we're on mobile (expandable rows active) */
-const isMobileView = ref(window.innerWidth <= 1024)
+const isMobileView = ref(window.innerWidth <= 768)
 
 function checkMobileView() {
-  isMobileView.value = window.innerWidth <= 1024
+  isMobileView.value = window.innerWidth <= 768
 }
 
 onMounted(() => {
@@ -1977,8 +1977,8 @@ onMounted(async () => {
   }
 }
 
-/* Panel responsive: full width overlay on ≤ 1024px (Req 2.7) */
-@media (max-width: 1024px) {
+/* Panel responsive: full width overlay on ≤ 768px (Req 2.7) */
+@media (max-width: 768px) {
   .customers-view--panel-open {
     grid-template-columns: 1fr;
   }
@@ -2171,8 +2171,8 @@ onMounted(async () => {
   transition: transform var(--transition-row-expand, 200ms ease-out), color 100ms ease-out, background 100ms ease-out;
 }
 
-/* Hide expand column on desktop (viewport > 1024px) */
-@media (min-width: 1025px) {
+/* Hide expand column on desktop (viewport > 768px) */
+@media (min-width: 769px) {
   .expand-chevron {
     display: none;
   }

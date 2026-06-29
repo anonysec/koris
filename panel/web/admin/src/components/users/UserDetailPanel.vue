@@ -54,7 +54,7 @@ const error = ref<string | null>(null)
 const isMobile = ref(false)
 
 function checkMobile() {
-  isMobile.value = window.innerWidth <= 1024
+  isMobile.value = window.innerWidth <= 768
 }
 
 onMounted(() => {
@@ -295,23 +295,33 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+// ─── Click-outside to close on desktop ──────────────────────────────────────
+function handleClickOutside(event: MouseEvent) {
+  if (!props.open || isMobile.value) return
+  const panel = document.querySelector('.user-detail-panel')
+  if (panel && !panel.contains(event.target as Node)) {
+    handleClose()
+  }
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('mousedown', handleClickOutside)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('mousedown', handleClickOutside)
 })
 </script>
 
 <template>
   <Teleport to="body">
-    <!-- Overlay: mobile (opaque) + desktop (transparent click-catcher) -->
+    <!-- Overlay: mobile only (blocks interaction behind full-screen panel) -->
     <Transition name="panel-overlay">
       <div
-        v-if="open"
+        v-if="open && isMobile"
         class="user-detail-panel__overlay"
-        :class="{ 'user-detail-panel__overlay--desktop': !isMobile }"
         aria-hidden="true"
         @click="handleClose"
       />
@@ -475,12 +485,6 @@ onUnmounted(() => {
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: calc(var(--z-modal, 200) - 1);
-}
-
-/* Desktop: transparent overlay just to catch clicks */
-.user-detail-panel__overlay--desktop {
-  background: transparent;
-  z-index: calc(var(--z-panel, 150) - 1);
 }
 
 /* ─── Close Button ────────────────────────────────────────────────────────── */

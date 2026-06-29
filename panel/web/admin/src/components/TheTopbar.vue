@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Breadcrumb } from '@koris/types/components'
 import { useI18n } from '@koris/composables/useI18n'
@@ -43,6 +43,12 @@ let hideTimeout: ReturnType<typeof setTimeout> | null = null
 // Language dropdown state
 const showLangDropdown = ref(false)
 let langHideTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Close notification dropdown on route change
+router.afterEach(() => {
+  showNotifDropdown.value = false
+  showLangDropdown.value = false
+})
 
 const langOptions = [
   { code: 'en', label: 'EN' },
@@ -88,6 +94,31 @@ function onBellClick() {
   showNotifDropdown.value = false
   router.push({ name: 'notifications' })
 }
+
+// Close dropdowns on click outside
+function handleClickOutside(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (showNotifDropdown.value) {
+    const wrapper = target.closest('.notif-bell-wrapper')
+    if (!wrapper) {
+      showNotifDropdown.value = false
+    }
+  }
+  if (showLangDropdown.value) {
+    const wrapper = target.closest('.lang-dropdown-wrapper')
+    if (!wrapper) {
+      showLangDropdown.value = false
+    }
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside, true)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside, true)
+})
 
 // Get recent notifications (last 5)
 const recentNotifications = computed(() => realtimeStore.notifications.slice(0, 5))
