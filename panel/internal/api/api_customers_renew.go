@@ -190,7 +190,7 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, bytes); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, strconv.FormatInt(bytes, 10)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -444,7 +444,7 @@ func (s *Server) applyPlanDirectly(customerID int64, username string, planID int
 	_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Max-Data',':=',$2)`, username, bytes)
+		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES($1,'Max-Data',':=',$2)`, username, strconv.FormatInt(bytes, 10))
 	}
 	_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Mikrotik-Rate-Limit'`, username)
 	if plan.SpeedMbps > 0 {

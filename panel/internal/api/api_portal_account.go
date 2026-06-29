@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -216,7 +217,7 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, username)
 	if plan.DataGB > 0 {
 		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
-		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, bytes); err != nil {
+		if _, err := tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, username, strconv.FormatInt(bytes, 10)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
