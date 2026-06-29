@@ -39,8 +39,9 @@ interface VpnProfile {
   port: number
   protocol: string
   node: string
-  download: string
+  download?: string
   description?: string
+  info_only?: boolean
 }
 
 interface ProfilesResponse {
@@ -91,6 +92,7 @@ const telegramProxies = ref<TelegramProxy[]>([])
 const teleProxiesLoading = ref(false)
 const copiedProxyId = ref<number | null>(null)
 const copiedProfileUrl = ref<string | null>(null)
+const copiedInfoProfile = ref<string | null>(null)
 
 async function fetchTelegramProxies() {
   teleProxiesLoading.value = true
@@ -121,6 +123,17 @@ function copyProfileUrl(downloadPath: string) {
   setTimeout(() => {
     if (copiedProfileUrl.value === downloadPath) {
       copiedProfileUrl.value = null
+    }
+  }, 2000)
+}
+
+function copyProfileText(profile: VpnProfile) {
+  const text = profile.description || `${profile.remote}:${profile.port}`
+  copy(text)
+  copiedInfoProfile.value = profile.type
+  setTimeout(() => {
+    if (copiedInfoProfile.value === profile.type) {
+      copiedInfoProfile.value = null
     }
   }, 2000)
 }
@@ -408,17 +421,30 @@ async function handleRate() {
               </div>
             </div>
             <div class="sp__profile-actions">
-              <a :href="profile.download" download class="sp__profile-dl">
-                <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
-              </a>
-              <KButton
-                v-if="profile.type.startsWith('openvpn')"
-                variant="ghost"
-                size="sm"
-                @click="copyProfileUrl(profile.download)"
-              >
-                {{ copiedProfileUrl === profile.download ? '✓' : '📋' }} URL
-              </KButton>
+              <!-- Info-only profiles (SSH, MTProxy): show copy button for connection details -->
+              <template v-if="profile.info_only">
+                <KButton
+                  variant="primary"
+                  size="sm"
+                  @click="copyProfileText(profile)"
+                >
+                  {{ copiedInfoProfile === profile.type ? '✓ Copied' : '📋 Copy' }}
+                </KButton>
+              </template>
+              <!-- Downloadable profiles: show download link -->
+              <template v-else>
+                <a :href="profile.download" download class="sp__profile-dl">
+                  <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
+                </a>
+                <KButton
+                  v-if="profile.type.startsWith('openvpn')"
+                  variant="ghost"
+                  size="sm"
+                  @click="copyProfileUrl(profile.download)"
+                >
+                  {{ copiedProfileUrl === profile.download ? '✓' : '📋' }} URL
+                </KButton>
+              </template>
             </div>
           </div>
           <!-- WireGuard peers inline with other profiles -->
