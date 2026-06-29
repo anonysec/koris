@@ -153,14 +153,26 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 		_ = s.DB.QueryRow(`SELECT name, address, domain FROM knode_connections WHERE id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&nodeName, &address, &nodeDomain)
 
 		if host == "" {
-			// Priority 1: Node's domain (allows DNS rotation when IPs get blocked)
+			// Priority 1: Active domain from vpn_protocol_bindings (position-based failover)
+			// Uses the protocol determined by the caller context (default: openvpn-udp)
+			bindingProtocol := "openvpn-udp"
+			if proto == "tcp" {
+				bindingProtocol = "openvpn-tcp"
+			}
+			if primary := s.protocolPrimaryDomain(nodeID, bindingProtocol); primary != "" {
+				host = primary
+			}
+		}
+
+		if host == "" {
+			// Priority 2: Node's domain (allows DNS rotation when IPs get blocked)
 			if nodeDomain != nil && strings.TrimSpace(*nodeDomain) != "" {
 				host = strings.TrimSpace(*nodeDomain)
 			}
 		}
 
 		if host == "" {
-			// Priority 2: Check for active failover domain pointing to this node
+			// Priority 3: Check for active failover domain pointing to this node
 			var failoverDomain string
 			if err := s.DB.QueryRow(
 				`SELECT domain FROM failover_domains WHERE current_node_id = $1 AND is_active = TRUE LIMIT 1`, nodeID,
@@ -170,7 +182,7 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 		}
 
 		if host == "" {
-			// Priority 3: Node's raw IP address
+			// Priority 4: Node's raw IP address
 			host = strings.TrimSpace(address)
 		}
 	}

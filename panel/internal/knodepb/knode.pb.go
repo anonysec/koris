@@ -1610,3 +1610,84 @@ func (x *MetricsEvent) GetGoRuntime() *GoRuntimeMetrics {
 func (x *MetricsEvent) ProtoReflect() protoreflect.Message { return nil }
 func (x *MetricsEvent) Reset()                             { *x = MetricsEvent{} }
 func (x *MetricsEvent) String() string                     { return "" }
+
+// ============================================================
+// MTProto Per-User Secrets
+// ============================================================
+
+type SyncMTProtoSecretsRequest struct {
+	Secrets []*MTProtoUserSecret `protobuf:"bytes,1,rep,name=secrets,proto3" json:"secrets,omitempty"`
+}
+
+func (x *SyncMTProtoSecretsRequest) GetSecrets() []*MTProtoUserSecret {
+	if x != nil {
+		return x.Secrets
+	}
+	return nil
+}
+func (x *SyncMTProtoSecretsRequest) ProtoReflect() protoreflect.Message { return nil }
+func (x *SyncMTProtoSecretsRequest) Reset()                             { *x = SyncMTProtoSecretsRequest{} }
+func (x *SyncMTProtoSecretsRequest) String() string                     { return "" }
+
+type MTProtoUserSecret struct {
+	Username       string `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Secret         string `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	Enabled        bool   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	MaxConnections int32  `protobuf:"varint,4,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
+}
+
+func (x *MTProtoUserSecret) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+func (x *MTProtoUserSecret) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+func (x *MTProtoUserSecret) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+func (x *MTProtoUserSecret) GetMaxConnections() int32 {
+	if x != nil {
+		return x.MaxConnections
+	}
+	return 0
+}
+func (x *MTProtoUserSecret) ProtoReflect() protoreflect.Message { return nil }
+func (x *MTProtoUserSecret) Reset()                             { *x = MTProtoUserSecret{} }
+func (x *MTProtoUserSecret) String() string                     { return x.Username }
+
+type SyncMTProtoSecretsResponse struct {
+	Success       bool   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ActiveSecrets int32  `protobuf:"varint,2,opt,name=active_secrets,json=activeSecrets,proto3" json:"active_secrets,omitempty"`
+	Message       string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+}
+
+func (x *SyncMTProtoSecretsResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+func (x *SyncMTProtoSecretsResponse) GetActiveSecrets() int32 {
+	if x != nil {
+		return x.ActiveSecrets
+	}
+	return 0
+}
+func (x *SyncMTProtoSecretsResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+func (x *SyncMTProtoSecretsResponse) ProtoReflect() protoreflect.Message { return nil }
+func (x *SyncMTProtoSecretsResponse) Reset()                             { *x = SyncMTProtoSecretsResponse{} }
+func (x *SyncMTProtoSecretsResponse) String() string                     { return x.Message }

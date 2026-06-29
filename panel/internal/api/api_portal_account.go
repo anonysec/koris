@@ -15,6 +15,14 @@ import (
 
 func (s *Server) ikev2MobileConfig(username string, r *http.Request, nodeID int64) string {
 	host, _, _, _ := s.openVPNEndpointNode(r, nodeID)
+
+	// Override with IKEv2-specific domain binding if available
+	if nodeID > 0 {
+		if primary := s.protocolPrimaryDomain(nodeID, "ikev2"); primary != "" {
+			host = primary
+		}
+	}
+
 	if host == "" {
 		host = r.Host
 	}

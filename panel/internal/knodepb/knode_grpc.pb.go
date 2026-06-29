@@ -44,6 +44,8 @@ type KnodeServiceClient interface {
 	// Certificates
 	SetCertificates(ctx context.Context, in *SetCertsRequest, opts ...grpc.CallOption) (*SetCertsResponse, error)
 	GetCertInfo(ctx context.Context, in *GetCertInfoRequest, opts ...grpc.CallOption) (*CertInfoResponse, error)
+	// MTProto per-user secret management
+	SyncMTProtoSecrets(ctx context.Context, in *SyncMTProtoSecretsRequest, opts ...grpc.CallOption) (*SyncMTProtoSecretsResponse, error)
 	// Outbound Tunnels
 	SetupTunnel(ctx context.Context, in *SetupTunnelRequest, opts ...grpc.CallOption) (*SetupTunnelResponse, error)
 	TeardownTunnel(ctx context.Context, in *TeardownTunnelRequest, opts ...grpc.CallOption) (*TeardownTunnelResponse, error)
@@ -243,6 +245,15 @@ func (c *knodeServiceClient) GetCertInfo(ctx context.Context, in *GetCertInfoReq
 	return out, nil
 }
 
+func (c *knodeServiceClient) SyncMTProtoSecrets(ctx context.Context, in *SyncMTProtoSecretsRequest, opts ...grpc.CallOption) (*SyncMTProtoSecretsResponse, error) {
+	out := new(SyncMTProtoSecretsResponse)
+	err := c.cc.Invoke(ctx, "/"+knodeServiceName+"/SyncMTProtoSecrets", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *knodeServiceClient) SetupTunnel(ctx context.Context, in *SetupTunnelRequest, opts ...grpc.CallOption) (*SetupTunnelResponse, error) {
 	out := new(SetupTunnelResponse)
 	err := c.cc.Invoke(ctx, "/"+knodeServiceName+"/SetupTunnel", in, out, opts...)
@@ -330,6 +341,7 @@ type KnodeServiceServer interface {
 	ListFirewallRules(context.Context, *ListRulesRequest) (*ListRulesResponse, error)
 	SetCertificates(context.Context, *SetCertsRequest) (*SetCertsResponse, error)
 	GetCertInfo(context.Context, *GetCertInfoRequest) (*CertInfoResponse, error)
+	SyncMTProtoSecrets(context.Context, *SyncMTProtoSecretsRequest) (*SyncMTProtoSecretsResponse, error)
 	SetupTunnel(context.Context, *SetupTunnelRequest) (*SetupTunnelResponse, error)
 	TeardownTunnel(context.Context, *TeardownTunnelRequest) (*TeardownTunnelResponse, error)
 	TunnelStatus(context.Context, *TunnelStatusRequest) (*TunnelStatusResponse, error)
@@ -399,6 +411,9 @@ func (UnimplementedKnodeServiceServer) SetCertificates(context.Context, *SetCert
 }
 func (UnimplementedKnodeServiceServer) GetCertInfo(context.Context, *GetCertInfoRequest) (*CertInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCertInfo not implemented")
+}
+func (UnimplementedKnodeServiceServer) SyncMTProtoSecrets(context.Context, *SyncMTProtoSecretsRequest) (*SyncMTProtoSecretsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncMTProtoSecrets not implemented")
 }
 func (UnimplementedKnodeServiceServer) SetupTunnel(context.Context, *SetupTunnelRequest) (*SetupTunnelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetupTunnel not implemented")
