@@ -150,6 +150,8 @@ func (s *Server) adminCustomerSubresource(w http.ResponseWriter, r *http.Request
 		s.adminCustomerCustomFields(w, r, id)
 	case "notes":
 		s.adminCustomerNotes(w, r, id)
+	case "mtproto-secret":
+		s.adminCustomerMTProtoSecret(w, r)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
