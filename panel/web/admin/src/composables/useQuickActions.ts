@@ -118,6 +118,7 @@ export function useQuickActions() {
 
     try {
       await patch<{ ok: boolean }>(`/api/customers/${userId}`, { status: newStatus })
+      toast.success(newStatus === 'active' ? 'User enabled' : 'User disabled')
       return true
     } catch {
       // Rollback on failure
@@ -147,6 +148,7 @@ export function useQuickActions() {
     // in the table, but we still track loading state per-row
     try {
       await post<{ ok: boolean }>(`/api/customers/${userId}/traffic-reset`, {})
+      toast.success('Traffic reset successfully')
       // Refresh list to show updated usage data
       await customersStore.loadCustomers()
       return true
@@ -185,6 +187,7 @@ export function useQuickActions() {
 
     try {
       await del<{ ok: boolean }>(`/api/customers/${userId}`)
+      toast.success('User deleted')
       return true
     } catch {
       // Rollback: re-insert at original position
