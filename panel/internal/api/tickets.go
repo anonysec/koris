@@ -472,11 +472,11 @@ func (s *Server) customerCreateTicket(w http.ResponseWriter, r *http.Request) {
 
 	// Notify admin via WebSocket
 	s.broadcastNotification(map[string]any{
-		"id":        fmt.Sprintf("support-ticket-%d", ticket.ID),
-		"type":      "new_support_ticket",
-		"message":   fmt.Sprintf("New support ticket from %s: %s", username, in.Subject),
-		"timestamp": ticket.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		"read":      false,
+		"id":                fmt.Sprintf("support-ticket-%d", ticket.ID),
+		"notification_type": "new_support_ticket",
+		"message":           fmt.Sprintf("New support ticket from %s: %s", username, in.Subject),
+		"timestamp":         ticket.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"read":              false,
 	})
 
 	// Telegram notification — urgent gets special notification

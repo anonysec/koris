@@ -320,6 +320,16 @@ async function handleReply() {
   }
 }
 
+async function handleCloseTicket() {
+  if (!ticketsStore.detail) return
+  const success = await ticketsStore.closeTicket(ticketsStore.detail.id)
+  if (success) {
+    toast.success('Ticket closed')
+  } else {
+    toast.error('Failed to close ticket')
+  }
+}
+
 async function handleRate() {
   if (!ticketsStore.detail || ratingValue.value < 1 || ratingValue.value > 5) return
   const success = await ticketsStore.rateTicket(ticketsStore.detail.id, ratingValue.value)
@@ -621,9 +631,14 @@ async function handleRate() {
             <KFormField :label="t('portal.support.yourReply')">
               <KTextarea v-model="replyMessage" :placeholder="t('portal.support.replyPlaceholder')" :rows="3" />
             </KFormField>
-            <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!replyMessage.trim()">
-              {{ t('portal.support.send') }}
-            </KButton>
+            <div class="sp__reply-actions">
+              <KButton type="submit" variant="primary" size="sm" :loading="ticketsStore.loading" :disabled="!replyMessage.trim()">
+                {{ t('portal.support.send') }}
+              </KButton>
+              <KButton variant="ghost" size="sm" @click="handleCloseTicket">
+                Close Ticket
+              </KButton>
+            </div>
           </form>
 
           <!-- Satisfaction Survey (for resolved/closed tickets without rating) -->
@@ -677,8 +692,8 @@ async function handleRate() {
             <div v-for="ticket in ticketsStore.list" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
               <div class="sp__ticket-row-info">
                 <span class="sp__ticket-row-subject">{{ ticket.subject }}</span>
-                <KStatusPill :status="ticket.status === 'open' || ticket.status === 'in_progress' ? 'active' : 'disabled'" size="sm">
-                  {{ ticket.status }}
+                <KStatusPill :status="ticket.status === 'open' || ticket.status === 'in_progress' ? 'active' : ticket.status === 'waiting' ? 'expired' : 'disabled'" size="sm">
+                  {{ ticket.status === 'waiting' ? 'answered' : ticket.status }}
                 </KStatusPill>
                 <span v-if="hasUnreadReply(ticket)" class="sp__ticket-unread">●</span>
               </div>
@@ -1243,6 +1258,11 @@ async function handleRate() {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
+}
+.sp__reply-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
 }
 .sp__ticket-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); margin-top: var(--space-3); }
 .sp__ticket-tab { padding: 6px 14px; font-size: var(--text-xs); font-weight: 500; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: transparent; color: var(--color-muted); cursor: pointer; min-height: 36px; }
