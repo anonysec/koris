@@ -302,11 +302,17 @@ func (s *Server) customerTickets(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// customerTicketByID handles POST /api/customer/tickets/:id/reply, POST /api/customer/tickets/:id/rate, and POST /api/customer/tickets/:id/attach.
+// customerTicketByID handles GET /api/customer/tickets/:id (detail) and POST /api/customer/tickets/:id/reply, POST /api/customer/tickets/:id/rate, POST /api/customer/tickets/:id/attach.
 func (s *Server) customerTicketByID(w http.ResponseWriter, r *http.Request) {
 	id, action, ok := pathID(r.URL.Path, "/api/customer/tickets/")
 	if !ok {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+
+	// GET /api/customer/tickets/:id — return ticket detail with messages
+	if r.Method == http.MethodGet && action == "" {
+		s.customerGetTicketDetail(w, r, id)
 		return
 	}
 
@@ -322,9 +328,58 @@ func (s *Server) customerTicketByID(w http.ResponseWriter, r *http.Request) {
 		s.customerRateTicket(w, r, id)
 	case "attach":
 		s.customerAttachFile(w, r, id)
+	case "close":
+		// Close the ticket
+		username, _ := s.currentCustomer(r)
+		var customerID int64
+		_ = s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+		ticket, err := s.Support.Get(r.Context(), id)
+		if err != nil || ticket.CustomerID != customerID {
+			writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "ticket_not_found"})
+			return
+		}
+		_, _ = s.DB.ExecContext(r.Context(), `UPDATE tickets SET status = 'closed', closed_at = NOW(), updated_at = NOW() WHERE id = $1`, id)
+		writeJSON(w, map[string]any{"ok": true})
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
+}
+
+// customerGetTicketDetail returns a single ticket with its messages for the authenticated customer.
+func (s *Server) customerGetTicketDetail(w http.ResponseWriter, r *http.Request, ticketID int64) {
+	if s.Support == nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "service_unavailable"})
+		return
+	}
+
+	username, _ := s.currentCustomer(r)
+
+	// Get the ticket
+	ticket, err := s.Support.Get(r.Context(), ticketID)
+	if err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "ticket_not_found"})
+		return
+	}
+
+	// Verify the ticket belongs to this customer
+	var customerID int64
+	_ = s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	if ticket.CustomerID != customerID {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "ticket_not_found"})
+		return
+	}
+
+	// Get messages
+	messages, err := s.Support.GetMessages(r.Context(), ticketID)
+	if err != nil {
+		messages = nil
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":       true,
+		"ticket":   ticket,
+		"messages": messages,
+	})
 }
 
 // customerListTickets lists tickets belonging to the current customer.
