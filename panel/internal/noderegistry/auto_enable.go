@@ -39,7 +39,7 @@ type coreDefault struct {
 // Requirement 1.4: OpenVPN 1194/UDP, WireGuard 51820/UDP, L2TP 1701/UDP, IKEv2 500/UDP, SSH 2222/TCP.
 func defaultCores(domain string) []coreDefault {
 	return []coreDefault{
-		{"openvpn", 1194, json.RawMessage(`{"auth_mode":"userpass","cipher":"AES-256-GCM","protocol":"udp"}`)},
+		{"openvpn", 1194, json.RawMessage(`{"auth_mode":"hybrid","cipher":"AES-256-GCM","protocol":"udp"}`)},
 		{"wireguard", 51820, json.RawMessage(`{"subnet":"10.8.0.0/24","dns":"8.8.8.8,1.1.1.1"}`)},
 		{"l2tp", 1701, json.RawMessage(`{"auth_type":"psk","ip_pool":"10.9.0.0/24"}`)},
 		{"ikev2", 500, buildIKEv2Extra(domain)},

@@ -119,9 +119,10 @@ const protocolFields: Record<string, FieldDef[]> = {
     { key: 'transport', label: 'services.transport', type: 'select', default: 'udp', options: [
       { label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' },
     ]},
-    { key: 'auth_mode', label: 'Auth Mode', type: 'select', default: 'userpass', options: [
-      { label: 'Username/Password', value: 'userpass' },
-      { label: 'Certificate (passwordless)', value: 'certificate' },
+    { key: 'auth_mode', label: 'Auth Mode', type: 'select', default: 'hybrid', options: [
+      { label: 'Hybrid (cert + password per user)', value: 'hybrid' },
+      { label: 'Username/Password only', value: 'userpass' },
+      { label: 'Certificate only', value: 'certificate' },
     ]},
     { key: 'cipher', label: 'services.cipher', type: 'select', default: 'AES-256-GCM', options: [
       { label: 'AES-256-GCM', value: 'AES-256-GCM' },
@@ -133,13 +134,15 @@ const protocolFields: Record<string, FieldDef[]> = {
       { label: 'tls-auth (compatible)', value: 'tls-auth' },
       { label: 'None (no protection)', value: 'none' },
     ]},
-    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '',
+      tooltip: 'Alternate domain when primary IP is blocked (optional)' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'mtu', label: 'services.mtu', type: 'number', default: 1500 },
   ],
   wireguard: [
     { key: 'port', label: 'services.port', type: 'number', default: 51820 },
-    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '',
+      tooltip: 'Alternate domain when primary IP is blocked (optional)' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '1.1.1.1' },
     { key: 'gaming_optimize', label: 'services.gaming_optimize', type: 'toggle', default: false,
       tooltip: 'services.gaming_desc' },
@@ -147,7 +150,8 @@ const protocolFields: Record<string, FieldDef[]> = {
   l2tp: [
     { key: 'port', label: 'services.port', type: 'number', default: 1701 },
     { key: 'psk', label: 'services.psk', type: 'text', default: '' },
-    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '',
+      tooltip: 'Alternate domain when primary IP is blocked (optional)' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'simple_mode', label: 'services.simple_mode', type: 'toggle', default: true },
     { key: 'auth_method', label: 'nodes.auth_method', type: 'select', default: 'MS-CHAPv2',
@@ -164,7 +168,8 @@ const protocolFields: Record<string, FieldDef[]> = {
   ikev2: [
     { key: 'port', label: 'services.port', type: 'number', default: 500 },
     { key: 'psk', label: 'services.psk', type: 'text', default: '' },
-    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '',
+      tooltip: 'Alternate domain when primary IP is blocked (optional)' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'domain', label: 'services.domain', type: 'text', default: '' },
     { key: 'cert_source', label: 'services.tls_mode', type: 'select', default: 'letsencrypt', options: [
