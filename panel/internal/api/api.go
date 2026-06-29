@@ -256,6 +256,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/node/install.sh", s.nodeInstallScript)
 	mux.HandleFunc("/api/nodes/", s.requireFullAdmin(s.nodeByID))
 	mux.HandleFunc("/api/vpn/settings", s.requireFullAdmin(s.vpnSettings))
+	mux.HandleFunc("/api/vpn/certificates", s.requireFullAdmin(s.vpnCertificates))
 	mux.HandleFunc("/api/realtime", s.requireAdmin(s.realtimeWS))
 	mux.HandleFunc("/api/portal/me", s.requireCustomer(s.portalMe))
 	mux.HandleFunc("/api/portal/impersonate-login", s.portalImpersonateLogin)

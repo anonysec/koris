@@ -132,8 +132,8 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 	if nodeName == "" {
 		nodeName = host
 	}
-	caBlock := inlineOpenVPNBlock("ca", getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt"))
-	tlsCryptBlock := inlineOpenVPNBlock("tls-crypt", getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key"))
+	caBlock := inlineOpenVPNBlockFromContent("ca", s.openVPNCACert(nodeID))
+	tlsCryptBlock := inlineOpenVPNBlockFromContent("tls-crypt", s.openVPNTLSCryptKey(nodeID))
 
 	// Get TCP port from node config or default to 8443
 	tcpPort := 8443
@@ -225,8 +225,8 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	if nodeName == "" {
 		nodeName = host
 	}
-	caBlock := inlineOpenVPNBlock("ca", getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt"))
-	tlsCryptBlock := inlineOpenVPNBlock("tls-crypt", getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key"))
+	caBlock := inlineOpenVPNBlockFromContent("ca", s.openVPNCACert(nodeID))
+	tlsCryptBlock := inlineOpenVPNBlockFromContent("tls-crypt", s.openVPNTLSCryptKey(nodeID))
 
 	authLine := "auth-user-pass\n"
 	authComment := "# Login with your VPN username/password when OpenVPN asks for credentials."
@@ -310,6 +310,76 @@ func inlineOpenVPNBlock(name, filePath string) string {
 		return ""
 	}
 	return fmt.Sprintf("\n<%s>\n%s\n</%s>\n", name, content, name)
+}
+
+// inlineOpenVPNBlockFromContent wraps raw PEM content in OpenVPN inline block tags.
+func inlineOpenVPNBlockFromContent(name, content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	return fmt.Sprintf("\n<%s>\n%s\n</%s>\n", name, content, name)
+}
+
+// openVPNCACert returns the CA certificate PEM content for the given node's OpenVPN core.
+// It checks vpn_certificates table first (DB-backed, pushed from knode), then falls back
+// to the filesystem paths for backward compatibility with co-located panel+OpenVPN setups.
+func (s *Server) openVPNCACert(nodeID int64) string {
+	// Priority 1: DB-backed cert from vpn_certificates (works with remote knode)
+	var content string
+	if nodeID > 0 {
+		_ = s.DB.QueryRow(
+			`SELECT content FROM vpn_certificates WHERE node_id=$1 AND type='ca' AND status='active' ORDER BY is_default DESC, id DESC LIMIT 1`,
+			nodeID,
+		).Scan(&content)
+	}
+	if strings.TrimSpace(content) == "" {
+		// Try default (node_id=0 or is_default=true regardless of node)
+		_ = s.DB.QueryRow(
+			`SELECT content FROM vpn_certificates WHERE type='ca' AND status='active' ORDER BY is_default DESC, id DESC LIMIT 1`,
+		).Scan(&content)
+	}
+	if strings.TrimSpace(content) != "" {
+		return strings.TrimSpace(content)
+	}
+
+	// Priority 2: Filesystem fallback (legacy: panel and OpenVPN on same host)
+	path := getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt")
+	if path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	return ""
+}
+
+// openVPNTLSCryptKey returns the tls-crypt key content for the given node's OpenVPN core.
+// Same priority logic as openVPNCACert: DB first, filesystem fallback.
+func (s *Server) openVPNTLSCryptKey(nodeID int64) string {
+	var content string
+	if nodeID > 0 {
+		_ = s.DB.QueryRow(
+			`SELECT content FROM vpn_certificates WHERE node_id=$1 AND type='tls-crypt' AND status='active' ORDER BY is_default DESC, id DESC LIMIT 1`,
+			nodeID,
+		).Scan(&content)
+	}
+	if strings.TrimSpace(content) == "" {
+		_ = s.DB.QueryRow(
+			`SELECT content FROM vpn_certificates WHERE type='tls-crypt' AND status='active' ORDER BY is_default DESC, id DESC LIMIT 1`,
+		).Scan(&content)
+	}
+	if strings.TrimSpace(content) != "" {
+		return strings.TrimSpace(content)
+	}
+
+	// Filesystem fallback
+	path := getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key")
+	if path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	return ""
 }
 
 func safeFilename(s string) string {
