@@ -42,6 +42,8 @@ interface VpnProfile {
   download?: string
   description?: string
   info_only?: boolean
+  username?: string
+  secret?: string
 }
 
 interface ProfilesResponse {
@@ -136,6 +138,10 @@ function copyProfileText(profile: VpnProfile) {
       copiedInfoProfile.value = null
     }
   }, 2000)
+}
+
+function copyValue(value: string) {
+  copy(value)
 }
 
 // ---- Support ----
@@ -421,15 +427,51 @@ async function handleRate() {
               </div>
             </div>
             <div class="sp__profile-actions">
-              <!-- Info-only profiles (SSH, MTProxy): show copy button for connection details -->
+              <!-- Info-only profiles (SSH, MTProxy): show copyable fields -->
               <template v-if="profile.info_only">
-                <KButton
-                  variant="primary"
-                  size="sm"
-                  @click="copyProfileText(profile)"
-                >
-                  {{ copiedInfoProfile === profile.type ? '✓ Copied' : '📋 Copy' }}
-                </KButton>
+                <div v-if="profile.type === 'ssh'" class="sp__ssh-info">
+                  <div class="sp__ssh-fields">
+                    <span class="sp__ssh-field" @click="copyValue(profile.remote)" :title="'Click to copy'">
+                      <span class="sp__ssh-label">Host</span>
+                      <span class="sp__ssh-value">{{ profile.remote }}</span>
+                    </span>
+                    <span class="sp__ssh-field" @click="copyValue(String(profile.port))" :title="'Click to copy'">
+                      <span class="sp__ssh-label">Port</span>
+                      <span class="sp__ssh-value">{{ profile.port }}</span>
+                    </span>
+                    <span class="sp__ssh-field" @click="copyValue(profile.username || '')" :title="'Click to copy'">
+                      <span class="sp__ssh-label">Username</span>
+                      <span class="sp__ssh-value">{{ profile.username }}</span>
+                    </span>
+                  </div>
+                  <p class="sp__ssh-note">Password is your login password. Click any field to copy.</p>
+                </div>
+                <div v-else-if="profile.type === 'mtproto'" class="sp__ssh-info">
+                  <div class="sp__ssh-fields">
+                    <span class="sp__ssh-field" @click="copyValue(profile.remote)" :title="'Click to copy'">
+                      <span class="sp__ssh-label">Server</span>
+                      <span class="sp__ssh-value">{{ profile.remote }}</span>
+                    </span>
+                    <span class="sp__ssh-field" @click="copyValue(String(profile.port))" :title="'Click to copy'">
+                      <span class="sp__ssh-label">Port</span>
+                      <span class="sp__ssh-value">{{ profile.port }}</span>
+                    </span>
+                    <span v-if="profile.secret" class="sp__ssh-field" @click="copyValue(profile.secret)" :title="'Click to copy'">
+                      <span class="sp__ssh-label">Secret</span>
+                      <span class="sp__ssh-value">{{ profile.secret }}</span>
+                    </span>
+                  </div>
+                  <p class="sp__ssh-note">Use in Telegram Settings → Data and Storage → Proxy. Click any field to copy.</p>
+                </div>
+                <div v-else class="sp__profile-actions">
+                  <KButton
+                    variant="primary"
+                    size="sm"
+                    @click="copyProfileText(profile)"
+                  >
+                    {{ copiedInfoProfile === profile.type ? '✓ Copied' : '📋 Copy' }}
+                  </KButton>
+                </div>
               </template>
               <!-- Downloadable profiles: show download link -->
               <template v-else>
@@ -894,6 +936,51 @@ async function handleRate() {
   gap: var(--space-2);
   flex-shrink: 0;
   align-items: center;
+}
+
+/* SSH Info Fields */
+.sp__ssh-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.sp__ssh-fields {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sp__ssh-field {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: all;
+}
+.sp__ssh-field:hover {
+  border-color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.05);
+}
+.sp__ssh-field:active {
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.1);
+}
+.sp__ssh-label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.sp__ssh-value {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+}
+.sp__ssh-note {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  margin: 0;
 }
 
 /* Cisco IPSec Instructions */

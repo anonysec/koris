@@ -338,7 +338,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// SSH Tunnel — display as connection info text, not a file download
+	// SSH Tunnel — display as separate copyable fields (host, port, username)
 	if enabledProtocols["ssh"] {
 		// Get SSH port from node config if available
 		sshPort := 22
@@ -348,16 +348,16 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			_ = s.DB.QueryRow(`SELECT COALESCE(port, 22) FROM node_vpn_configs WHERE protocol='ssh' AND enabled=TRUE LIMIT 1`).Scan(&sshPort)
 		}
 		profiles = append(profiles, map[string]any{
-			"type":        "ssh",
-			"name":        "SSH Tunnel — " + nodeName,
-			"available":   true,
-			"remote":      host,
-			"port":        sshPort,
-			"protocol":    "ssh",
-			"node":        nodeName,
-			"description": fmt.Sprintf("Host: %s · Port: %d · Username: %s", host, sshPort, username),
-			"auth_mode":   authMode,
-			"info_only":   true,
+			"type":      "ssh",
+			"name":      "SSH Tunnel — " + nodeName,
+			"available": true,
+			"remote":    host,
+			"port":      sshPort,
+			"protocol":  "ssh",
+			"node":      nodeName,
+			"username":  username,
+			"auth_mode": authMode,
+			"info_only": true,
 		})
 	}
 
@@ -380,24 +380,31 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 
 	// MTProto Proxy — display as connection info text
 	if enabledProtocols["mtproto"] {
-		// Get MTProto port and secret from node config
+		// Get MTProto port and secret from node config or mtproto_proxies table
 		mtPort := 443
 		var mtSecret string
 		if nodeID > 0 {
 			_ = s.DB.QueryRow(`SELECT COALESCE(port, 443) FROM node_vpn_configs WHERE node_id=$1 AND protocol='mtproto' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&mtPort)
 			_ = s.DB.QueryRow(`SELECT COALESCE(extra_json->>'secret', '') FROM node_vpn_configs WHERE node_id=$1 AND protocol='mtproto' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&mtSecret)
+		} else {
+			_ = s.DB.QueryRow(`SELECT COALESCE(port, 443) FROM node_vpn_configs WHERE protocol='mtproto' AND enabled=TRUE LIMIT 1`).Scan(&mtPort)
+			_ = s.DB.QueryRow(`SELECT COALESCE(extra_json->>'secret', '') FROM node_vpn_configs WHERE protocol='mtproto' AND enabled=TRUE LIMIT 1`).Scan(&mtSecret)
+		}
+		// Fallback: check mtproto_proxies table for the secret
+		if mtSecret == "" {
+			_ = s.DB.QueryRow(`SELECT COALESCE(secret, '') FROM mtproto_proxies WHERE node_id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&mtSecret)
 		}
 		profiles = append(profiles, map[string]any{
-			"type":        "mtproto",
-			"name":        "MTProto Proxy — " + nodeName,
-			"available":   true,
-			"remote":      host,
-			"port":        mtPort,
-			"protocol":    "mtproto",
-			"node":        nodeName,
-			"description": fmt.Sprintf("Server: %s · Port: %d · Secret: %s", host, mtPort, mtSecret),
-			"auth_mode":   authMode,
-			"info_only":   true,
+			"type":      "mtproto",
+			"name":      "MTProto Proxy — " + nodeName,
+			"available": true,
+			"remote":    host,
+			"port":      mtPort,
+			"protocol":  "mtproto",
+			"node":      nodeName,
+			"secret":    mtSecret,
+			"auth_mode": authMode,
+			"info_only": true,
 		})
 	}
 
