@@ -14,6 +14,7 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 import NodeMetricsPanel from '@/components/nodes/NodeMetricsPanel.vue'
 import NodeCoresTab from '@/components/nodes/NodeCoresTab.vue'
 import NodeSessionsTab from '@/components/nodes/NodeSessionsTab.vue'
+import NodeDomainsTab from '@/components/nodes/NodeDomainsTab.vue'
 import BandwidthChart from '@/components/metrics/BandwidthChart.vue'
 
 const props = defineProps<{ id: string; tab?: string }>()
@@ -36,6 +37,7 @@ const activeTab = ref(props.tab || 'overview')
 const tabs = computed(() => {
   const list = [
     { key: 'overview', label: t('node_detail.tab_overview') },
+    { key: 'domains', label: 'Domains' },
     { key: 'cores', label: t('node_detail.tab_cores') },
     { key: 'sessions', label: t('node_detail.tab_sessions') },
   ]
@@ -194,6 +196,9 @@ onMounted(async () => {
           <NodeMetricsPanel :node-id="Number(id)" />
           <BandwidthChart :node-id="Number(id)" />
         </div>
+
+        <!-- Domains Tab -->
+        <NodeDomainsTab v-else-if="activeTab === 'domains'" :node-id="Number(id)" />
 
         <!-- Cores Tab -->
         <NodeCoresTab v-else-if="activeTab === 'cores'" :node-id="Number(id)" />

@@ -125,35 +125,16 @@ Toggle a node's status to control whether customers can connect to it. Disabled 
 
 ## Domain & Protocol Management
 
-Domains provide censorship-resilient endpoint routing for VPN protocols. Instead of hard-coding node IPs in client configs, you bind domain names to protocols — when an IP is blocked, rotate it without re-downloading configs.
+Domains are used in VPN configs instead of raw node IPs. DNS is managed externally in Cloudflare.
 
 ### Domains
 
 Manage domains from **Domains** in the sidebar:
-- **Add Domain** — enter a valid hostname (RFC 1123) and IP address; domain starts as `active`
-- **Rotate IP** — change a domain's IP address; an audit trail records who rotated and when
-- **Status** — domains can be `active`, `blocked`, or `retired`
-  - `active` — available for new bindings, included in client configs
-  - `blocked` — existing bindings preserved but no new bindings allowed; excluded from generated configs
-  - `retired` — same as blocked, indicates permanent removal
-- **Delete** — only possible when no active protocol bindings reference the domain
+- **Add Domain** — enter a valid hostname (RFC 1123); DNS should already point to the correct node IP in Cloudflare
+- **Edit** — inline rename of a domain entry
+- **Delete** — removes the domain; configs referencing it will fall back to the node's direct IP
 
-### Protocol Bindings
-
-Bind domains to specific protocols on a per-node basis:
-- Each node can have multiple domains bound to each protocol (failover order)
-- Drag-and-drop reordering sets priority (position 1 = primary, 2+ = backups)
-- Only `active` domains can be added as new bindings
-- Blocking a domain preserves existing bindings but triggers a warning
-
-### IP Rotation History
-
-Every IP rotation is logged with:
-- Previous and new IP addresses
-- Admin who performed the rotation
-- Timestamp
-
-View history from a domain's detail panel.
+The UI is a simple CRUD list. IP rotation, status management, and certificate tracking are handled at the API level (see API docs) but not exposed in the admin UI.
 
 ### MTProto Secrets
 
