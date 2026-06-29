@@ -86,6 +86,8 @@ type knodeNodeResponse struct {
 	Port            int    `json:"port"`
 	Enabled         bool   `json:"enabled"`
 	Status          string `json:"status"`
+	Domain          string `json:"domain,omitempty"`
+	BackupDomains   string `json:"backup_domains,omitempty"`
 	LastSeenAt      string `json:"last_seen_at,omitempty"`
 	CreatedAt       string `json:"created_at"`
 	UpdatedAt       string `json:"updated_at"`
@@ -416,6 +418,12 @@ func nodeRecordToResponse(rec *noderegistry.NodeRecord) knodeNodeResponse {
 		Status:    rec.Status,
 		CreatedAt: rec.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: rec.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if rec.Domain.Valid {
+		resp.Domain = rec.Domain.String
+	}
+	if rec.BackupDomains.Valid {
+		resp.BackupDomains = rec.BackupDomains.String
 	}
 	if rec.LastSeenAt.Valid {
 		resp.LastSeenAt = rec.LastSeenAt.Time.UTC().Format(time.RFC3339)

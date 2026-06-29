@@ -34,7 +34,10 @@ func (s *Server) getKnodeNodeDomain(w http.ResponseWriter, r *http.Request, id i
 		return
 	}
 
-	writeJSON(w, map[string]any{"ok": true, "domain": domain})
+	var backupDomains string
+	_ = s.DB.QueryRow(`SELECT COALESCE(backup_domains, '') FROM knode_connections WHERE id = $1`, id).Scan(&backupDomains)
+
+	writeJSON(w, map[string]any{"ok": true, "domain": domain, "backup_domains": backupDomains})
 }
 
 // setKnodeNodeDomain handles PUT /api/admin/knode/nodes/{id}/domain.
@@ -53,7 +56,8 @@ func (s *Server) setKnodeNodeDomain(w http.ResponseWriter, r *http.Request, id i
 
 	limitBody(w, r, maxJSONBody)
 	var in struct {
-		Domain string `json:"domain"`
+		Domain        string `json:"domain"`
+		BackupDomains string `json:"backup_domains"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -70,6 +74,9 @@ func (s *Server) setKnodeNodeDomain(w http.ResponseWriter, r *http.Request, id i
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "set_domain_failed"})
 		return
 	}
+
+	// Set backup domains
+	_, _ = s.DB.Exec(`UPDATE knode_connections SET backup_domains = $1 WHERE id = $2`, nullString(in.BackupDomains), id)
 
 	// DNS validation (non-blocking — only returns warnings)
 	var warnings []string
