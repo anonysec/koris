@@ -11,7 +11,7 @@ const router = createRouter({
         { path: '', name: 'portal-home', component: () => import('@/views/SinglePageView.vue') },
         { path: 'billing', name: 'portal-billing', component: () => import('@/views/BillingView.vue'), meta: { requiresBilling: true } },
         { path: 'profile', name: 'portal-profile', component: () => import('@/views/ProfileView.vue') },
-        { path: 'support', name: 'portal-support', component: () => import('@/views/SupportView.vue') },
+        { path: 'support', redirect: '/' },
         { path: 'connections', name: 'portal-connections', component: () => import('@/views/ConnectionsView.vue') },
         { path: 'configs', name: 'portal-configs', component: () => import('@/views/ConfigDownloadsView.vue') },
         { path: 'invoices', name: 'portal-invoices', component: () => import('@/views/InvoicesView.vue'), meta: { requiresBilling: true } },
