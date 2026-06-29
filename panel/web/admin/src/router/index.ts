@@ -22,6 +22,7 @@ const adminOnlyRoutes = new Set([
   'knowledge-base',
   'user-tags',
   'filter-presets',
+  'domains',
 ])
 
 const router = createRouter({
@@ -60,6 +61,7 @@ const router = createRouter({
         { path: 'knowledge-base', name: 'knowledge-base', component: () => import('@/views/KnowledgeBaseView.vue') },
         { path: 'user-tags', name: 'user-tags', component: () => import('@/views/UserTagsView.vue') },
         { path: 'filter-presets', name: 'filter-presets', component: () => import('@/views/FilterPresetsView.vue') },
+        { path: 'domains', name: 'domains', component: () => import('@/views/DomainsView.vue') },
         // Redirects from old paths
         { path: 'customers', redirect: '/dashboard/users' },
         { path: 'customers/:id', redirect: (to: any) => `/dashboard/users/${to.params.id}` },

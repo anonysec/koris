@@ -83,9 +83,9 @@ func TestTicketLifecycle_Create(t *testing.T) {
 
 			if !tt.wantErr {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO tickets").
+				mock.ExpectQuery("INSERT INTO tickets").
 					WithArgs(tt.customerID, tt.subject, expectCategory(tt.category), expectPriority(tt.priority)).
-					WillReturnResult(sqlmock.NewResult(42, 1))
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
 				mock.ExpectQuery(`SELECT COALESCE\(username, ''\) FROM customers WHERE id = \$1`).
 					WithArgs(tt.customerID).
 					WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("testuser"))
@@ -205,9 +205,9 @@ func TestTicketLifecycle_Reply(t *testing.T) {
 
 			if !tt.wantErr {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO ticket_messages").
+				mock.ExpectQuery("INSERT INTO ticket_messages").
 					WithArgs(tt.ticketID, tt.senderType, tt.senderName, tt.body, tt.isInternal).
-					WillReturnResult(sqlmock.NewResult(10, 1))
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
 
 				if !tt.isInternal {
 					expectedStatus := "waiting"
@@ -592,9 +592,9 @@ func TestNotificationTriggers(t *testing.T) {
 		ctx := context.Background()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO tickets").
+		mock.ExpectQuery("INSERT INTO tickets").
 			WithArgs(int64(1), "Test", "general", "medium").
-			WillReturnResult(sqlmock.NewResult(1, 1))
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 		mock.ExpectQuery(`SELECT COALESCE\(username, ''\) FROM customers WHERE id = \$1`).
 			WithArgs(int64(1)).
 			WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("customer1"))
@@ -630,9 +630,9 @@ func TestNotificationTriggers(t *testing.T) {
 		ctx := context.Background()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO ticket_messages").
+		mock.ExpectQuery("INSERT INTO ticket_messages").
 			WithArgs(int64(5), "customer", "john", "Help please", false).
-			WillReturnResult(sqlmock.NewResult(1, 1))
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 		mock.ExpectExec("UPDATE tickets SET status").
 			WithArgs("open", int64(5)).
 			WillReturnResult(sqlmock.NewResult(0, 1))
@@ -662,9 +662,9 @@ func TestNotificationTriggers(t *testing.T) {
 		ctx := context.Background()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO ticket_messages").
+		mock.ExpectQuery("INSERT INTO ticket_messages").
 			WithArgs(int64(5), "admin", "admin1", "Internal note", true).
-			WillReturnResult(sqlmock.NewResult(1, 1))
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 		mock.ExpectExec("UPDATE tickets SET updated_at").
 			WithArgs(int64(5)).
 			WillReturnResult(sqlmock.NewResult(0, 1))

@@ -211,16 +211,37 @@ func (s *Server) wireguardConfig(username string, nodeID int64) string {
 		return ""
 	}
 
-	// Get endpoint
-	var nodeIP, nodeDomain string
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peerNodeID).Scan(&nodeIP, &nodeDomain)
-
+	// Get endpoint — prefer domain binding over node's static domain/IP
 	var endpoint string
-	if nodeDomain != "" {
-		endpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)
-	} else if nodeIP != "" {
-		endpoint = fmt.Sprintf("%s:%d", nodeIP, wgPort)
-	} else {
+
+	// Priority 1: Active domain from vpn_protocol_bindings for wireguard
+	if primary := s.protocolPrimaryDomain(peerNodeID, "wireguard"); primary != "" {
+		endpoint = fmt.Sprintf("%s:%d", primary, wgPort)
+	}
+
+	if endpoint == "" {
+		// Priority 2: Node's domain field
+		var nodeIP, nodeDomain string
+		_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peerNodeID).Scan(&nodeIP, &nodeDomain)
+
+		if nodeDomain != "" {
+			endpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)
+		} else if nodeIP != "" {
+			endpoint = fmt.Sprintf("%s:%d", nodeIP, wgPort)
+		}
+	}
+
+	if endpoint == "" {
+		// Priority 3: knode_connections address
+		var address string
+		_ = s.DB.QueryRow(`SELECT COALESCE(address,'') FROM knode_connections WHERE id=$1`, peerNodeID).Scan(&address)
+		address = strings.TrimSpace(address)
+		if address != "" {
+			endpoint = fmt.Sprintf("%s:%d", address, wgPort)
+		}
+	}
+
+	if endpoint == "" {
 		return ""
 	}
 

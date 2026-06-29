@@ -174,6 +174,34 @@ Node agent endpoints use Bearer token authentication (`Authorization: Bearer <no
 | POST | `/api/resellers/checkout` | Reseller checkout (create customers) |
 | GET | `/api/resellers/payments` | List reseller payments |
 
+## Domains
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/domains` | List all domains (with binding count and cert status) |
+| POST | `/api/admin/domains` | Create a domain (name + IP, RFC 1123 validated) |
+| GET | `/api/admin/domains/{id}` | Get domain detail |
+| PATCH | `/api/admin/domains/{id}` | Update domain IP or status (active/blocked/retired) |
+| DELETE | `/api/admin/domains/{id}` | Delete domain (blocked if active bindings exist) |
+| POST | `/api/admin/domains/{id}/rotate-ip` | Rotate domain IP with audit trail |
+| GET | `/api/admin/domains/{id}/history` | Get IP rotation history |
+
+## Protocol Bindings
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/nodes/{nodeId}/bindings` | List protocol bindings for a node |
+| POST | `/api/admin/nodes/{nodeId}/bindings` | Create a protocol-to-domain binding |
+| DELETE | `/api/admin/nodes/{nodeId}/bindings/{id}` | Delete binding (re-sequences positions) |
+| PATCH | `/api/admin/nodes/{nodeId}/bindings/reorder` | Reorder bindings by position |
+
+## MTProto Secrets
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/customers/{id}/mtproto-secret` | Get customer MTProto secret and status |
+| POST | `/api/admin/customers/{id}/mtproto-secret/regenerate` | Regenerate MTProto secret (64-char hex) |
+
 ## Certificates
 
 | Method | Endpoint | Description |

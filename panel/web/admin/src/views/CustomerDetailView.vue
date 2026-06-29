@@ -3,7 +3,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
 import { useResellersStore } from '@/stores/resellers'
+import { useDomainsStore, type MTProtoSecretInfo } from '@/stores/domains'
 import { useToast } from '@koris/composables/useToast'
+import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
 import { useAuthStore } from '@/stores/auth'
@@ -24,7 +26,9 @@ const props = defineProps<{ id: string }>()
 const { t } = useI18n()
 const router = useRouter()
 const store = useCustomersStore()
+const domainsStore = useDomainsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const { get } = useApi()
 const activeTab = ref('profile')
 const saving = ref(false)
@@ -58,6 +62,12 @@ const resettingTraffic = ref(false)
 const editingConnectionLimit = ref(false)
 const connectionLimitInput = ref(0)
 const savingConnectionLimit = ref(false)
+
+// ─── MTProto Secret State (Requirements 7.6, 5.4) ───────────────────────────
+const mtprotoSecret = ref<MTProtoSecretInfo | null>(null)
+const mtprotoLoading = ref(false)
+const mtprotoRegenerating = ref(false)
+const mtprotoCopied = ref(false)
 
 /**
  * Extracts the current connection limit from the customer's radius_checks.
@@ -122,6 +132,73 @@ async function saveConnectionLimit() {
     )
   } else {
     toast.error(t('customer.conn_limit_error'))
+  }
+}
+
+// ─── MTProto Secret Functions (Requirements 7.6, 5.4) ────────────────────────
+
+/**
+ * Fetch the customer's MTProto secret and connection info.
+ * Requirement 5.4
+ */
+async function loadMTProtoSecret() {
+  if (!props.id || props.id === 'new') return
+  mtprotoLoading.value = true
+  try {
+    mtprotoSecret.value = await domainsStore.fetchMTProtoSecret(Number(props.id))
+  } catch {
+    // Ignore — customer may not have MTProto enabled
+  } finally {
+    mtprotoLoading.value = false
+  }
+}
+
+/**
+ * Copy MTProto secret to clipboard.
+ * Requirement 7.6
+ */
+async function copyMTProtoSecret() {
+  if (!mtprotoSecret.value?.secret) return
+  try {
+    await navigator.clipboard.writeText(mtprotoSecret.value.secret)
+    mtprotoCopied.value = true
+    toast.success('Secret copied to clipboard')
+    setTimeout(() => { mtprotoCopied.value = false }, 2000)
+  } catch {
+    toast.error('Failed to copy secret')
+  }
+}
+
+/**
+ * Regenerate MTProto secret with confirmation dialog.
+ * Requirement 5.6 — invalidates old secret and disconnects active sessions.
+ */
+async function regenerateMTProtoSecret() {
+  if (!store.detail) return
+
+  const confirmed = await confirm({
+    title: 'Regenerate MTProto Secret',
+    message: 'This will generate a new secret, invalidate the current one, and disconnect all active MTProto sessions for this customer. This action cannot be undone.',
+    variant: 'danger',
+    icon: '⚠',
+    confirmText: 'Regenerate',
+    cancelText: 'Cancel',
+  })
+  if (!confirmed) return
+
+  mtprotoRegenerating.value = true
+  try {
+    const result = await domainsStore.regenerateSecret(store.detail.id)
+    if (result) {
+      mtprotoSecret.value = result
+      toast.success('MTProto secret regenerated')
+    } else {
+      toast.error('Failed to regenerate secret')
+    }
+  } catch {
+    toast.error('Failed to regenerate secret')
+  } finally {
+    mtprotoRegenerating.value = false
   }
 }
 
@@ -427,6 +504,7 @@ onMounted(() => {
     loadPlans()
     loadCustomFields()
     loadNotes()
+    loadMTProtoSecret()
   }
   loadReservedEmojis()
   if (!isReseller.value) {
@@ -757,6 +835,55 @@ onMounted(() => {
               </div>
             </div>
 
+            <!-- MTProto Secret Section (Requirements 7.6, 5.4) -->
+            <div v-if="mtprotoSecret" class="mtproto-section">
+              <h4 class="section-title">MTProto Proxy</h4>
+
+              <!-- Secret Display -->
+              <div class="mtproto-secret-row">
+                <div class="mtproto-secret-label">Secret</div>
+                <div class="mtproto-secret-value">
+                  <code class="mtproto-secret-code">{{ mtprotoSecret.secret }}</code>
+                  <KButton
+                    variant="ghost"
+                    size="sm"
+                    :aria-label="mtprotoCopied ? 'Copied' : 'Copy secret to clipboard'"
+                    @click="copyMTProtoSecret"
+                  >
+                    {{ mtprotoCopied ? '✓ Copied' : '📋 Copy' }}
+                  </KButton>
+                </div>
+              </div>
+
+              <!-- Connection Info -->
+              <div class="mtproto-secret-row">
+                <div class="mtproto-secret-label">Connections</div>
+                <div class="mtproto-connections">
+                  <span class="mtproto-connections__count">
+                    {{ mtprotoSecret.connections }} / {{ mtprotoSecret.connection_limit === 0 ? '∞' : mtprotoSecret.connection_limit }}
+                  </span>
+                  <span class="mtproto-connections__label">active</span>
+                </div>
+              </div>
+
+              <!-- Regenerate -->
+              <div class="mtproto-secret-row">
+                <div class="mtproto-secret-label">Actions</div>
+                <KButton
+                  variant="ghost"
+                  size="sm"
+                  :loading="mtprotoRegenerating"
+                  @click="regenerateMTProtoSecret"
+                >
+                  🔄 Regenerate Secret
+                </KButton>
+              </div>
+            </div>
+            <div v-else-if="mtprotoLoading" class="mtproto-section">
+              <h4 class="section-title">MTProto Proxy</h4>
+              <KSkeleton variant="rect" :width="'100%'" :height="60" />
+            </div>
+
             <!-- Sessions Table -->
             <h4 class="section-title">{{ t('customer.sessions') }}</h4>
             <table class="mini-table" role="table">
@@ -955,9 +1082,68 @@ onMounted(() => {
 .connection-limit-editor__input { width: 80px; padding: var(--space-1) var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); font-size: var(--text-sm); outline: none; transition: border-color var(--duration-normal); }
 .connection-limit-editor__input:focus { border-color: var(--color-primary); }
 
+/* MTProto Secret Section (Requirements 7.6, 5.4) */
+.mtproto-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.mtproto-secret-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.mtproto-secret-label {
+  min-width: 100px;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  font-weight: var(--font-semibold);
+}
+.mtproto-secret-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+.mtproto-secret-code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  color: var(--color-text);
+  max-width: 480px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mtproto-connections {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+.mtproto-connections__count {
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  color: var(--color-text);
+}
+.mtproto-connections__label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; }
   .traffic-management__row { flex-direction: column; align-items: flex-start; }
+  .mtproto-secret-row { flex-direction: column; align-items: flex-start; }
+  .mtproto-secret-code { max-width: 100%; }
 }
 
 .detail-header__plan {

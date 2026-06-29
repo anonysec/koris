@@ -123,6 +123,57 @@ Toggle a node's status to control whether customers can connect to it. Disabled 
 
 ---
 
+## Domain & Protocol Management
+
+Domains provide censorship-resilient endpoint routing for VPN protocols. Instead of hard-coding node IPs in client configs, you bind domain names to protocols — when an IP is blocked, rotate it without re-downloading configs.
+
+### Domains
+
+Manage domains from **Domains** in the sidebar:
+- **Add Domain** — enter a valid hostname (RFC 1123) and IP address; domain starts as `active`
+- **Rotate IP** — change a domain's IP address; an audit trail records who rotated and when
+- **Status** — domains can be `active`, `blocked`, or `retired`
+  - `active` — available for new bindings, included in client configs
+  - `blocked` — existing bindings preserved but no new bindings allowed; excluded from generated configs
+  - `retired` — same as blocked, indicates permanent removal
+- **Delete** — only possible when no active protocol bindings reference the domain
+
+### Protocol Bindings
+
+Bind domains to specific protocols on a per-node basis:
+- Each node can have multiple domains bound to each protocol (failover order)
+- Drag-and-drop reordering sets priority (position 1 = primary, 2+ = backups)
+- Only `active` domains can be added as new bindings
+- Blocking a domain preserves existing bindings but triggers a warning
+
+### IP Rotation History
+
+Every IP rotation is logged with:
+- Previous and new IP addresses
+- Admin who performed the rotation
+- Timestamp
+
+View history from a domain's detail panel.
+
+### MTProto Secrets
+
+Per-customer MTProto proxy secrets:
+- 32-byte random secrets (64-char hex string)
+- Regenerate invalidates the old secret and pushes updated list to knode
+- Connection limit enforcement per customer
+
+### IKEv2 Certificates
+
+When a domain is bound to the IKEv2 protocol, Koris automatically:
+- Issues a Let's Encrypt certificate for the domain
+- Monitors expiry (renews within 30 days)
+- Retries up to 72 times (3 days) on failure before marking as expired
+- Pushes certificates to knode on issuance/renewal
+
+Certificate status indicators in the domains table: green (valid), yellow (expiring soon), red (expired).
+
+---
+
 ## VPN Configuration (Cores Tab)
 
 The **VPN Settings** page controls global VPN parameters:

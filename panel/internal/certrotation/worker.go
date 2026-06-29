@@ -31,11 +31,12 @@ type CertPusher interface {
 
 // Worker periodically checks for expiring certificates and handles rotation.
 type Worker struct {
-	db       *sql.DB
-	interval time.Duration
-	done     chan struct{}
-	eventFn  func(eventType, severity, title, message string)
-	pusher   CertPusher // gRPC cert pusher for distributing certs to nodes
+	db          *sql.DB
+	interval    time.Duration
+	done        chan struct{}
+	eventFn     func(eventType, severity, title, message string)
+	pusher      CertPusher   // gRPC cert pusher for distributing certs to nodes
+	ikev2Worker *IKEv2Worker // IKEv2 domain certificate lifecycle worker
 }
 
 // New creates a new certificate rotation Worker with a 1-hour check interval.
@@ -53,6 +54,13 @@ func New(db *sql.DB, eventFn func(string, string, string, string)) *Worker {
 // This should be called during startup after the gRPC pool is initialized.
 func (w *Worker) SetPusher(pusher CertPusher) {
 	w.pusher = pusher
+}
+
+// SetIKEv2Worker sets the IKEv2 domain certificate lifecycle worker.
+// When set, the hourly cycle will also process IKEv2 domain certificates.
+// This should be called during startup after the IKEv2 store and issuer are initialized.
+func (w *Worker) SetIKEv2Worker(ikev2 *IKEv2Worker) {
+	w.ikev2Worker = ikev2
 }
 
 // Start launches the background goroutine that periodically checks for expiring certs.
@@ -114,6 +122,11 @@ func (w *Worker) run() {
 				fmt.Sprintf("Certificate %q expires in %d days", cert.Name, cert.DaysUntilExpiry),
 				fmt.Sprintf("Certificate at %s expires on %s. Will be auto-renewed when within 7 days of expiry.", cert.CertPath, cert.ExpiresAt.Format("2006-01-02")))
 		}
+	}
+
+	// Run IKEv2 domain certificate lifecycle check
+	if w.ikev2Worker != nil {
+		w.ikev2Worker.Run(context.Background())
 	}
 }
 
