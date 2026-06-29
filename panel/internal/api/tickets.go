@@ -359,6 +359,11 @@ func (s *Server) customerListTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure non-nil slice for JSON serialization ([] not null)
+	if tickets == nil {
+		tickets = []support.Ticket{}
+	}
+
 	writeJSON(w, map[string]any{
 		"ok":      true,
 		"tickets": tickets,
