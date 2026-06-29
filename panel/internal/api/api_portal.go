@@ -256,26 +256,11 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 
 	// OpenVPN UDP
 	if enabledProtocols["openvpn"] {
-		profiles = append(profiles, map[string]any{
-			"type":                  "openvpn-udp",
-			"name":                  "OpenVPN UDP — " + nodeName,
-			"filename":              nodeBase + ".ovpn",
-			"filename_passwordless": perUserOvpn,
-			"available":             true,
-			"remote":                host,
-			"port":                  port,
-			"protocol":              "udp",
-			"node":                  nodeName,
-			"download":              fmt.Sprintf("/api/portal/profiles/openvpn.ovpn?node_id=%d", nodeID),
-			"description":           "Fast, best for gaming. Direct connection with failover.",
-			"auth_mode":             authMode,
-		})
-
-		// Passwordless OpenVPN UDP (when auth_mode is certificate)
-		if authMode == "certificate" || passwordlessAvailable {
+		// When user is passwordless/certificate, show only the passwordless config
+		if authMode == "certificate" {
 			profiles = append(profiles, map[string]any{
-				"type":        "openvpn-udp-passwordless",
-				"name":        "OpenVPN UDP (Passwordless) — " + nodeName,
+				"type":        "openvpn-udp",
+				"name":        "OpenVPN UDP — " + nodeName,
 				"filename":    perUserOvpn,
 				"available":   true,
 				"remote":      host,
@@ -283,8 +268,23 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"protocol":    "udp",
 				"node":        nodeName,
 				"download":    fmt.Sprintf("/api/portal/profiles/openvpn-passwordless.ovpn?node_id=%d", nodeID),
-				"description": "Certificate-based, no password needed.",
+				"description": "Fast, best for gaming. Certificate-based, no password needed.",
 				"auth_mode":   "certificate",
+			})
+		} else {
+			profiles = append(profiles, map[string]any{
+				"type":                  "openvpn-udp",
+				"name":                  "OpenVPN UDP — " + nodeName,
+				"filename":              nodeBase + ".ovpn",
+				"filename_passwordless": perUserOvpn,
+				"available":             true,
+				"remote":                host,
+				"port":                  port,
+				"protocol":              "udp",
+				"node":                  nodeName,
+				"download":              fmt.Sprintf("/api/portal/profiles/openvpn.ovpn?node_id=%d", nodeID),
+				"description":           "Fast, best for gaming. Direct connection with failover.",
+				"auth_mode":             authMode,
 			})
 		}
 	}
@@ -338,20 +338,26 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// SSH Tunnel
+	// SSH Tunnel — display as connection info text, not a file download
 	if enabledProtocols["ssh"] {
+		// Get SSH port from node config if available
+		sshPort := 22
+		if nodeID > 0 {
+			_ = s.DB.QueryRow(`SELECT COALESCE(port, 22) FROM node_vpn_configs WHERE node_id=$1 AND protocol='ssh' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&sshPort)
+		} else {
+			_ = s.DB.QueryRow(`SELECT COALESCE(port, 22) FROM node_vpn_configs WHERE protocol='ssh' AND enabled=TRUE LIMIT 1`).Scan(&sshPort)
+		}
 		profiles = append(profiles, map[string]any{
 			"type":        "ssh",
 			"name":        "SSH Tunnel — " + nodeName,
-			"filename":    userBase + "-" + nodeBase + "-ssh.json",
 			"available":   true,
 			"remote":      host,
-			"port":        22,
+			"port":        sshPort,
 			"protocol":    "ssh",
 			"node":        nodeName,
-			"download":    fmt.Sprintf("/api/portal/profiles/ssh.json?node_id=%d", nodeID),
-			"description": "SSH-based tunnel. Works in restricted networks.",
+			"description": fmt.Sprintf("Host: %s · Port: %d · Username: %s", host, sshPort, username),
 			"auth_mode":   authMode,
+			"info_only":   true,
 		})
 	}
 
@@ -372,20 +378,26 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// MTProto Proxy
+	// MTProto Proxy — display as connection info text
 	if enabledProtocols["mtproto"] {
+		// Get MTProto port and secret from node config
+		mtPort := 443
+		var mtSecret string
+		if nodeID > 0 {
+			_ = s.DB.QueryRow(`SELECT COALESCE(port, 443) FROM node_vpn_configs WHERE node_id=$1 AND protocol='mtproto' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&mtPort)
+			_ = s.DB.QueryRow(`SELECT COALESCE(extra_json->>'secret', '') FROM node_vpn_configs WHERE node_id=$1 AND protocol='mtproto' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&mtSecret)
+		}
 		profiles = append(profiles, map[string]any{
 			"type":        "mtproto",
 			"name":        "MTProto Proxy — " + nodeName,
-			"filename":    userBase + "-" + nodeBase + "-mtproto.json",
 			"available":   true,
 			"remote":      host,
-			"port":        443,
+			"port":        mtPort,
 			"protocol":    "mtproto",
 			"node":        nodeName,
-			"download":    fmt.Sprintf("/api/portal/profiles/mtproto.json?node_id=%d", nodeID),
-			"description": "Telegram-optimized proxy protocol.",
+			"description": fmt.Sprintf("Server: %s · Port: %d · Secret: %s", host, mtPort, mtSecret),
 			"auth_mode":   authMode,
+			"info_only":   true,
 		})
 	}
 
