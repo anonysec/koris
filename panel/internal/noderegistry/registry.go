@@ -23,6 +23,8 @@ type NodeRecord struct {
 	Status        string
 	LastSeenAt    sql.NullTime
 	OwnerWorker   sql.NullString
+	Domain        sql.NullString
+	BackupDomains sql.NullString
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -184,7 +186,7 @@ func (r *DBRegistry) Delete(ctx context.Context, id int64) error {
 // Get retrieves a single node record by ID.
 func (r *DBRegistry) Get(ctx context.Context, id int64) (*NodeRecord, error) {
 	row := r.db.QueryRowContext(ctx,
-		`SELECT id, name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, last_seen_at, owner_worker, created_at, updated_at
+		`SELECT id, name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, last_seen_at, owner_worker, domain, backup_domains, created_at, updated_at
 		 FROM knode_connections WHERE id = $1`, id)
 
 	rec, err := scanNodeRecord(row)
@@ -200,7 +202,7 @@ func (r *DBRegistry) Get(ctx context.Context, id int64) (*NodeRecord, error) {
 // ListEnabled returns all node records where enabled = true.
 func (r *DBRegistry) ListEnabled(ctx context.Context) ([]*NodeRecord, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, last_seen_at, owner_worker, created_at, updated_at
+		`SELECT id, name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, last_seen_at, owner_worker, domain, backup_domains, created_at, updated_at
 		 FROM knode_connections WHERE enabled = $1`, true)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled nodes: %w", err)
@@ -261,6 +263,7 @@ func scanNodeRecord(row *sql.Row) (*NodeRecord, error) {
 		&rec.ID, &rec.Name, &rec.Address, &rec.Port,
 		&rec.APIKeyEnc, &rec.ClientCertPEM, &rec.ClientKeyEnc, &rec.CACertPEM,
 		&rec.Enabled, &rec.Status, &rec.LastSeenAt, &rec.OwnerWorker,
+		&rec.Domain, &rec.BackupDomains,
 		&rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {
@@ -276,6 +279,7 @@ func scanNodeRecordRows(rows *sql.Rows) (*NodeRecord, error) {
 		&rec.ID, &rec.Name, &rec.Address, &rec.Port,
 		&rec.APIKeyEnc, &rec.ClientCertPEM, &rec.ClientKeyEnc, &rec.CACertPEM,
 		&rec.Enabled, &rec.Status, &rec.LastSeenAt, &rec.OwnerWorker,
+		&rec.Domain, &rec.BackupDomains,
 		&rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {

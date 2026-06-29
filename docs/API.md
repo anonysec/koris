@@ -300,3 +300,34 @@ These endpoints require customer session authentication.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/portal/sub` | Subscription link (returns config based on client User-Agent) |
+
+## Config Download (Token-Authenticated)
+
+Public endpoint for downloading VPN configuration files. Authenticated via the customer's `sub_token` embedded in the URL — no session cookie required.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/d/{sub_token}/{protocol}` | Download VPN config file for the given protocol |
+
+**Path parameters:**
+- `sub_token` — The customer's 24-character subscription token (from `customers.sub_token`)
+- `protocol` — One of: `openvpn`, `openvpn-udp`, `openvpn-tcp`, `l2tp`, `ikev2`, `wireguard`, `wg`
+
+**Query parameters:**
+- `node_id` (optional) — Specific node ID to generate config for
+
+**Supported protocol values:**
+| Value | Output |
+|-------|--------|
+| `openvpn`, `openvpn-udp`, `openvpn.ovpn` | OpenVPN UDP profile (.ovpn) |
+| `openvpn-tcp`, `openvpn-tcp.ovpn` | OpenVPN TCP profile (.ovpn) |
+| `l2tp`, `l2tp.mobileconfig` | L2TP/IPsec Apple profile (.mobileconfig) |
+| `ikev2`, `ikev2.mobileconfig` | IKEv2 Apple profile (.mobileconfig) |
+| `wireguard`, `wg`, `wireguard.conf` | WireGuard config (.conf) |
+
+**Behavior:**
+- Returns the config file as an attachment with appropriate Content-Type and Content-Disposition headers
+- Returns 404 if token is invalid, customer is disabled/deleted, or protocol is unsupported
+- Sets `Cache-Control: no-store` on all responses
+
+**Example:** `GET /d/abc123def456ghi789jkl012/openvpn?node_id=3`
