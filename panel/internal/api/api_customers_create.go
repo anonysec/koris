@@ -16,17 +16,22 @@ import (
 func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	limitBody(w, r, maxJSONBody)
 	var in struct {
-		Username          string   `json:"username"`
-		Password          string   `json:"password"`
-		DisplayName       string   `json:"display_name"`
-		PlanID            *int64   `json:"plan_id"`
-		DataGB            *float64 `json:"data_gb"`
-		SpeedMbps         *float64 `json:"speed_mbps"`
-		Days              *int     `json:"days"`
-		IPLimit           *int     `json:"ip_limit"`
-		ActivateOnConnect bool     `json:"activate_on_connect"`
-		TemplateID        *int64   `json:"template_id"`
-		Avatar            *string  `json:"avatar"`
+		Username          string            `json:"username"`
+		Password          string            `json:"password"`
+		DisplayName       string            `json:"display_name"`
+		PlanID            *int64            `json:"plan_id"`
+		DataGB            *float64          `json:"data_gb"`
+		SpeedMbps         *float64          `json:"speed_mbps"`
+		Days              *int              `json:"days"`
+		IPLimit           *int              `json:"ip_limit"`
+		ActivateOnConnect bool              `json:"activate_on_connect"`
+		TemplateID        *int64            `json:"template_id"`
+		Avatar            *string           `json:"avatar"`
+		Status            string            `json:"status"`
+		ExpiryDate        string            `json:"expiry_date"`
+		Note              string            `json:"note"`
+		AllowedProtocols  []string          `json:"allowed_protocols"`
+		ProtocolOptions   map[string]string `json:"protocol_options"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -193,7 +198,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	_, _ = tx.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Max-Data'`, in.Username)
 	if dataGB > 0 {
 		bytes := int64(math.Round(dataGB * 1024 * 1024 * 1024))
-		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, in.Username, bytes); err != nil {
+		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES($1,'Max-Data',':=',$2)`, in.Username, strconv.FormatInt(bytes, 10)); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -225,9 +230,22 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if days > 0 {
+	// Handle subscription: expiry_date takes precedence over days
+	var expiresAt *time.Time
+	if in.ExpiryDate != "" {
+		if t, err := time.Parse(time.RFC3339, in.ExpiryDate); err == nil {
+			expiresAt = &t
+		} else if t, err := time.Parse("2006-01-02", in.ExpiryDate); err == nil {
+			expiresAt = &t
+		}
+	}
+	if expiresAt != nil {
+		if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES($1,$2,$3,$4)`, customerID, in.Username, in.PlanID, *expiresAt); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	} else if days > 0 {
 		if in.ActivateOnConnect {
-			// First-connection activation: don't set expires_at yet; auth script will set it on first VPN connect
 			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,activate_on_connect) VALUES($1,$2,$3,1)`, customerID, in.Username, in.PlanID); err != nil {
 				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 				return
@@ -239,6 +257,30 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	// Save note if provided
+	if in.Note != "" {
+		_, _ = tx.Exec(`UPDATE customers SET notes=$1 WHERE id=$2`, in.Note, customerID)
+	}
+	// Save allowed protocols as radreply Allowed-Protocol attributes
+	for _, proto := range in.AllowedProtocols {
+		proto = strings.TrimSpace(proto)
+		if proto == "" {
+			continue
+		}
+		_, _ = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,'Allowed-Protocol','+=', $2)`, in.Username, proto)
+	}
+	// Save protocol options (e.g., openvpn auth mode) as radreply
+	for proto, opt := range in.ProtocolOptions {
+		if opt == "" {
+			continue
+		}
+		attrName := strings.Title(proto) + "-Auth-Mode"
+		_, _ = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,$2,':=',$3)`, in.Username, attrName, opt)
+	}
+	// Set initial status if not active
+	if in.Status != "" && in.Status != "active" {
+		_, _ = tx.Exec(`UPDATE customers SET status=$1 WHERE id=$2`, in.Status, customerID)
 	}
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})

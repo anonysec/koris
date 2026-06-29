@@ -39,7 +39,7 @@ Click **+ New User** and fill in:
 - Display name
 - Password
 - Plan assignment
-- Optional: set expiry date, data limit, connection limit
+- Optional: status, expiry date, data limit, speed limit, connection limit, note, allowed protocols, and protocol-specific options
 
 ### Edit Customer
 
