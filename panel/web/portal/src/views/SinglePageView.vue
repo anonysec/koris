@@ -667,24 +667,14 @@ async function handleRate() {
             <KButton variant="primary" size="sm" @click="showCreateForm = true">
               + {{ t('portal.support.newTicket') }}
             </KButton>
-            <span v-if="ticketsStore.openTickets.length" class="sp__support-count">
-              {{ ticketsStore.openTickets.length }} open ticket{{ ticketsStore.openTickets.length > 1 ? 's' : '' }}
+            <span v-if="ticketsStore.list.length" class="sp__support-count">
+              {{ ticketsStore.list.length }} ticket{{ ticketsStore.list.length > 1 ? 's' : '' }}
             </span>
           </div>
 
-          <!-- Ticket tabs -->
-          <div v-if="ticketsStore.list.length" class="sp__ticket-tabs">
-            <button :class="['sp__ticket-tab', { 'sp__ticket-tab--active': supportTab === 'open' }]" @click="supportTab = 'open'">
-              {{ t('portal.support.open') }} ({{ ticketsStore.openTickets.length }})
-            </button>
-            <button :class="['sp__ticket-tab', { 'sp__ticket-tab--active': supportTab === 'closed' }]" @click="supportTab = 'closed'">
-              {{ t('portal.support.closed') }} ({{ ticketsStore.closedTickets.length }})
-            </button>
-          </div>
-
-          <!-- Filtered ticket list -->
+          <!-- All tickets list -->
           <div v-if="ticketsStore.list.length" class="sp__tickets-list">
-            <div v-for="ticket in (supportTab === 'open' ? ticketsStore.openTickets : ticketsStore.closedTickets)" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
+            <div v-for="ticket in ticketsStore.list" :key="ticket.id" class="sp__ticket-row" @click="handleViewTicket(ticket.id)">
               <div class="sp__ticket-row-info">
                 <span class="sp__ticket-row-subject">{{ ticket.subject }}</span>
                 <KStatusPill :status="ticket.status === 'open' || ticket.status === 'in_progress' ? 'active' : 'disabled'" size="sm">
