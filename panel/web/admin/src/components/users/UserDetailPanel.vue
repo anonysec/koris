@@ -104,6 +104,16 @@ function syncFormFromCustomer() {
     ?.filter((r) => r.attribute === 'Allowed-Protocol')
     .map((r) => r.value) ?? []
 
+  // Extract protocol options from Auth-Mode radreply attributes
+  const protocolOptions: Record<string, string> = {}
+  customer.value.radius_replies
+    ?.filter((r) => r.attribute.endsWith('-Auth-Mode'))
+    .forEach((r) => {
+      // Convert "Openvpn-Auth-Mode" → "openvpn"
+      const proto = r.attribute.replace('-Auth-Mode', '').toLowerCase()
+      protocolOptions[proto] = r.value
+    })
+
   let dataLimit = ''
   if (customer.value.subscription?.data_limit_gb) {
     dataLimit = String(customer.value.subscription.data_limit_gb)
@@ -128,7 +138,7 @@ function syncFormFromCustomer() {
     expiry_date: expirationCheck?.value ?? '',
     note: customer.value.notes ?? '',
     allowed_protocols: protocols,
-    protocol_options: {},
+    protocol_options: protocolOptions,
     billing_enabled: customer.value.billing_enabled !== false,
     avatar: customer.value.avatar ?? '',
   }
