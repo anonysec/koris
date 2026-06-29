@@ -438,12 +438,6 @@ function handleToggleTheme() {
               <circle cx="7" cy="7" r="1" fill="currentColor" />
               <circle cx="7" cy="17" r="1" fill="currentColor" />
             </svg>
-            <!-- Domains icon (globe with link) -->
-            <svg v-else-if="item.icon === 'domains'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M2 12h20" />
-              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
-            </svg>
             <!-- Cores icon (shield with network) -->
             <svg v-else-if="item.icon === 'cores'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
