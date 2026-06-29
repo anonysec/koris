@@ -177,8 +177,12 @@ export const useTicketsStore = defineStore('tickets', () => {
   async function loadTicketDetail(id: number): Promise<void> {
     loading.value = true
     try {
-      const res = await get<TicketDetailResponse>(`/api/admin/tickets/${id}`)
-      detail.value = res.ticket
+      const res = await get<any>(`/api/admin/tickets/${id}`)
+      // API returns { ok, ticket, messages } — merge messages onto ticket object
+      detail.value = {
+        ...res.ticket,
+        messages: res.messages || res.ticket?.messages || [],
+      }
     } catch {
       // Preserve existing detail on error
     } finally {
