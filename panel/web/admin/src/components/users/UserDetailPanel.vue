@@ -16,6 +16,7 @@
  */
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
+import { useToast } from '@koris/composables/useToast'
 import KButton from '@koris/ui/KButton.vue'
 import KThreeDotMenu from '@koris/ui/KThreeDotMenu.vue'
 import KModal from '@koris/ui/KModal.vue'
@@ -45,6 +46,7 @@ const emit = defineEmits<{
 
 // ─── API & State ────────────────────────────────────────────────────────────
 const { get, post, patch } = useApi({ showErrorToast: false })
+const toast = useToast()
 
 const customer = ref<CustomerDetail | null>(null)
 const loading = ref(false)
@@ -245,10 +247,13 @@ function handleModify(): void {
   }
   patch(`/api/customers/${props.userId}`, payload)
     .then(() => {
+      toast.success('User updated successfully')
       emit('updated')
       refresh()
     })
-    .catch(() => {})
+    .catch((e: any) => {
+      toast.error(e?.message || 'Failed to update user')
+    })
     .finally(() => { saving.value = false })
 }
 
@@ -261,7 +266,10 @@ function handleMenuSelect(key: string): void {
     // Reset usage — call API
     if (props.userId) {
       post(`/api/customers/${props.userId}/reset-traffic`, {}).then(() => {
+        toast.success('Usage reset successfully')
         refresh()
+      }).catch((e: any) => {
+        toast.error(e?.message || 'Failed to reset usage')
       })
     }
   }
