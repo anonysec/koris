@@ -252,16 +252,19 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 
 func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64) {
 	var in struct {
-		DisplayName *string  `json:"display_name"`
-		Status      *string  `json:"status"`
-		PlanID      *int64   `json:"plan_id"`
-		Notes       *string  `json:"notes"`
-		DataGB      *float64 `json:"data_gb"`
-		SpeedMbps   *float64 `json:"speed_mbps"`
-		Days        *int     `json:"days"`
-		IPLimit     *int     `json:"ip_limit"`
-		Avatar      *string  `json:"avatar"`
-		BillingMode *string  `json:"billing_mode"`
+		DisplayName      *string           `json:"display_name"`
+		Status           *string           `json:"status"`
+		PlanID           *int64            `json:"plan_id"`
+		Notes            *string           `json:"notes"`
+		DataGB           *float64          `json:"data_gb"`
+		SpeedMbps        *float64          `json:"speed_mbps"`
+		Days             *int              `json:"days"`
+		IPLimit          *int              `json:"ip_limit"`
+		Avatar           *string           `json:"avatar"`
+		BillingMode      *string           `json:"billing_mode"`
+		ExpiryDate       *string           `json:"expiry_date"`
+		AllowedProtocols *[]string         `json:"allowed_protocols"`
+		ProtocolOptions  map[string]string `json:"protocol_options"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -390,6 +393,38 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Simultaneous-Use'`, username)
 		} else {
 			_ = s.upsertRadCheck(username, "Simultaneous-Use", strconv.Itoa(*in.IPLimit))
+		}
+	}
+	if in.ExpiryDate != nil {
+		expiryStr := strings.TrimSpace(*in.ExpiryDate)
+		if expiryStr == "" {
+			// Remove expiration
+			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=$1 AND attribute='Expiration'`, username)
+		} else {
+			// Parse and store expiration (format: yyyy-mm-dd or full datetime)
+			_ = s.upsertRadCheck(username, "Expiration", expiryStr)
+		}
+	}
+	if in.AllowedProtocols != nil {
+		// Replace all Allowed-Protocol entries
+		_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute='Allowed-Protocol'`, username)
+		for _, proto := range *in.AllowedProtocols {
+			proto = strings.TrimSpace(proto)
+			if proto == "" {
+				continue
+			}
+			_, _ = s.DB.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES($1,'Allowed-Protocol','+=', $2)`, username, proto)
+		}
+	}
+	if in.ProtocolOptions != nil {
+		// Replace protocol auth mode entries
+		for proto, opt := range in.ProtocolOptions {
+			attrName := strings.Title(proto) + "-Auth-Mode"
+			if opt == "" {
+				_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=$1 AND attribute=$2`, username, attrName)
+			} else {
+				_ = s.upsertRadReply(username, attrName, opt)
+			}
 		}
 	}
 

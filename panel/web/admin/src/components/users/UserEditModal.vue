@@ -229,15 +229,14 @@ async function handleSubmit(): Promise<void> {
 
   const payload: Record<string, unknown> = {
     status: status.value,
-    note: note.value,
+    notes: note.value,
     expiry_date: expiryDate.value || null,
-    periodic_usage_reset: periodicUsageReset.value,
-    hwid_limit: hwidLimit.value ? Number(hwidLimit.value) : 0,
+    ip_limit: hwidLimit.value ? Number(hwidLimit.value) : 0,
     plan_id: planId.value ? Number(planId.value) : undefined,
   }
 
   if (dataLimitGb !== null) {
-    payload.data_limit_gb = dataLimitGb
+    payload.data_gb = dataLimitGb
   }
 
   try {

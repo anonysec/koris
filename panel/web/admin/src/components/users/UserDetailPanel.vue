@@ -238,6 +238,10 @@ function handleModify(): void {
     notes: profileFormData.value.note,
     data_gb: profileFormData.value.data_limit ? Number(profileFormData.value.data_limit) : 0,
     plan_id: profileFormData.value.plan_id ? Number(profileFormData.value.plan_id) : undefined,
+    expiry_date: profileFormData.value.expiry_date || '',
+    allowed_protocols: profileFormData.value.allowed_protocols || [],
+    protocol_options: profileFormData.value.protocol_options || {},
+    avatar: profileFormData.value.avatar || '',
   }
   patch(`/api/customers/${props.userId}`, payload)
     .then(() => {
