@@ -149,7 +149,7 @@ func initGRPCSubsystem(ctx context.Context, database *sql.DB, cfg config.Config,
 
 	// 7. Create UserSyncService and register reconnect-sync callback.
 	userSync := grpcclient.NewUserSyncService(pool, store)
-	grpcclient.RegisterReconnectSync(pool, userSync, store)
+	grpcclient.RegisterReconnectSync(pool, userSync, store, cfg.TLSDomain)
 	log.Info("grpc-client", "user sync service ready (reconnect-sync callback registered)")
 
 	// 7b. Perform initial Health + AllCoreStatuses for nodes that connected successfully.

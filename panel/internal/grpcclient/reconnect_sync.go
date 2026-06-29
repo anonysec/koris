@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"KorisPanel/panel/internal/dbstore"
+	"KorisPanel/panel/internal/noderegistry"
 )
 
 // RegisterReconnectSync registers an OnStatusChange callback on the pool that
@@ -12,12 +13,13 @@ import (
 // This ensures that:
 //  1. The Panel calls Health + AllCoreStatuses to learn the node's capabilities
 //     (satisfying the requirement that these are fetched within 30s of reconnection).
-//  2. A full user sync (FullSyncForNode) pushes all assigned users to the node,
+//  2. Non-running cores are re-enabled with default configurations.
+//  3. A full user sync (FullSyncForNode) pushes all assigned users to the node,
 //     detecting any drift that occurred during the disconnect.
-func RegisterReconnectSync(pool Pool, syncService *UserSyncService, store dbstore.Store) {
+func RegisterReconnectSync(pool Pool, syncService *UserSyncService, store dbstore.Store, domain string) {
 	pool.OnStatusChange(func(nodeID int64, old, new NodeStatus) {
 		if old == StatusOffline && new == StatusOnline {
-			log.Printf("[knode] Node %d reconnected (offline → online), triggering Health + AllCoreStatuses + full user sync", nodeID)
+			log.Printf("[knode] Node %d reconnected (offline → online), triggering Health + ReenableCores + full user sync", nodeID)
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -34,10 +36,20 @@ func RegisterReconnectSync(pool Pool, syncService *UserSyncService, store dbstor
 
 				// 2. Call AllCoreStatuses to refresh the node's capabilities in the DB.
 				if err := RefreshNodeState(ctx, pool, store, nodeID); err != nil {
-					log.Printf("[knode] RefreshNodeState failed for reconnected node %d: %v (continuing with user sync)", nodeID, err)
+					log.Printf("[knode] RefreshNodeState failed for reconnected node %d: %v (continuing with re-enable)", nodeID, err)
 				}
 
-				// 3. Full user sync for all cores on this node.
+				// 3. Re-enable any stopped/crashed cores with default configurations.
+				cm := NewCoreManager(pool, store)
+				enabler := NewCoreEnablerAdapter(cm)
+				results := noderegistry.ReenableStoppedCores(ctx, enabler, nodeID, domain)
+				for _, r := range results {
+					if !r.Success {
+						log.Printf("[knode] ReenableStoppedCores: core %q failed on node %d: %s", r.Core, nodeID, r.Error)
+					}
+				}
+
+				// 4. Full user sync for all cores on this node.
 				if err := syncService.FullSyncForNode(ctx, nodeID); err != nil {
 					log.Printf("[knode] Full sync failed for reconnected node %d: %v", nodeID, err)
 				}
