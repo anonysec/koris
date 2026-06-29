@@ -80,9 +80,9 @@ async function handleCategoryChange(newCategory: string) {
 }
 
 async function handleAssigneeChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  if (input.value !== ticket.value?.assigned_to) {
-    await store.updateTicket(Number(props.id), { assigned_to: input.value })
+  const select = event.target as HTMLSelectElement
+  if (select.value !== ticket.value?.assigned_to) {
+    await store.updateTicket(Number(props.id), { assigned_to: select.value })
     toast.success(t('tickets.assignee_updated'))
   }
 }
@@ -274,20 +274,16 @@ watch(() => props.id, (newId) => {
           <!-- Assigned To -->
           <div class="sidebar-section">
             <label class="sidebar-label">{{ t('tickets.assigned_to') }}</label>
-            <input
-              type="text"
-              class="sidebar-input"
-              :value="ticket.assigned_to"
-              :placeholder="t('tickets.unassigned')"
-              @blur="handleAssigneeChange"
-              @keydown.enter="($event.target as HTMLInputElement).blur()"
-            />
+            <select class="sidebar-input" :value="ticket.assigned_to" @change="handleAssigneeChange">
+              <option value="">{{ t('tickets.unassigned') }}</option>
+              <option v-for="admin in store.adminsList" :key="admin" :value="admin">{{ admin }}</option>
+            </select>
           </div>
 
           <!-- Customer -->
           <div class="sidebar-section">
             <label class="sidebar-label">{{ t('tickets.customer') }}</label>
-            <span class="sidebar-value">{{ ticket.username }}</span>
+            <span class="sidebar-value">{{ ticket.username || '—' }}</span>
           </div>
 
           <!-- Created -->

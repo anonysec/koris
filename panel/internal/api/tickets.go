@@ -170,10 +170,29 @@ func (s *Server) adminGetTicket(w http.ResponseWriter, r *http.Request, id int64
 		return
 	}
 
+	// Resolve customer username for the sidebar
+	var customerUsername string
+	_ = s.DB.QueryRowContext(r.Context(), `SELECT username FROM customers WHERE id = $1 AND deleted_at IS NULL`, ticket.CustomerID).Scan(&customerUsername)
+
+	// Get list of admins for assignment dropdown
+	var admins []string
+	rows, err := s.DB.QueryContext(r.Context(), `SELECT username FROM admins ORDER BY username`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var u string
+			if rows.Scan(&u) == nil {
+				admins = append(admins, u)
+			}
+		}
+	}
+
 	writeJSON(w, map[string]any{
-		"ok":       true,
-		"ticket":   ticket,
-		"messages": messages,
+		"ok":                true,
+		"ticket":            ticket,
+		"messages":          messages,
+		"customer_username": customerUsername,
+		"admins":            admins,
 	})
 }
 
