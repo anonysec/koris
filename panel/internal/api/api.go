@@ -284,6 +284,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/sessions/kill", s.requireFullAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub/", s.subscriptionLink)
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
+	mux.HandleFunc("/d/", s.handleConfigDownload)
 	mux.HandleFunc("/api/nodes/vpn-config/", s.requireFullAdmin(s.nodeVPNConfig))
 	mux.HandleFunc("/api/wireguard/peers", s.requireFullAdmin(s.wireguardPeers))
 	mux.HandleFunc("/api/wireguard/peers/", s.requireFullAdmin(s.wireguardPeerByID))
