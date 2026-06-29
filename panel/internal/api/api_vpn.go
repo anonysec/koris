@@ -119,6 +119,17 @@ func (s *Server) readVPNSettings(r *http.Request) (VPNSettings, error) {
 	v.TLSCryptFile = tls
 	_, v.CAExists = fileExists(ca)
 	_, v.TLSCryptExists = fileExists(tls)
+	// Also check DB-backed certs (remote knode support)
+	var dbCACount int
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM vpn_certificates WHERE type='ca' AND status='active'`).Scan(&dbCACount)
+	if dbCACount > 0 {
+		v.CAExists = true
+	}
+	var dbTLSCount int
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM vpn_certificates WHERE type='tls-crypt' AND status='active'`).Scan(&dbTLSCount)
+	if dbTLSCount > 0 {
+		v.TLSCryptExists = true
+	}
 	v.RemoteHost, _, _, v.ActiveNode = s.openVPNEndpoint(r)
 	v.OpenVPNServiceStatus = "unknown"
 	_ = s.DB.QueryRow(`SELECT openvpn_status FROM node_status ORDER BY updated_at DESC LIMIT 1`).Scan(&v.OpenVPNServiceStatus)
@@ -181,6 +192,100 @@ func cidrToOpenVPNServer(cidr string) (string, string) {
 	}
 	mask := ipNet.Mask
 	return ip.To4().String(), fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
+}
+
+// vpnCertificates handles GET/POST /api/vpn/certificates for admin cert management.
+// GET: list all stored VPN certificates
+// POST: upload a new CA or tls-crypt key to the DB for a specific node
+func (s *Server) vpnCertificates(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := s.DB.Query(`SELECT id, name, type, node_id, is_default, status, expires_at, fingerprint, created_at FROM vpn_certificates ORDER BY node_id, type, id DESC`)
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		defer rows.Close()
+		var certs []map[string]any
+		for rows.Next() {
+			var id, nodeID int64
+			var name, certType, status, fingerprint string
+			var isDefault bool
+			var expiresAt, createdAt sql.NullTime
+			if err := rows.Scan(&id, &name, &certType, &nodeID, &isDefault, &status, &expiresAt, &fingerprint, &createdAt); err != nil {
+				continue
+			}
+			cert := map[string]any{
+				"id":          id,
+				"name":        name,
+				"type":        certType,
+				"node_id":     nodeID,
+				"is_default":  isDefault,
+				"status":      status,
+				"fingerprint": fingerprint,
+			}
+			if expiresAt.Valid {
+				cert["expires_at"] = expiresAt.Time.Format(time.RFC3339)
+			}
+			if createdAt.Valid {
+				cert["created_at"] = createdAt.Time.Format(time.RFC3339)
+			}
+			certs = append(certs, cert)
+		}
+		if certs == nil {
+			certs = []map[string]any{}
+		}
+		writeJSON(w, map[string]any{"ok": true, "certificates": certs})
+
+	case http.MethodPost:
+		var in struct {
+			Name      string `json:"name"`
+			Type      string `json:"type"`    // "ca" or "tls-crypt"
+			NodeID    int64  `json:"node_id"` // 0 = global/default
+			Content   string `json:"content"` // PEM content
+			IsDefault bool   `json:"is_default"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+			return
+		}
+		in.Type = strings.ToLower(strings.TrimSpace(in.Type))
+		if in.Type != "ca" && in.Type != "tls-crypt" {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "type must be 'ca' or 'tls-crypt'"})
+			return
+		}
+		in.Content = strings.TrimSpace(in.Content)
+		if in.Content == "" {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "content is required"})
+			return
+		}
+		if in.Name == "" {
+			in.Name = in.Type
+			if in.NodeID > 0 {
+				var nodeName string
+				_ = s.DB.QueryRow(`SELECT name FROM knode_connections WHERE id=$1`, in.NodeID).Scan(&nodeName)
+				if nodeName != "" {
+					in.Name = nodeName + "-" + in.Type
+				}
+			}
+		}
+
+		var id int64
+		err := s.DB.QueryRow(`INSERT INTO vpn_certificates (name, type, node_id, content, is_default, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, 'active', NOW()) RETURNING id`,
+			in.Name, in.Type, in.NodeID, in.Content, in.IsDefault).Scan(&id)
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+
+		actor, _, _ := s.currentAdmin(r)
+		s.logAudit(actor, "vpn.cert_uploaded", "vpn_certificates", fmt.Sprintf("%d", id), nil, map[string]any{"type": in.Type, "node_id": in.NodeID}, clientIP(r))
+		writeJSON(w, map[string]any{"ok": true, "id": id})
+
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
 }
 
 // authNode authenticates a node request.
