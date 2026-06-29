@@ -253,11 +253,6 @@ const navGroups = computed<NavGroup[]>(() => {
         label: t('nav.services'),
         icon: 'services',
       },
-      {
-        route: 'domains',
-        label: 'Domains',
-        icon: 'domains',
-      },
     )
   }
 
