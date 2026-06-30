@@ -159,7 +159,7 @@ Certificate status indicators in the domains table: green (valid), yellow (expir
 
 The **VPN Settings** page controls global VPN parameters:
 
-- **OpenVPN**: Server subnet, port, protocol, cipher, DNS push, TLS settings
+- **OpenVPN**: Server subnet, port, protocol, cipher, DNS push, TLS settings, auth mode (hybrid/userpass/certificate)
 - **L2TP**: PSK, authentication settings
 - **IKEv2**: Certificate selection, identity settings
 - **WireGuard**: Interface config, peer management

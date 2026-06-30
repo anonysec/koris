@@ -846,6 +846,7 @@ func main() {
 		srv.CoreMgr = grpcclient.NewCoreManager(grpcSub.Pool, grpcSub.Store)
 		srv.TunnelMgr = grpcclient.NewTunnelManager(grpcSub.Pool, grpcSub.Store)
 		srv.CertMgr = grpcclient.NewCertManager(grpcSub.Pool)
+		srv.ClientCertSvc = grpcclient.NewClientCertService(grpcSub.Pool)
 		srv.SessionMgr = grpcclient.NewSessionManager(grpcSub.Pool)
 		srv.UserSync = grpcSub.UserSync
 		srv.TrafficCollector = grpcSub.TrafficCollector
