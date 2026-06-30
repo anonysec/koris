@@ -28,10 +28,6 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.HasSuffix(path, "/openvpn-passwordless.ovpn"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
-		if !s.canUsePasswordless(username) {
-			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "passwordless_not_available"})
-			return
-		}
 		profile := s.openVPNProfilePasswordless(username, r, nodeID)
 		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
 		nodeBase := safeFilename(nodeName)
