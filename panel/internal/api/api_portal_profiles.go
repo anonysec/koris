@@ -2,7 +2,9 @@ package api
 
 import (
 	"KorisPanel/panel/internal/auth"
+	"KorisPanel/panel/internal/wireguard"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -24,6 +26,23 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	path := r.URL.Path
 	switch {
+	case strings.HasSuffix(path, "/openvpn-passwordless.ovpn"):
+		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
+		if !s.canUsePasswordless(username) {
+			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "passwordless_not_available"})
+			return
+		}
+		profile := s.openVPNProfilePasswordless(username, r, nodeID)
+		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
+		nodeBase := safeFilename(nodeName)
+		if nodeBase == "" {
+			nodeBase = "vpn"
+		}
+		filename := safeFilename(username) + "-" + nodeBase + ".ovpn"
+		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/openvpn-tcp.ovpn"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
 		profile := s.openVPNProfileTCP(username, r, nodeID)
@@ -90,6 +109,9 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(profile))
+	case strings.HasSuffix(path, "/wireguard.conf"):
+		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
+		s.portalWireguardConfByNode(w, r, username, nodeID)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -522,4 +544,117 @@ func (s *Server) l2tpMobileConfig(username string, r *http.Request, nodeID int64
 	<integer>1</integer>
 </dict>
 </plist>`, username, uuidPayload, username, host, pskData, username, uuidProfile)
+}
+
+// portalWireguardConfByNode generates a WireGuard config for the customer's peer on the given node.
+// If nodeID is 0, it uses any available peer for the customer.
+func (s *Server) portalWireguardConfByNode(w http.ResponseWriter, r *http.Request, username string, nodeID int64) {
+	// Get customer ID
+	var customerID int64
+	err := s.DB.QueryRow(`SELECT id FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
+	if err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+
+	// Find the customer's peer for this node
+	var peer WgPeer
+	var query string
+	var args []any
+	if nodeID > 0 {
+		query = `SELECT id, node_id, public_key, COALESCE(preshared_key,''),
+		         COALESCE(private_key_encrypted,''), allowed_ips, COALESCE(endpoint,''), status
+		         FROM wg_peers WHERE customer_id=$1 AND node_id=$2 AND status='active' LIMIT 1`
+		args = []any{customerID, nodeID}
+	} else {
+		query = `SELECT id, node_id, public_key, COALESCE(preshared_key,''),
+		         COALESCE(private_key_encrypted,''), allowed_ips, COALESCE(endpoint,''), status
+		         FROM wg_peers WHERE customer_id=$1 AND status='active' LIMIT 1`
+		args = []any{customerID}
+	}
+	err = s.DB.QueryRow(query, args...).Scan(
+		&peer.ID, &peer.NodeID, &peer.PublicKey,
+		&peer.PresharedKey, &peer.PrivateKeyEncrypted, &peer.AllowedIPs,
+		&peer.Endpoint, &peer.Status)
+	if err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "no_wireguard_peer"})
+		return
+	}
+
+	if peer.PrivateKeyEncrypted == "" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "private_key_not_available"})
+		return
+	}
+
+	// Get server config for this peer's node
+	var extraJSON []byte
+	err = s.DB.QueryRow(`
+		SELECT COALESCE(extra_json,'{}')
+		FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&extraJSON)
+	if err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "wireguard_config_not_found"})
+		return
+	}
+
+	var serverPublicKey, dns1, dns2, serverEndpoint string
+	var gamingOptimize bool
+	var extra map[string]any
+	if err := json.Unmarshal(extraJSON, &extra); err == nil {
+		if v, ok := extra["server_public_key"].(string); ok {
+			serverPublicKey = v
+		}
+		if v, ok := extra["dns_1"].(string); ok {
+			dns1 = v
+		}
+		if v, ok := extra["dns_2"].(string); ok {
+			dns2 = v
+		}
+		if v, ok := extra["gaming_optimize"].(bool); ok {
+			gamingOptimize = v
+		}
+	}
+
+	// Get node endpoint
+	var nodeIP, nodeDomain string
+	var wgPort int
+	_ = s.DB.QueryRow(`SELECT COALESCE(address,''), COALESCE(domain,'') FROM knode_connections WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
+
+	if nodeDomain != "" {
+		serverEndpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)
+	} else if nodeIP != "" {
+		serverEndpoint = fmt.Sprintf("%s:%d", nodeIP, wgPort)
+	}
+
+	// Build DNS string
+	dns := dns1
+	if dns2 != "" {
+		dns = dns1 + ", " + dns2
+	}
+	if dns == "" {
+		dns = "1.1.1.1, 8.8.8.8"
+	}
+
+	// Generate config
+	conf := wireguard.GenerateClientConfig(wireguard.ClientConfig{
+		PrivateKey:      peer.PrivateKeyEncrypted,
+		Address:         peer.AllowedIPs,
+		DNS:             dns,
+		ServerPublicKey: serverPublicKey,
+		PresharedKey:    peer.PresharedKey,
+		Endpoint:        serverEndpoint,
+		GamingOptimize:  gamingOptimize,
+	})
+
+	// Serve as downloadable .conf file
+	var nodeName string
+	_ = s.DB.QueryRow(`SELECT COALESCE(name,'') FROM knode_connections WHERE id=$1`, peer.NodeID).Scan(&nodeName)
+	if nodeName == "" {
+		nodeName = fmt.Sprintf("node%d", peer.NodeID)
+	}
+	filename := fmt.Sprintf("KorisVPN-%s.conf", safeFilename(nodeName))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(conf))
 }
