@@ -2,6 +2,12 @@
 
 All notable changes to the clean Go + Vue rewrite are tracked here.
 
+## Unreleased
+
+### Changed
+- **OpenVPN auth mode** — Cores config now offers three auth modes: Hybrid (cert + password per user, new default), Username/Password only, Certificate only. Previous default was userpass.
+- **Passwordless OpenVPN profiles** — when `?passwordless=true` is used, the generated `.ovpn` file now embeds credentials inline via `<auth-user-pass>` block instead of omitting `auth-user-pass` entirely. This prevents the OpenVPN client from prompting the user for credentials while maintaining server-side authentication.
+
 ## 0.38.0 - 2025-06-18
 
 ### Added

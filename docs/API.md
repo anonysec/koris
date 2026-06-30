@@ -341,6 +341,7 @@ Public endpoint for downloading VPN configuration files. Authenticated via the c
 
 **Query parameters:**
 - `node_id` (optional) — Specific node ID to generate config for
+- `passwordless` (optional, OpenVPN only) — When set to `true`, generates a certificate-based `.ovpn` profile with the customer's client certificate and private key embedded inline (`<cert>` and `<key>` blocks) instead of requiring username/password authentication. The `auth-user-pass` directive is omitted entirely. Requires the global `passwordless_configs_enabled` setting and the customer's plan to have `allow_passwordless` enabled. Certificate lookup checks the `vpn_certificates` table for active entries matching the node and username, with a fallback to node-agnostic certificates.
 
 **Supported protocol values:**
 | Value | Output |

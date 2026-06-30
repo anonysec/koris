@@ -52,6 +52,8 @@ type KnodeServiceClient interface {
 	TunnelStatus(ctx context.Context, in *TunnelStatusRequest, opts ...grpc.CallOption) (*TunnelStatusResponse, error)
 	// Metrics Stream (server-side streaming)
 	StreamMetrics(ctx context.Context, in *StreamMetricsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MetricsEvent], error)
+	// Client Certificates
+	GenerateClientCert(ctx context.Context, in *GenerateClientCertRequest, opts ...grpc.CallOption) (*GenerateClientCertResponse, error)
 }
 
 type knodeServiceClient struct {
@@ -315,6 +317,15 @@ func (x *streamMetricsClient) Recv() (*MetricsEvent, error) {
 func (x *streamMetricsClient) Msg() *MetricsEvent {
 	m := new(MetricsEvent)
 	return m
+}
+
+func (c *knodeServiceClient) GenerateClientCert(ctx context.Context, in *GenerateClientCertRequest, opts ...grpc.CallOption) (*GenerateClientCertResponse, error) {
+	out := new(GenerateClientCertResponse)
+	err := c.cc.Invoke(ctx, "/"+knodeServiceName+"/GenerateClientCert", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // KnodeServiceServer is the server API for KnodeService service.

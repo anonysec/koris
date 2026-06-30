@@ -3,6 +3,7 @@ package api
 import (
 	"KorisPanel/panel/internal/auth"
 	"KorisPanel/panel/internal/wireguard"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -275,14 +276,16 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	authLine := "auth-user-pass\n"
 	authComment := "# Login with your VPN username/password when OpenVPN asks for credentials."
 	if !withAuth {
-		// Passwordless mode: embed credentials inline so the user is never prompted.
-		var password string
-		_ = s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute='Cleartext-Password' ORDER BY id DESC LIMIT 1`, username).Scan(&password)
-		if password == "" {
-			password = "nopass"
+		// Certificate-based (passwordless) mode: embed client cert+key.
+		clientCert, clientKey := s.ensureClientCert(username, resolvedNodeID)
+		authLine = ""
+		authComment = "# Certificate-based auth — no password needed."
+		if clientCert != "" {
+			caBlock += inlineOpenVPNBlockFromContent("cert", clientCert)
 		}
-		authLine = fmt.Sprintf("auth-user-pass\n\n<auth-user-pass>\n%s\n%s\n</auth-user-pass>\n", username, password)
-		authComment = "# Passwordless mode — credentials are embedded, no prompt needed."
+		if clientKey != "" {
+			caBlock += inlineOpenVPNBlockFromContent("key", clientKey)
+		}
 	}
 
 	// Build remote lines using domain bindings in failover position order.
@@ -659,4 +662,70 @@ func (s *Server) portalWireguardConfByNode(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(conf))
+}
+
+// ensureClientCert checks if a client cert exists for the user on the node.
+// If not, it calls the knode gRPC to generate one and stores it in the DB.
+// Returns (certPEM, keyPEM). Empty strings if generation fails.
+func (s *Server) ensureClientCert(username string, nodeID int64) (string, string) {
+	// 1. Check DB for existing cert
+	var clientCert, clientKey string
+	_ = s.DB.QueryRow(
+		`SELECT content FROM vpn_certificates WHERE node_id=$1 AND type='client-cert' AND status='active' AND username=$2 LIMIT 1`,
+		nodeID, username,
+	).Scan(&clientCert)
+	_ = s.DB.QueryRow(
+		`SELECT content FROM vpn_certificates WHERE node_id=$1 AND type='client-key' AND status='active' AND username=$2 LIMIT 1`,
+		nodeID, username,
+	).Scan(&clientKey)
+
+	if clientCert != "" && clientKey != "" {
+		return clientCert, clientKey
+	}
+
+	// 2. No cert exists — generate via knode gRPC
+	if s.ClientCertSvc == nil {
+		return "", ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := s.ClientCertSvc.GenerateClientCert(ctx, nodeID, username)
+	if err != nil {
+		// Log but don't fail — user just won't get cert in profile
+		return "", ""
+	}
+
+	// 3. Store cert and key in DB
+	_, _ = s.DB.Exec(
+		`INSERT INTO vpn_certificates (node_id, type, status, username, content, name, is_default, created_at)
+		 VALUES ($1, 'client-cert', 'active', $2, $3, $4, FALSE, NOW())`,
+		nodeID, username, result.CertPEM, username+"-cert",
+	)
+	_, _ = s.DB.Exec(
+		`INSERT INTO vpn_certificates (node_id, type, status, username, content, name, is_default, created_at)
+		 VALUES ($1, 'client-key', 'active', $2, $3, $4, FALSE, NOW())`,
+		nodeID, username, result.KeyPEM, username+"-key",
+	)
+
+	// 4. Also update the CA cert in DB if it changed (knode is source of truth)
+	if result.CAPEM != "" {
+		var existingCA string
+		_ = s.DB.QueryRow(`SELECT content FROM vpn_certificates WHERE node_id=$1 AND type='ca' AND status='active' LIMIT 1`, nodeID).Scan(&existingCA)
+		if strings.TrimSpace(existingCA) != strings.TrimSpace(result.CAPEM) {
+			// Update existing or insert new
+			if existingCA != "" {
+				_, _ = s.DB.Exec(`UPDATE vpn_certificates SET content=$1 WHERE node_id=$2 AND type='ca' AND status='active'`, result.CAPEM, nodeID)
+			} else {
+				_, _ = s.DB.Exec(
+					`INSERT INTO vpn_certificates (node_id, type, status, content, name, is_default, created_at)
+					 VALUES ($1, 'ca', 'active', $2, 'ca-cert', TRUE, NOW())`,
+					nodeID, result.CAPEM,
+				)
+			}
+		}
+	}
+
+	return result.CertPEM, result.KeyPEM
 }

@@ -43,6 +43,7 @@ type Server struct {
 	CoreMgr              *grpcclient.CoreManager
 	TunnelMgr            *grpcclient.TunnelManager
 	CertMgr              *grpcclient.CertManager
+	ClientCertSvc        *grpcclient.ClientCertService
 	SessionMgr           *grpcclient.SessionManager
 	UserSync             *grpcclient.UserSyncService
 	TrafficCollector     *grpcclient.TrafficCollector
