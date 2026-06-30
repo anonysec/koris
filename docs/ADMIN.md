@@ -86,6 +86,10 @@ Nodes are the VPN servers that customers connect to.
    - Protocols supported
 4. Save — the panel generates an auth token
 
+### Automatic CA Certificate Sync
+
+When a new node is registered, the panel automatically copies the master OpenVPN CA certificate from an existing node to the new one. This ensures client certificates issued by the primary CA are trusted by all nodes without manual intervention. No admin action is required — the sync happens during node registration.
+
 ### Node Agent Setup
 
 On the VPN node server, run the node installer:
