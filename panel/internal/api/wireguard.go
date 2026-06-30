@@ -361,7 +361,7 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 	// Get the node's public IP or domain as the endpoint
 	var nodeIP, nodeDomain string
 	var wgPort int
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT COALESCE(address,''), COALESCE(domain,'') FROM knode_connections WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
 	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
 	// Prefer backup_domain from extra_json (failover domain), then node domain, then IP
@@ -552,7 +552,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 	// Get node endpoint
 	var nodeIP, nodeDomain string
 	var wgPort int
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT COALESCE(address,''), COALESCE(domain,'') FROM knode_connections WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
 	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
 	if nodeDomain != "" {
@@ -583,7 +583,7 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 
 	// Serve as downloadable .conf file
 	var nodeName string
-	_ = s.DB.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeName)
+	_ = s.DB.QueryRow(`SELECT COALESCE(name,'') FROM knode_connections WHERE id=$1`, peer.NodeID).Scan(&nodeName)
 	if nodeName == "" {
 		nodeName = fmt.Sprintf("node%d", peer.NodeID)
 	}
@@ -853,7 +853,7 @@ func (s *Server) portalWireguardPeerQR(w http.ResponseWriter, r *http.Request, i
 	// Get node endpoint
 	var nodeIP, nodeDomain string
 	var wgPort int
-	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
+	_ = s.DB.QueryRow(`SELECT COALESCE(address,''), COALESCE(domain,'') FROM knode_connections WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
 	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
 	if nodeDomain != "" {
