@@ -275,8 +275,14 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 	authLine := "auth-user-pass\n"
 	authComment := "# Login with your VPN username/password when OpenVPN asks for credentials."
 	if !withAuth {
-		authLine = ""
-		authComment = "# Passwordless mode — no credentials required."
+		// Passwordless mode: embed credentials inline so the user is never prompted.
+		var password string
+		_ = s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=$1 AND attribute='Cleartext-Password' ORDER BY id DESC LIMIT 1`, username).Scan(&password)
+		if password == "" {
+			password = "nopass"
+		}
+		authLine = fmt.Sprintf("auth-user-pass\n\n<auth-user-pass>\n%s\n%s\n</auth-user-pass>\n", username, password)
+		authComment = "# Passwordless mode — credentials are embedded, no prompt needed."
 	}
 
 	// Build remote lines using domain bindings in failover position order.
