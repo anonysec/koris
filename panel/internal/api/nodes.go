@@ -464,4 +464,17 @@ func (s *Server) insertDefaultVpnConfigs(nodeID int64) {
 		_, _ = s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json) VALUES($1, $2, 0, $3, $4, $5) ON CONFLICT (node_id, protocol) DO NOTHING`,
 			nodeID, dc.protocol, dc.port, dc.network, dc.extra)
 	}
+
+	// Auto-sync: copy the master OpenVPN CA cert from the primary node to this new node.
+	// This ensures client certificates issued by the primary CA are trusted by all nodes.
+	var masterCA string
+	_ = s.DB.QueryRow(`SELECT content FROM vpn_certificates WHERE type='ca' AND status='active' AND node_id != $1 ORDER BY is_default DESC, id ASC LIMIT 1`, nodeID).Scan(&masterCA)
+	if masterCA != "" {
+		_, _ = s.DB.Exec(
+			`INSERT INTO vpn_certificates (node_id, type, status, content, name, is_default, created_at)
+			 VALUES ($1, 'ca', 'active', $2, 'ca-cert', TRUE, NOW())
+			 ON CONFLICT DO NOTHING`,
+			nodeID, masterCA,
+		)
+	}
 }
