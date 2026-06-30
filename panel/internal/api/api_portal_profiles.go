@@ -683,7 +683,32 @@ func (s *Server) ensureClientCert(username string, nodeID int64) (string, string
 		return clientCert, clientKey
 	}
 
-	// 2. No cert exists — generate via knode gRPC
+	// 2. Check if user has a cert from another node (same CA = interchangeable)
+	_ = s.DB.QueryRow(
+		`SELECT content FROM vpn_certificates WHERE type='client-cert' AND status='active' AND username=$1 LIMIT 1`,
+		username,
+	).Scan(&clientCert)
+	_ = s.DB.QueryRow(
+		`SELECT content FROM vpn_certificates WHERE type='client-key' AND status='active' AND username=$1 LIMIT 1`,
+		username,
+	).Scan(&clientKey)
+
+	if clientCert != "" && clientKey != "" {
+		// Cache for this node too
+		_, _ = s.DB.Exec(
+			`INSERT INTO vpn_certificates (node_id, type, status, username, content, name, is_default, created_at)
+			 VALUES ($1, 'client-cert', 'active', $2, $3, $4, FALSE, NOW()) ON CONFLICT DO NOTHING`,
+			nodeID, username, clientCert, username+"-cert",
+		)
+		_, _ = s.DB.Exec(
+			`INSERT INTO vpn_certificates (node_id, type, status, username, content, name, is_default, created_at)
+			 VALUES ($1, 'client-key', 'active', $2, $3, $4, FALSE, NOW()) ON CONFLICT DO NOTHING`,
+			nodeID, username, clientKey, username+"-key",
+		)
+		return clientCert, clientKey
+	}
+
+	// 3. No cert exists anywhere — generate via knode gRPC
 	if s.ClientCertSvc == nil {
 		return "", ""
 	}
