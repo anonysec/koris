@@ -51,7 +51,8 @@ func initGRPCSubsystem(ctx context.Context, database *sql.DB, cfg config.Config,
 	store := mariadb.NewFromDB(database)
 
 	// 2. Initialize node registry with credential encryption.
-	encryptor := noderegistry.NewEncryptor(cfg.SessionSecret)
+	encKey := cfg.SessionSecret + "-node-encryption"
+	encryptor := noderegistry.NewEncryptor(encKey)
 	registry := noderegistry.NewDBRegistry(database, encryptor)
 	log.Info("grpc-client", "node registry initialized")
 

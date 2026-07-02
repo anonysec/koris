@@ -143,7 +143,7 @@ func (s *Server) runProvisionSSH(provisionID, host string, port int, user, passw
 	sshConfig := &ssh.ClientConfig{
 		User:            user,
 		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error { return nil },
 		Timeout:         30 * time.Second,
 	}
 
