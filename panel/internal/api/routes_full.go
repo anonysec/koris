@@ -81,14 +81,6 @@ func (s *Server) registerExcludedRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/admin/landing-content", s.requireFullAdmin(s.handleAdminLandingContent))
 	mux.HandleFunc("/api/admin/landing-page/check-blocklist", s.requireFullAdmin(s.adminLandingBlocklistCheck))
 
-	// Xray
-	mux.HandleFunc("/api/xray/inbounds", s.requireFullAdmin(s.handleXrayInbound))
-	mux.HandleFunc("/api/xray/inbounds/", s.requireFullAdmin(s.handleXrayInboundByID))
-	mux.HandleFunc("/api/admin/xray/templates", s.requireFullAdmin(s.handleXrayTemplates))
-	mux.HandleFunc("/api/admin/xray/templates/", s.requireFullAdmin(s.handleXrayTemplateByID))
-	mux.HandleFunc("/api/portal/xray/subscription", s.requireCustomer(s.handleXraySubscription))
-	mux.HandleFunc("/api/portal/xray/links", s.requireCustomer(s.handleXrayLinks))
-	mux.HandleFunc("/api/sub/", s.xraySubscription)
 
 	// MTProto
 	mux.HandleFunc("/api/admin/mtproto", s.requireFullAdmin(s.handleMTProto))

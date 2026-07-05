@@ -70,14 +70,6 @@ func (s *Server) registerExcludedRoutes(mux *http.ServeMux) {
 		"/api/export/payments.csv",
 		"/api/export/wallet-transactions.csv",
 		"/api/export/revenue.csv",
-		// Xray
-		"/api/xray/inbounds",
-		"/api/xray/inbounds/",
-		"/api/admin/xray/templates",
-		"/api/admin/xray/templates/",
-		"/api/portal/xray/subscription",
-		"/api/portal/xray/links",
-		"/api/sub/",
 		// MTProto
 		"/api/admin/mtproto",
 		"/api/admin/mtproto/",

@@ -55,7 +55,6 @@ const router = createRouter({
         { path: 'wireguard', redirect: '/dashboard/services' },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
         { path: 'telegram-proxies', redirect: '/dashboard/services' },
-        { path: 'xray', redirect: '/dashboard/services' },
         { path: 'mtproto', redirect: '/dashboard/services' },
         { path: 'canned-responses', name: 'canned-responses', component: () => import('@/views/CannedResponsesView.vue') },
         { path: 'sla-config', name: 'sla-config', component: () => import('@/views/SLAConfigView.vue') },

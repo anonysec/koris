@@ -25,8 +25,6 @@ const router = createRouter({
     { path: '/usage', redirect: '/' },
     { path: '/vpn-profiles', redirect: '/' },
     { path: '/anyconnect', redirect: '/' },
-    { path: '/xray', redirect: '/' },
-    { path: '/xray/subscription', redirect: '/' },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ]
 })

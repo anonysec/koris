@@ -73,8 +73,6 @@ func (s *Server) nodeByID(w http.ResponseWriter, r *http.Request) {
 		s.setNodeStatus(w, id, "disabled")
 	case "assign-group":
 		s.assignNodeToGroup(w, r, id)
-	case "migrate":
-		s.handleNodeMigrate(w, r, id)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -103,11 +101,11 @@ func (s *Server) listNodes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Build IN clause placeholders
+		// Build IN clause placeholders (PostgreSQL $n syntax)
 		placeholders := make([]string, len(filtered))
 		args := make([]any, len(filtered))
 		for i, t := range filtered {
-			placeholders[i] = "?"
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
 			args[i] = t
 		}
 
@@ -356,7 +354,7 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 					// Send CoA disconnect (best effort)
 					go func(u, sid, ip string) {
 						attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", u, sid)
-						cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", "testing123")
+						cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", s.radiusSecret())
 						cmd.Stdin = strings.NewReader(attrs)
 						_ = cmd.Run()
 					}(username, sessionID, nasIP)

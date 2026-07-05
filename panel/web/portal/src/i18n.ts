@@ -5,6 +5,7 @@ export type { Locale }
 
 const messages: Record<Locale, Record<string, string>> = {
   en: {
+    downloadQR: 'Download QR',
     // Nav / Shell
     'portal.nav.dashboard': 'Dashboard',
     'portal.nav.home': 'Home',
@@ -93,23 +94,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.apps.title': 'Download Apps',
     'portal.apps.desc': 'Get the app for your device to connect easily.',
 
-    // Xray Configs section
-    'portal.nav.xray': 'Xray',
-    'portal.xray.title': 'Xray Configs',
-    'portal.xray.subtitle': 'Your proxy configurations for bypassing restrictions.',
-    'portal.xray.subscriptionTitle': 'Subscription Link',
-    'portal.xray.subscriptionDesc': 'Add this link to your VPN app (v2rayN, Clash, Shadowrocket) to auto-import all configs.',
-    'portal.xray.copy': 'Copy',
-    'portal.xray.copied': 'Copied!',
-    'portal.xray.showQR': 'Show QR',
-    'portal.xray.hideQR': 'Hide QR',
-    'portal.xray.downloadQR': 'Download PNG',
-    'portal.xray.configsTitle': 'Config Links',
-    'portal.xray.configsDesc': 'Individual protocol links — copy or scan the QR code.',
-    'portal.xray.noConfigs': 'No configs available',
-    'portal.xray.noConfigsDesc': 'Xray configuration links will appear here when your account is set up.',
-    'portal.xray.appsTitle': 'Recommended Apps',
-    'portal.xray.appsDesc': 'Download a compatible app for your device.',
 
     // Cisco IPSec section
     'portal.cisco.desc': 'IKEv1 + XAUTH — iOS, macOS, Android',
@@ -181,6 +165,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.support.yourRating': 'Your rating',
   },
   fa: {
+    downloadQR: 'Download QR',
     // Nav / Shell
     'portal.nav.dashboard': 'داشبورد',
     'portal.nav.home': 'خانه',
@@ -269,23 +254,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.apps.title': 'دانلود اپلیکیشن',
     'portal.apps.desc': 'اپ مناسب دستگاه خود را دانلود کنید تا راحت وصل شوید.',
 
-    // Xray Configs section
-    'portal.nav.xray': 'Xray',
-    'portal.xray.title': 'تنظیمات Xray',
-    'portal.xray.subtitle': 'پیکربندی‌های پروکسی شما برای دور زدن محدودیت‌ها.',
-    'portal.xray.subscriptionTitle': 'لینک اشتراک',
-    'portal.xray.subscriptionDesc': 'این لینک را به اپ VPN خود (v2rayN، Clash، Shadowrocket) اضافه کنید تا همه کانفیگ‌ها به‌صورت خودکار وارد شوند.',
-    'portal.xray.copy': 'کپی',
-    'portal.xray.copied': 'کپی شد!',
-    'portal.xray.showQR': 'نمایش QR',
-    'portal.xray.hideQR': 'مخفی کردن QR',
-    'portal.xray.downloadQR': 'دانلود PNG',
-    'portal.xray.configsTitle': 'لینک‌های کانفیگ',
-    'portal.xray.configsDesc': 'لینک‌های جداگانه هر پروتکل — کپی کنید یا کد QR را اسکن کنید.',
-    'portal.xray.noConfigs': 'کانفیگی موجود نیست',
-    'portal.xray.noConfigsDesc': 'لینک‌های تنظیمات Xray وقتی حساب شما فعال شود اینجا نمایش داده می‌شوند.',
-    'portal.xray.appsTitle': 'اپلیکیشن‌های پیشنهادی',
-    'portal.xray.appsDesc': 'یک اپ سازگار برای دستگاه خود دانلود کنید.',
 
     // Cisco IPSec section
     'portal.cisco.desc': 'IKEv1 + XAUTH — iOS، macOS، اندروید',
@@ -357,6 +325,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.support.yourRating': 'امتیاز شما',
   },
   zh: {
+    downloadQR: 'Download QR',
     // Nav / Shell
     'portal.nav.dashboard': '仪表盘',
     'portal.nav.home': '首页',
@@ -445,23 +414,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.apps.title': '下载应用',
     'portal.apps.desc': '下载适合您设备的应用，轻松连接。',
 
-    // Xray Configs section
-    'portal.nav.xray': 'Xray',
-    'portal.xray.title': 'Xray 配置',
-    'portal.xray.subtitle': '您的代理配置，用于绕过网络限制。',
-    'portal.xray.subscriptionTitle': '订阅链接',
-    'portal.xray.subscriptionDesc': '将此链接添加到您的VPN应用（v2rayN、Clash、Shadowrocket）中，自动导入所有配置。',
-    'portal.xray.copy': '复制',
-    'portal.xray.copied': '已复制！',
-    'portal.xray.showQR': '显示二维码',
-    'portal.xray.hideQR': '隐藏二维码',
-    'portal.xray.downloadQR': '下载PNG',
-    'portal.xray.configsTitle': '配置链接',
-    'portal.xray.configsDesc': '各协议的单独链接 — 复制或扫描二维码。',
-    'portal.xray.noConfigs': '暂无配置',
-    'portal.xray.noConfigsDesc': '当您的账户配置完成后，Xray配置链接将显示在此处。',
-    'portal.xray.appsTitle': '推荐应用',
-    'portal.xray.appsDesc': '下载适合您设备的兼容应用。',
 
     // Cisco IPSec section
     'portal.cisco.desc': 'IKEv1 + XAUTH — iOS、macOS、Android',
@@ -533,6 +485,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.support.yourRating': '您的评分',
   },
   ru: {
+    downloadQR: 'Download QR',
     // Nav / Shell
     'portal.nav.dashboard': 'Панель',
     'portal.nav.home': 'Главная',
@@ -610,23 +563,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.apps.title': 'Скачать приложения',
     'portal.apps.desc': 'Скачайте приложение для вашего устройства.',
 
-    // Xray Configs section
-    'portal.nav.xray': 'Xray',
-    'portal.xray.title': 'Конфигурации Xray',
-    'portal.xray.subtitle': 'Ваши прокси-конфигурации для обхода ограничений.',
-    'portal.xray.subscriptionTitle': 'Ссылка подписки',
-    'portal.xray.subscriptionDesc': 'Добавьте эту ссылку в VPN-приложение (v2rayN, Clash, Shadowrocket) для автоматического импорта всех конфигов.',
-    'portal.xray.copy': 'Копировать',
-    'portal.xray.copied': 'Скопировано!',
-    'portal.xray.showQR': 'Показать QR',
-    'portal.xray.hideQR': 'Скрыть QR',
-    'portal.xray.downloadQR': 'Скачать PNG',
-    'portal.xray.configsTitle': 'Ссылки конфигов',
-    'portal.xray.configsDesc': 'Отдельные ссылки протоколов — скопируйте или отсканируйте QR-код.',
-    'portal.xray.noConfigs': 'Нет конфигураций',
-    'portal.xray.noConfigsDesc': 'Ссылки конфигурации Xray появятся здесь, когда ваш аккаунт будет настроен.',
-    'portal.xray.appsTitle': 'Рекомендуемые приложения',
-    'portal.xray.appsDesc': 'Скачайте совместимое приложение для вашего устройства.',
 
     // Cisco IPSec section
     'portal.cisco.desc': 'IKEv1 + XAUTH — iOS, macOS, Android',

@@ -246,7 +246,6 @@ const navGroups = computed<NavGroup[]>(() => {
       { route: 'protocols', label: t('nav.protocols'), icon: 'wireguard' },
       { route: 'backups', label: t('nav.backups'), icon: 'backups' },
       { route: 'telegram-proxies', label: t('nav.telegram_proxies'), icon: 'telegram' },
-      { route: 'xray', label: t('nav.xray'), icon: 'xray' },
     ],
   })
 
@@ -474,11 +473,7 @@ function handleToggleTheme() {
               <path d="M22 2L11 13" />
               <path d="M22 2L15 22L11 13L2 9L22 2Z" />
             </svg>
-            <!-- Xray icon (lightning/bolt) -->
-            <svg v-else-if="item.icon === 'xray'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
-            <!-- Metrics icon (chart) -->
+                        <!-- Metrics icon (chart) -->
             <svg v-else-if="item.icon === 'metrics'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 3v18h18" />
               <path d="M7 14l4-4 4 4 5-5" />

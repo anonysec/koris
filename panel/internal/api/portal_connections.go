@@ -122,8 +122,6 @@ func normalizeProtocol(raw string) string {
 		return "ssh"
 	case strings.Contains(lower, "mtproto"):
 		return "mtproto"
-	case strings.Contains(lower, "xray"):
-		return "xray"
 	default:
 		// If it looks like an IP address or empty, default to openvpn
 		if raw == "" || strings.Contains(raw, ".") || strings.Contains(raw, ":") {

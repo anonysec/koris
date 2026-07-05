@@ -18,7 +18,7 @@ const MaxContentFieldLength = 5000
 // vpnRelatedTerms are terms that identify VPN-related headers that must be stripped.
 var vpnRelatedTerms = []string{
 	"vpn", "proxy", "tunnel", "openvpn", "wireguard", "ikev2",
-	"l2tp", "xray", "vless", "vmess", "trojan", "mtproto",
+	"l2tp", "vless", "vmess", "trojan", "mtproto",
 	"shadowsocks", "v2ray", "koris", "korispanel", "panel",
 }
 

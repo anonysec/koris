@@ -25,7 +25,6 @@ const protocolIcons: Record<string, string> = {
   ikev2: '🔑',
   ssh: '💻',
   mtproto: '📡',
-  xray: '⚡',
 }
 
 const protocolNames: Record<string, string> = {
@@ -35,7 +34,6 @@ const protocolNames: Record<string, string> = {
   ikev2: 'IKEv2',
   ssh: 'SSH',
   mtproto: 'MTProto',
-  xray: 'Xray',
 }
 
 const icon = computed(() => protocolIcons[props.core.type] || '📦')
