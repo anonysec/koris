@@ -814,4 +814,20 @@ function handleToggleTheme() {
   cursor: default;
 }
 
+
+/* ── Premium overhaul: depth, active glow, motion ── */
+.sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 26%),
+    color-mix(in srgb, var(--color-surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 1px 0 0 color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+.nav-item { transition: background var(--duration-fast,0.15s) var(--ease-out,ease), color var(--duration-fast,0.15s), transform var(--duration-fast,0.15s); }
+.nav-item:hover { transform: translateX(2px); }
+.nav-item.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 24%, transparent), color-mix(in srgb, var(--color-primary) 5%, transparent));
+  box-shadow: inset 3px 0 0 var(--color-primary), 0 0 20px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+.nav-item.active svg { color: var(--color-primary); }
 </style>

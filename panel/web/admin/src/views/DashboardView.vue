@@ -593,4 +593,53 @@ function formatDuration(seconds: number): string {
 @media (max-width: 768px) {
   .charts-row, .bottom-row { grid-template-columns: 1fr; }
 }
+
+/* ── Premium overhaul: stat chips, accent bars, motion ── */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.30));
+  transition: transform var(--duration-fast,0.15s) var(--ease-out,ease), border-color var(--duration-fast,0.15s), box-shadow var(--duration-fast,0.15s);
+}
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--gradient-brand, linear-gradient(180deg, var(--color-primary), var(--color-brand-2)));
+  opacity: 0.85;
+}
+.stat-card--clickable:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+  box-shadow: var(--shadow-md, 0 12px 28px rgba(0,0,0,0.35));
+}
+.stat-card__icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: var(--gradient-brand, linear-gradient(135deg, var(--color-primary), var(--color-brand-2)));
+  box-shadow: var(--shadow-brand, 0 6px 18px rgba(91,157,255,0.35));
+  font-size: 1.4rem;
+}
+.panel, .chart-panel {
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.30));
+  transition: box-shadow var(--duration-fast,0.15s), border-color var(--duration-fast,0.15s);
+}
+.panel:hover, .chart-panel:hover {
+  box-shadow: var(--shadow-md, 0 12px 28px rgba(0,0,0,0.32));
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+}
+.panel-title { position: relative; padding-left: 12px; }
+.panel-title::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 2px; bottom: 2px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--gradient-brand, linear-gradient(180deg, var(--color-primary), var(--color-brand-2)));
+}
 </style>
