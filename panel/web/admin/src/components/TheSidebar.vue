@@ -243,6 +243,7 @@ const navGroups = computed<NavGroup[]>(() => {
     title: t('nav.group_infrastructure'),
     items: [
       { route: 'services', label: t('nav.services'), icon: 'services' },
+      { route: 'protocols', label: t('nav.protocols'), icon: 'wireguard' },
       { route: 'backups', label: t('nav.backups'), icon: 'backups' },
       { route: 'telegram-proxies', label: t('nav.telegram_proxies'), icon: 'telegram' },
       { route: 'xray', label: t('nav.xray'), icon: 'xray' },
@@ -285,7 +286,10 @@ const navGroups = computed<NavGroup[]>(() => {
     groups.push({
       id: 'system',
       title: t('nav.group_system'),
-      items: [{ route: 'settings', label: t('nav.settings'), icon: 'settings' }],
+      items: [
+        { route: 'settings', label: t('nav.settings'), icon: 'settings' },
+        { route: 'telegram-bot', label: t('nav.telegram_bot'), icon: 'telegram' },
+      ],
     })
   }
 
@@ -347,6 +351,8 @@ function isActive(route: string): boolean {
   if (route === 'reseller-tickets') {
     return ['reseller-tickets', 'reseller-ticket-detail'].includes(props.currentRoute)
   }
+  if (route === 'protocols') return props.currentRoute === 'protocols'
+  if (route === 'telegram-bot') return props.currentRoute === 'telegram-bot'
   return props.currentRoute === route
 }
 

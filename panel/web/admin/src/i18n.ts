@@ -23,6 +23,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_customers': 'Customers',
     'nav.group_billing': 'Billing',
     'nav.group_support': 'Support',
+    'nav.protocols': 'Protocols',
+    'nav.telegram_bot': 'Telegram Bot',
     'nav.telegram_proxies': 'Telegram Proxies',
     // Page titles
     'page.dashboard': 'Dashboard',
@@ -1101,6 +1103,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_customers': 'مشتریان',
     'nav.group_billing': 'صورت‌حساب',
     'nav.group_support': 'پشتیبانی',
+    'nav.protocols': 'پروتکل‌ها',
+    'nav.telegram_bot': 'بات تلگرام',
     'nav.telegram_proxies': 'پراکسی‌های تلگرام',
     // Page titles
     'page.dashboard': 'داشبورد',
@@ -2010,6 +2014,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_customers': '客户',
     'nav.group_billing': '账单',
     'nav.group_support': '支持',
+    'nav.protocols': '协议',
+    'nav.telegram_bot': 'Telegram 机器人',
     // Page titles
     'page.dashboard': '仪表盘',
     'page.transactions': '交易记录',
@@ -2805,6 +2811,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_customers': 'Клиенты',
     'nav.group_billing': 'Биллинг',
     'nav.group_support': 'Поддержка',
+    'nav.protocols': 'Протоколы',
+    'nav.telegram_bot': 'Telegram-бот',
     // Page titles
     'page.dashboard': 'Панель',
     'page.transactions': 'Транзакции',
