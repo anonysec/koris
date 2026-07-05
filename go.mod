@@ -1,4 +1,4 @@
-module KorisPanel
+module github.com/anonysec/koris
 
 go 1.25.0
 
