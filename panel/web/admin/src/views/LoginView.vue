@@ -219,4 +219,49 @@ async function handleLogin() {
   .login-page { grid-template-columns: 1fr; }
   .login-hero { display: none; }
 }
+
+/* ── Premium overhaul: branded hero + floating glass form card ── */
+.login-hero {
+  background:
+    radial-gradient(900px 520px at 18% 16%, color-mix(in srgb, var(--color-brand-2) 55%, transparent), transparent 60%),
+    linear-gradient(150deg, color-mix(in srgb, var(--color-primary) 92%, #05070d), color-mix(in srgb, var(--color-brand-2) 78%, #05070d));
+  color: #fff;
+}
+.login-hero__logo-icon,
+.login-hero__logo-text { color: #fff; }
+.login-hero__title { color: #fff; }
+.login-hero__desc { color: rgba(255,255,255,0.82); }
+.login-hero__gradient {
+  background: radial-gradient(circle at 70% 28%, rgba(255,255,255,0.20), transparent 45%);
+  animation: loginGlow 9s ease-in-out infinite alternate;
+}
+@keyframes loginGlow {
+  from { transform: translate3d(0,0,0) scale(1); opacity: .55; }
+  to   { transform: translate3d(0,-18px,0) scale(1.12); opacity: 1; }
+}
+.login-hero__content { animation: loginRise 0.7s var(--ease-out, ease) both; }
+@keyframes loginRise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
+}
+.login-form-wrapper {
+  background:
+    radial-gradient(700px 420px at 100% 0%, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 55%),
+    var(--color-bg);
+}
+.login-form {
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl, 20px);
+  padding: var(--space-7, 36px);
+  box-shadow: var(--shadow-lg, 0 24px 60px rgba(0,0,0,0.35));
+  backdrop-filter: blur(10px);
+  animation: loginRise 0.7s var(--ease-out, ease) 0.08s both;
+}
+.login-form__title {
+  background: var(--gradient-brand, linear-gradient(135deg, var(--color-primary), var(--color-brand-2)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 </style>

@@ -709,4 +709,24 @@ function formatTime(timestamp: string): string {
   font-weight: 600;
 }
 
+
+/* ── Premium overhaul: sticky glass topbar, glow on controls ── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: var(--space-3, 12px) 0;
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+.icon-btn:hover {
+  background: var(--color-surface-2);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  color: var(--color-text);
+}
+.search-box:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
 </style>
