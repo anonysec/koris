@@ -251,7 +251,7 @@ HTTP_CODE=$(curl -sSL -o "$BINARY_PATH" -w "%{http_code}" \
 if [[ "$HTTP_CODE" != "200" ]]; then
     warn "Could not download binary from panel (HTTP $HTTP_CODE)."
     warn "The node agent binary may need to be installed manually."
-    warn "See: https://github.com/anonysec/panel for instructions."
+    warn "See: https://github.com/anonysec/koris for instructions."
 fi
 
 if [[ -f "$BINARY_PATH" ]]; then

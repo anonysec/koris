@@ -32,8 +32,8 @@ The installer accepts the following flags:
 ### Manual Installation
 
 ```bash
-git clone https://github.com/anonysec/KorisPanel.git /opt/KorisPanel
-cd /opt/KorisPanel
+git clone https://github.com/anonysec/KorisPanel.git /opt/koris
+cd /opt/koris
 docker compose build && docker compose up -d
 ```
 

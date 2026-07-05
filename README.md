@@ -46,7 +46,7 @@ Manage your entire VPN infrastructure from a single dashboard: nodes, customers,
 ### Docker (recommended)
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 ```
 
 Running without flags launches an interactive prompt for edition, domain, port, DB, and SSL configuration. If an existing installation is detected, the installer offers reinstall, full wipe, update, or cancel options before proceeding.
@@ -114,7 +114,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/anonysec/knode/master/install.
 
 ```bash
 # Clone
-git clone https://github.com/anonysec/panel.git
+git clone https://github.com/anonysec/koris.git
 cd panel
 
 # Backend
