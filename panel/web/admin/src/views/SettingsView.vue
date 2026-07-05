@@ -292,6 +292,7 @@ const telegramToken = ref('')
 const telegramChatId = ref('')
 const savingTelegram = ref(false)
 const testingBot = ref(false)
+const botConfigured = computed(() => !!(telegramToken.value || '').trim())
 
 async function loadTelegramSettings(): Promise<void> {
   try {
@@ -722,15 +723,25 @@ onMounted(async () => {
 
       <!-- Telegram Bot -->
       <template #telegram>
-        <div class="settings-panel">
-          <h4 class="section-title">{{ t('settings.telegram') }}</h4>
+        <div class="settings-panel telegram-panel">
+          <div class="telegram-head">
+            <div>
+              <h4 class="section-title">{{ t('settings.telegram') }}</h4>
+              <p class="section-desc">Connect a Telegram bot to receive admin alerts and run commands from chat.</p>
+            </div>
+            <span class="bot-status" :class="botConfigured ? 'is-on' : 'is-off'">
+              <span class="bot-status__dot" />
+              {{ botConfigured ? 'Connected' : 'Not set up' }}
+            </span>
+          </div>
+
           <form class="settings-form" autocomplete="off" @submit.prevent="saveTelegramSettings">
-            <KFormField name="tg-token" :label="t('settings.telegram_token')" hint="Get this from @BotFather">
+            <KFormField name="tg-token" :label="t('settings.telegram_token')" hint="Get the token from @BotFather">
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="telegramToken" placeholder="123456:ABC-DEF..." type="password" autocomplete="new-password" />
               </template>
             </KFormField>
-            <KFormField name="tg-chat" :label="t('settings.telegram_chat')">
+            <KFormField name="tg-chat" :label="t('settings.telegram_chat')" hint="Admin chat or group ID that receives alerts">
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="telegramChatId" placeholder="-1001234567890" />
               </template>
@@ -740,6 +751,11 @@ onMounted(async () => {
               <KButton type="button" variant="ghost" size="sm" :loading="testingBot" @click="testBot">{{ t('settings.test_bot') }}</KButton>
             </div>
           </form>
+
+          <div class="telegram-help">
+            <strong>How it works</strong>
+            <p>Save the token, then press <em>Test &amp; Restart</em> to bring the bot online. It reads its configuration from the database and alerts the admin chats you specify.</p>
+          </div>
         </div>
       </template>
 
@@ -879,4 +895,40 @@ onMounted(async () => {
 
 
 
+/* ── Telegram bot polish ── */
+.telegram-panel { max-width: 560px; }
+.telegram-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4, 16px);
+  margin-bottom: var(--space-5, 20px);
+}
+.section-desc { margin: 6px 0 0; color: var(--color-muted, #8b98a5); font-size: var(--text-sm, 13px); line-height: 1.5; }
+.bot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: var(--text-xs, 11px);
+  font-weight: var(--font-semibold, 600);
+  border: 1px solid var(--color-border, #28333f);
+  background: var(--color-surface-2, #1e2630);
+  color: var(--color-muted, #8b98a5);
+}
+.bot-status__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-muted, #8b98a5); }
+.bot-status.is-on { color: var(--color-success, #22c55e); border-color: color-mix(in srgb, var(--color-success, #22c55e) 40%, var(--color-border, #28333f)); }
+.bot-status.is-on .bot-status__dot { background: var(--color-success, #22c55e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success, #22c55e) 22%, transparent); }
+.telegram-help {
+  margin-top: var(--space-5, 20px);
+  padding: var(--space-4, 16px);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-2, #1e2630);
+}
+.telegram-help strong { color: var(--color-text, #e6edf3); font-size: var(--text-sm, 13px); }
+.telegram-help p { margin: 6px 0 0; color: var(--color-muted, #8b98a5); font-size: var(--text-sm, 13px); line-height: 1.55; }
+.telegram-help em { color: var(--color-primary, #2563eb); font-style: normal; font-weight: var(--font-semibold, 600); }
 </style>

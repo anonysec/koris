@@ -565,7 +565,10 @@ async function saveProtocolSettings() {
               >
                 <div class="card-left">
                   <span class="proto-icon">{{ proto.icon }}</span>
-                  <span class="proto-name">{{ proto.name }}</span>
+                  <span class="proto-meta">
+                    <span class="proto-name">{{ proto.name }}</span>
+                    <KStatusPill :status="entry.config[proto.key]?.enabled ? 'active' : 'inactive'" :label="entry.config[proto.key]?.enabled ? 'Enabled' : 'Disabled'" />
+                  </span>
                 </div>
                 <button
                   class="toggle-btn"
@@ -1167,4 +1170,7 @@ async function saveProtocolSettings() {
     min-width: unset;
   }
 }
+/* ── Protocol card status polish ── */
+.proto-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.proto-meta :deep(.status-pill) { transform: scale(0.92); transform-origin: left center; }
 </style>

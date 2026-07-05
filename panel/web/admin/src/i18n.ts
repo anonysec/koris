@@ -19,6 +19,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_overview': 'Overview',
     'nav.group_manage': 'Manage',
     'nav.group_system': 'System',
+    'nav.group_infrastructure': 'Infrastructure',
+    'nav.group_customers': 'Customers',
+    'nav.group_billing': 'Billing',
+    'nav.group_support': 'Support',
     'nav.telegram_proxies': 'Telegram Proxies',
     // Page titles
     'page.dashboard': 'Dashboard',
@@ -1093,6 +1097,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_overview': 'نمای کلی',
     'nav.group_manage': 'مدیریت',
     'nav.group_system': 'سیستم',
+    'nav.group_infrastructure': 'زیرساخت',
+    'nav.group_customers': 'مشتریان',
+    'nav.group_billing': 'صورت‌حساب',
+    'nav.group_support': 'پشتیبانی',
     'nav.telegram_proxies': 'پراکسی‌های تلگرام',
     // Page titles
     'page.dashboard': 'داشبورد',
@@ -1998,6 +2006,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_overview': '概览',
     'nav.group_manage': '管理',
     'nav.group_system': '系统',
+    'nav.group_infrastructure': '基础设施',
+    'nav.group_customers': '客户',
+    'nav.group_billing': '账单',
+    'nav.group_support': '支持',
     // Page titles
     'page.dashboard': '仪表盘',
     'page.transactions': '交易记录',
@@ -2789,6 +2801,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.group_overview': 'Обзор',
     'nav.group_manage': 'Управление',
     'nav.group_system': 'Система',
+    'nav.group_infrastructure': 'Инфраструктура',
+    'nav.group_customers': 'Клиенты',
+    'nav.group_billing': 'Биллинг',
+    'nav.group_support': 'Поддержка',
     // Page titles
     'page.dashboard': 'Панель',
     'page.transactions': 'Транзакции',

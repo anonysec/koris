@@ -237,7 +237,20 @@ const navGroups = computed<NavGroup[]>(() => {
     ],
   })
 
-  const manageItems: NavItem[] = [
+  // Infrastructure — nodes/services, protocol surfaces, backups
+  groups.push({
+    id: 'infrastructure',
+    title: t('nav.group_infrastructure'),
+    items: [
+      { route: 'services', label: t('nav.services'), icon: 'services' },
+      { route: 'backups', label: t('nav.backups'), icon: 'backups' },
+      { route: 'telegram-proxies', label: t('nav.telegram_proxies'), icon: 'telegram' },
+      { route: 'xray', label: t('nav.xray'), icon: 'xray' },
+    ],
+  })
+
+  // Customers
+  const customerItems: NavItem[] = [
     {
       route: 'users',
       label: t('nav.users'),
@@ -245,58 +258,34 @@ const navGroups = computed<NavGroup[]>(() => {
       badge: props.notificationCount > 0 ? props.notificationCount : undefined,
     },
   ]
-
-  if (!isReseller) {
-    manageItems.push(
-      {
-        route: 'services',
-        label: t('nav.services'),
-        icon: 'services',
-      },
-    )
-  }
-
   if (isFull.value) {
-    manageItems.push({
-      route: 'plans',
-      label: t('nav.plans'),
-      icon: 'plans',
-    })
+    customerItems.push({ route: 'plans', label: t('nav.plans'), icon: 'plans' })
   }
+  groups.push({ id: 'customers', title: t('nav.group_customers'), items: customerItems })
 
-  if (!isReseller && isFull.value) {
-    manageItems.push({
-      route: 'tickets',
-      label: t('nav.tickets'),
-      icon: 'tickets',
-    })
-  }
-
+  // Billing
   if (isFull.value) {
-    manageItems.push({
-      route: 'payments',
-      label: t('nav.transactions'),
-      icon: 'transactions',
+    groups.push({
+      id: 'billing',
+      title: t('nav.group_billing'),
+      items: [{ route: 'payments', label: t('nav.transactions'), icon: 'transactions' }],
     })
   }
 
-  groups.push({
-    id: 'manage',
-    title: t('nav.group_manage'),
-    items: manageItems,
-  })
+  // Support
+  const supportItems: NavItem[] = []
+  if (isFull.value) {
+    supportItems.push({ route: 'tickets', label: t('nav.tickets'), icon: 'tickets' })
+  }
+  supportItems.push({ route: 'notifications', label: t('nav.notifications'), icon: 'notifications' })
+  groups.push({ id: 'support', title: t('nav.group_support'), items: supportItems })
 
+  // System
   if (!isReseller) {
     groups.push({
       id: 'system',
       title: t('nav.group_system'),
-      items: [
-        {
-          route: 'settings',
-          label: t('nav.settings'),
-          icon: 'settings',
-        },
-      ],
+      items: [{ route: 'settings', label: t('nav.settings'), icon: 'settings' }],
     })
   }
 
@@ -468,6 +457,11 @@ function handleToggleTheme() {
             <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" />
+            </svg>
+            <!-- Notifications icon (bell) -->
+            <svg v-else-if="item.icon === 'notifications'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.7 21a2 2 0 01-3.4 0" />
             </svg>
             <!-- Telegram icon -->
             <svg v-else-if="item.icon === 'telegram'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
