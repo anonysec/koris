@@ -9,7 +9,7 @@ info()  { echo -e "${green}[+]${plain} $*"; }
 warn()  { echo -e "${yellow}[!]${plain} $*"; }
 error() { echo -e "${red}[-]${plain} $*"; }
 
-INSTALL_DIR="/opt/KorisPanel"
+INSTALL_DIR="/opt/koris"
 PANEL_ENV="/etc/koris/panel.env"
 NODE_ENV="/etc/knode/node.env"
 COMPOSE_FILE="${INSTALL_DIR}/docker-compose.yml"
@@ -204,7 +204,7 @@ cmd_uninstall() {
     else
         echo "    • Docker volumes: koris_db-data, koris_panel-data, koris_pgadmin-data"
     fi
-    echo "    • Installation directory: /opt/KorisPanel"
+    echo "    • Installation directory: /opt/koris"
     echo "    • Configuration: /etc/koris"
     echo "    • CLI binary: /usr/local/bin/koris"
     echo "    • Certbot cron jobs for Koris"
@@ -256,8 +256,8 @@ cmd_uninstall() {
     fi
 
     # 4. Remove installation directory
-    info "Removing /opt/KorisPanel..."
-    rm -rf /opt/KorisPanel 2>/dev/null || failures+=("remove /opt/KorisPanel")
+    info "Removing /opt/koris..."
+    rm -rf /opt/koris 2>/dev/null || failures+=("remove /opt/koris")
 
     # 5. Remove configuration
     if [[ "${keep_data}" != "yes" ]]; then

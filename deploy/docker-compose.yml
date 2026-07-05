@@ -1,0 +1,78 @@
+name: koris
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: koris-db
+    environment:
+      POSTGRES_DB: koris
+      POSTGRES_USER: koris
+      POSTGRES_PASSWORD: otF6FZHOvGV5TdVvgVZ2
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U koris"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  panel:
+    image: panel:fixed
+    container_name: panel
+    ports:
+      - "443:443"
+    environment:
+      PANEL_DEV_MODE: "false"
+      PANEL_SESSION_SECRET: "A5M23D9LoNL5bKCg8V2v9AezldPvDGJFi0E0DMmy"
+      PANEL_SETUP_KEY: "g1euL15HnBCbPBQN"
+      PANEL_PG_DSN: "postgres://koris:otF6FZHOvGV5TdVvgVZ2@db:5432/koris?sslmode=disable"
+      PANEL_DOMAIN: "imkoris.info"
+      # Configurable URLs (path or subdomain). Change and restart to reroute.
+      PANEL_ADMIN_PATH:  "/admin/"
+      PANEL_PORTAL_PATH: "/account/"
+      # PANEL_ADMIN_HOST:  "admin.imkoris.info"    # uncomment for subdomain routing
+      # PANEL_PORTAL_HOST: "account.imkoris.info"
+    volumes:
+      - /etc/koris:/etc/koris
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  knode:
+    image: knode:fixed
+    container_name: knode
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - /etc/knode:/etc/knode
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "62051:62050"
+    environment:
+      KNODE_INSTANCE: knode
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@koris.example.com
+      PGADMIN_DEFAULT_PASSWORD: H3fkG8fBXDwkyI6gBaXY
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  pgadmin-data:
