@@ -2,6 +2,8 @@
 
 import (
 	"context"
+	"KorisPanel/panel/internal/knodepb"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -67,23 +69,41 @@ func (tm *TunnelManager) SetupTunnel(ctx context.Context, nodeID int64, config T
 		return "", fmt.Errorf("node %q is offline, cannot setup tunnel", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.SetupTunnel(ctx, &knodepb.SetupTunnelRequest{
-	//       Protocol:    config.Protocol,
-	//       ExitAddress: config.ExitAddress,
-	//       ExitPort:    int32(config.ExitPort),
-	//       ExtraConfig: config.ExtraConfig,
-	//   })
-	//   if err != nil {
-	//       log.Printf("[knode] SetupTunnel failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
-	//       return "", err
-	//   }
-	//   tunnelID = resp.TunnelId
-	tunnelID := fmt.Sprintf("tunnel-%d-%s-%d", nodeID, config.Protocol, config.ExitPort)
-	log.Printf("[knode] SetupTunnel stub: would setup %s tunnel to %s:%d on node %q (id=%d)",
-		config.Protocol, config.ExitAddress, config.ExitPort, node.NodeName, nodeID)
+	// Map string protocol to proto enum
+	var protoEnum knodepb.TunnelProtocol
+	switch config.Protocol {
+	case "wireguard":
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_WIREGUARD
+	case "ssh":
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_SSH
+	case "vless_reality":
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_VLESS_REALITY
+	case "rathole":
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_RATHOLE
+	case "gre":
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_GRE
+	case "ipip":
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_IPIP
+	default:
+		protoEnum = knodepb.TunnelProtocol_TUNNEL_PROTOCOL_UNSPECIFIED
+	}
+
+	configBytes, _ := json.Marshal(config.ExtraConfig)
+
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	resp, rpcErr := client.SetupTunnel(ctx, &knodepb.SetupTunnelRequest{
+		Protocol: protoEnum,
+		ExitAddr: config.ExitAddress,
+		ExitPort: int32(config.ExitPort),
+		Config:   configBytes,
+	})
+	var tunnelID string
+	if rpcErr == nil {
+		tunnelID = resp.GetTunnelId()
+	} else {
+		log.Printf("[knode] SetupTunnel failed on node %q (id=%d): %v", node.NodeName, nodeID, rpcErr)
+		return "", fmt.Errorf("SetupTunnel RPC on node %q: %w", node.NodeName, rpcErr)
+	}
 
 	// Store tunnel_id in outbound_tunnels table on successful setup
 	if err := tm.storeTunnel(ctx, nodeID, tunnelID, config); err != nil {
@@ -116,14 +136,10 @@ func (tm *TunnelManager) TeardownTunnel(ctx context.Context, nodeID int64, tunne
 		return fmt.Errorf("node %q is offline, cannot teardown tunnel", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.TeardownTunnel(ctx, &knodepb.TeardownTunnelRequest{
-	//       TunnelId: tunnelID,
-	//   })
-	var rpcErr error // placeholder for actual RPC error
-	_ = node.Conn    // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	_, rpcErr := client.TeardownTunnel(ctx, &knodepb.TeardownTunnelRequest{
+		TunnelId: tunnelID,
+	})
 
 	if rpcErr != nil {
 		if status.Code(rpcErr) == codes.NotFound {
@@ -168,30 +184,26 @@ func (tm *TunnelManager) TunnelStatus(ctx context.Context, nodeID int64) ([]Tunn
 		return nil, fmt.Errorf("node %q is offline, cannot query tunnel status", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.TunnelStatus(ctx, &knodepb.TunnelStatusRequest{})
-	//   if err != nil {
-	//       log.Printf("[knode] TunnelStatus failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
-	//       return nil, err
-	//   }
-	//   tunnels := make([]TunnelInfo, 0, len(resp.Tunnels))
-	//   for _, t := range resp.Tunnels {
-	//       tunnels = append(tunnels, TunnelInfo{
-	//           TunnelID: t.TunnelId,
-	//           Protocol: t.Protocol,
-	//           ExitAddr: t.ExitAddress,
-	//           ExitPort: int(t.ExitPort),
-	//           State:    t.State,
-	//       })
-	//   }
-	//   return tunnels, nil
-	_ = node.Conn // will be used with proto client
-
-	log.Printf("[knode] TunnelStatus: fetching live tunnel state from node %q (id=%d)",
-		node.NodeName, nodeID)
-	return []TunnelInfo{}, nil
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	resp, err := client.TunnelStatus(ctx, &knodepb.TunnelStatusRequest{})
+	if err != nil {
+		log.Printf("[knode] TunnelStatus failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
+		return nil, err
+	}
+	tunnels := make([]TunnelInfo, 0, len(resp.GetTunnels()))
+	for _, t := range resp.GetTunnels() {
+		if t == nil {
+			continue
+		}
+		tunnels = append(tunnels, TunnelInfo{
+			TunnelID: t.GetTunnelId(),
+			Protocol: t.GetProtocol().String(),
+			ExitAddr: t.GetExitAddr(),
+			ExitPort: int(t.GetExitPort()),
+			State:    t.GetState().String(),
+		})
+	}
+	return tunnels, nil
 }
 
 // storeTunnel inserts a new tunnel record into the outbound_tunnels table.

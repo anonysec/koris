@@ -2,6 +2,7 @@ package grpcclient
 
 import (
 	"context"
+	"KorisPanel/panel/internal/knodepb"
 	"fmt"
 	"log"
 	"time"
@@ -46,21 +47,17 @@ func (cm *CertManager) SetCertificates(ctx context.Context, nodeID int64, coreTy
 		return fmt.Errorf("node %q is offline, cannot push certificates", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.SetCertificates(ctx, &knodepb.SetCertificatesRequest{
-	//       CoreType: coreType,
-	//       CaCert:   caCert,
-	//       Cert:     cert,
-	//       Key:      key,
-	//   })
-	//   if err != nil {
-	//       log.Printf("[knode] SetCertificates failed for core %q on node %q (id=%d): %v", coreType, node.NodeName, nodeID, err)
-	//       return fmt.Errorf("SetCertificates RPC failed: %w", err)
-	//   }
-	log.Printf("[knode] SetCertificates stub: would push certs for core %q to node %q (id=%d) — ca=%d bytes, cert=%d bytes, key=%d bytes",
-		coreType, node.NodeName, nodeID, len(caCert), len(cert), len(key))
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	_, err = client.SetCertificates(ctx, &knodepb.SetCertsRequest{
+		CoreType: coreType,
+		Ca:       caCert,
+		Cert:     cert,
+		Key:      key,
+	})
+	if err != nil {
+		log.Printf("[knode] SetCertificates failed for core %q on node %q (id=%d): %v", coreType, node.NodeName, nodeID, err)
+		return fmt.Errorf("SetCertificates RPC failed: %w", err)
+	}
 
 	return nil
 }
@@ -83,25 +80,20 @@ func (cm *CertManager) GetCertInfo(ctx context.Context, nodeID int64) ([]CertInf
 		return nil, fmt.Errorf("node %q is offline, cannot retrieve cert info", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.GetCertInfo(ctx, &knodepb.GetCertInfoRequest{})
-	//   if err != nil {
-	//       log.Printf("[knode] GetCertInfo failed for node %q (id=%d): %v", node.NodeName, nodeID, err)
-	//       return nil, fmt.Errorf("GetCertInfo RPC failed: %w", err)
-	//   }
-	//   var certs []CertInfo
-	//   for _, c := range resp.Certs {
-	//       certs = append(certs, CertInfo{
-	//           CoreType:  c.CoreType,
-	//           ExpiresAt: c.ExpiresAt.AsTime(),
-	//           Issuer:    c.Issuer,
-	//           Subject:   c.Subject,
-	//       })
-	//   }
-	//   return certs, nil
-	log.Printf("[knode] GetCertInfo stub: would retrieve cert info from node %q (id=%d)", node.NodeName, nodeID)
-
-	return []CertInfo{}, nil
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	resp, err := client.GetCertInfo(ctx, &knodepb.GetCertInfoRequest{})
+	if err != nil {
+		log.Printf("[knode] GetCertInfo failed for node %q (id=%d): %v", node.NodeName, nodeID, err)
+		return nil, fmt.Errorf("GetCertInfo RPC failed: %w", err)
+	}
+	var certs []CertInfo
+	if resp != nil {
+		certs = append(certs, CertInfo{
+			CoreType:  "",
+			ExpiresAt: resp.GetNotAfter().AsTime(),
+			Issuer:    resp.GetIssuer(),
+			Subject:   resp.GetSubject(),
+		})
+	}
+	return certs, nil
 }

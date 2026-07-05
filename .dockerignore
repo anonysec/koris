@@ -6,7 +6,6 @@
 **/node_modules
 
 # Pre-built frontend (rebuilt in Docker from source)
-panel/web/admin/www
 panel/web/portal/www
 panel/web/landing/www
 

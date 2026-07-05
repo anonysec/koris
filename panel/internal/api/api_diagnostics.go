@@ -73,17 +73,17 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		"detail": "strongswan service check",
 	})
 
-	disk := runCmd("sh", "-c", "df -h / | tail -1 | awk '{print $3 \" / \" $2 \" (\" $5 \")\"}'")
+	disk := runCmd("df", "-h", "/")
 	if disk == "" {
 		disk = "N/A"
 	}
 
-	mem := runCmd("sh", "-c", "free -h | awk '/Mem:/ {print $3 \" / \" $2}'")
+	mem := runCmd("free", "-h")
 	if mem == "" {
 		mem = "N/A"
 	}
 
-	ports := runCmd("sh", "-c", "ss -ltnp | grep -E ':(80|443|8088|1194|1812|1813)'")
+	ports := runCmd("ss", "-ltnp")
 
 	writeJSON(w, map[string]any{
 		"ok":     true,

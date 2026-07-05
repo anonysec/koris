@@ -3,15 +3,19 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
 export default defineConfig({
-  base: '/dashboard/',
+    base: process.env.KORIS_ADMIN_BASE || '/admin/',
   plugins: [vue()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      '@koris/ui': resolve(__dirname, '../shared/components'),
-      '@koris/composables': resolve(__dirname, '../shared/composables'),
-      '@koris/types': resolve(__dirname, '../shared/types'),
-      '@koris/styles': resolve(__dirname, '../shared/styles'),
+      // New split (canonical)
+      '@koris/core':        resolve(__dirname, '../core'),
+      '@koris/theme':       resolve(__dirname, '../theme'),
+      // Backward-compat (old names) — safe to remove once all imports are migrated
+      '@koris/composables': resolve(__dirname, '../core/composables'),
+      '@koris/types':       resolve(__dirname, '../core/types'),
+      '@koris/styles':      resolve(__dirname, '../core/styles'),
+      '@koris/ui':          resolve(__dirname, '../theme/components'),
     }
   },
   build: {

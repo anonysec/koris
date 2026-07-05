@@ -2,6 +2,7 @@ package grpcclient
 
 import (
 	"context"
+	"KorisPanel/panel/internal/knodepb"
 	"fmt"
 	"log"
 
@@ -54,16 +55,12 @@ func (fm *FirewallManager) OpenPort(ctx context.Context, nodeID int64, port int,
 		return fmt.Errorf("node %q is offline, cannot open port", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.OpenPort(ctx, &knodepb.OpenPortRequest{
-	//       Port:     int32(port),
-	//       Protocol: protocol,
-	//       Comment:  comment,
-	//   })
-	var rpcErr error // placeholder for actual RPC error
-	_ = node.Conn    // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	_, rpcErr := client.OpenPort(ctx, &knodepb.OpenPortRequest{
+		Port:     int32(port),
+		Protocol: protocol,
+		Comment:  comment,
+	})
 
 	if rpcErr != nil {
 		if status.Code(rpcErr) == codes.AlreadyExists {
@@ -101,15 +98,11 @@ func (fm *FirewallManager) ClosePort(ctx context.Context, nodeID int64, port int
 		return fmt.Errorf("node %q is offline, cannot close port", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.ClosePort(ctx, &knodepb.ClosePortRequest{
-	//       Port:     int32(port),
-	//       Protocol: protocol,
-	//   })
-	var rpcErr error // placeholder for actual RPC error
-	_ = node.Conn    // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	_, rpcErr := client.ClosePort(ctx, &knodepb.ClosePortRequest{
+		Port:     int32(port),
+		Protocol: protocol,
+	})
 
 	if rpcErr != nil {
 		if status.Code(rpcErr) == codes.NotFound {
@@ -146,27 +139,23 @@ func (fm *FirewallManager) ListFirewallRules(ctx context.Context, nodeID int64) 
 		return nil, fmt.Errorf("node %q is offline, cannot list firewall rules", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.ListFirewallRules(ctx, &knodepb.ListFirewallRulesRequest{})
-	//   if err != nil {
-	//       log.Printf("[knode] ListFirewallRules failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
-	//       return nil, err
-	//   }
-	//   rules := make([]FirewallRule, 0, len(resp.Rules))
-	//   for _, r := range resp.Rules {
-	//       rules = append(rules, FirewallRule{
-	//           Port:     int(r.Port),
-	//           Protocol: r.Protocol,
-	//           Comment:  r.Comment,
-	//           Action:   r.Action,
-	//       })
-	//   }
-	//   return rules, nil
-	_ = node.Conn // will be used with proto client
-
-	log.Printf("[knode] ListFirewallRules: fetching live rules from node %q (id=%d)",
-		node.NodeName, nodeID)
-	return []FirewallRule{}, nil
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	resp, err := client.ListFirewallRules(ctx, &knodepb.ListRulesRequest{})
+	if err != nil {
+		log.Printf("[knode] ListFirewallRules failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
+		return nil, err
+	}
+	rules := make([]FirewallRule, 0, len(resp.GetRules()))
+	for _, r := range resp.GetRules() {
+		if r == nil {
+			continue
+		}
+		rules = append(rules, FirewallRule{
+			Port:     int(r.GetPort()),
+			Protocol: r.GetProtocol(),
+			Comment:  r.GetComment(),
+			Action:   r.GetAction(),
+		})
+	}
+	return rules, nil
 }

@@ -24,7 +24,6 @@ const adminOnlyRoutes = new Set([
   'filter-presets',
   'protocols',
   'telegram-bot',
-  'telegram-proxies',
 ])
 
 const router = createRouter({
@@ -52,11 +51,9 @@ const router = createRouter({
         { path: 'landing-editor', name: 'landing-editor', component: () => import('@/views/LandingPageEditorView.vue') },
         { path: 'templates', name: 'templates', component: () => import('@/views/TemplatesView.vue') },
         { path: 'settings/:tab?', name: 'settings', component: () => import('@/views/SettingsView.vue'), props: true },
-        { path: 'backups', redirect: '/dashboard/settings/backup' },
-        { path: 'wireguard', redirect: '/dashboard/services' },
+                { path: 'wireguard', redirect: '/dashboard/services' },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
-        { path: 'telegram-proxies', name: 'telegram-proxies', component: () => import('@/views/TelegramProxiesView.vue') },
-        { path: 'mtproto', redirect: '/dashboard/services' },
+                { path: 'mtproto', redirect: '/dashboard/services' },
         { path: 'canned-responses', name: 'canned-responses', component: () => import('@/views/CannedResponsesView.vue') },
         { path: 'sla-config', name: 'sla-config', component: () => import('@/views/SLAConfigView.vue') },
         { path: 'knowledge-base', name: 'knowledge-base', component: () => import('@/views/KnowledgeBaseView.vue') },

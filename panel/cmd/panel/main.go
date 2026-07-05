@@ -1100,7 +1100,7 @@ func main() {
 	limiter := ratelimit.New(30, 60, cfg.TrustedProxies)
 
 	// Apply no-cache middleware on API responses
-	handler := api.NoCacheMiddleware(mux)
+	handler := api.SecurityHeadersMiddleware(api.NoCacheMiddleware(mux))
 
 	// ─── Unix Socket Listener (Linux only, for local CLI) ──────────────────
 	socketPath := os.Getenv("PANEL_SOCKET_PATH")

@@ -14,6 +14,6 @@
     "build:portal": "pnpm --filter portal build",
     "build:landing": "pnpm --filter landing build",
     "build": "pnpm --filter admin build && pnpm --filter portal build && pnpm --filter landing build",
-    "test": "pnpm --filter admin test && pnpm --filter shared test && pnpm --filter landing test"
+    "test": "pnpm --filter admin test && pnpm --filter core test && pnpm --filter landing test"
   }
 }

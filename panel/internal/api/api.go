@@ -361,13 +361,40 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/settings/grpc", s.requireFullAdmin(s.handleSettingsGrpc))
 	mux.HandleFunc("/api/admin/settings/tls/upload", s.requireFullAdmin(s.handleSettingsTLSUpload))
 
-	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
-	mux.HandleFunc("/dashboard/dashboard", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
-	})
-	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/", s.AdminEmbedFS))
-	mux.HandleFunc("/portal", redirectTo("/portal/"))
-	mux.Handle("/portal/", spaHandler(s.Config.PortalWebDir, "/portal/", s.PortalEmbedFS))
+	// SPA mounts — paths configurable via PANEL_ADMIN_PATH / PANEL_PORTAL_PATH.
+	// Subdomain routing (PANEL_ADMIN_HOST / PANEL_PORTAL_HOST) is layered above
+	// by the outer host mux in cmd/panel; here we always register the path route
+	// so subdomain hosts serve the SPA at their root as well.
+	adminPath := s.Config.AdminPath
+	portalPath := s.Config.PortalPath
+	if adminPath == "" {
+		adminPath = "/admin/"
+	}
+	if portalPath == "" {
+		portalPath = "/account/"
+	}
+
+	// Trailing-slash redirect + SPA mount for admin.
+	if adminPath != "/" {
+		trimmed := adminPath[:len(adminPath)-1] // "/admin/" -> "/admin"
+		mux.HandleFunc(trimmed, redirectTo(adminPath))
+		// Legacy /dashboard/ redirect for backward compatibility.
+		mux.HandleFunc("/dashboard", redirectTo(adminPath))
+		mux.HandleFunc("/dashboard/", redirectTo(adminPath))
+	}
+	mux.Handle(adminPath, spaHandler(s.Config.AdminWebDir, adminPath, s.AdminEmbedFS))
+
+	// Trailing-slash redirect + SPA mount for portal.
+	if portalPath != "/" {
+		trimmed := portalPath[:len(portalPath)-1]
+		mux.HandleFunc(trimmed, redirectTo(portalPath))
+		// Legacy /portal/ redirect if it isn't the current portal path.
+		if portalPath != "/portal/" {
+			mux.HandleFunc("/portal", redirectTo(portalPath))
+			mux.HandleFunc("/portal/", redirectTo(portalPath))
+		}
+	}
+	mux.Handle(portalPath, spaHandler(s.Config.PortalWebDir, portalPath, s.PortalEmbedFS))
 
 	// Excluded-feature routes (no-op in lite build)
 	s.registerExcludedRoutes(mux)

@@ -99,6 +99,10 @@ func (s *Server) registerExcludedRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/admin/telegram-proxies/rotate", s.requireFullAdmin(s.adminTelegramProxiesRotate))
 	mux.HandleFunc("/api/customer/telegram-proxies", s.requireCustomer(s.customerTelegramProxies))
 
+	// Per-user Telegram proxy credentials (each customer gets own secret/token + limits)
+	mux.HandleFunc("/api/admin/user-telegram-proxy/", s.requireFullAdmin(s.adminUserTelegramProxy))
+	mux.HandleFunc("/api/portal/telegram-proxy", s.requireCustomer(s.portalUserTelegramProxy))
+
 	// Knowledge base
 	mux.HandleFunc("/api/admin/kb/articles", s.requireFullAdmin(s.handleKBArticles))
 	mux.HandleFunc("/api/admin/kb/articles/", s.requireFullAdmin(s.handleKBArticleByID))

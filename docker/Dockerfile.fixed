@@ -1,7 +1,0 @@
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata
-WORKDIR /app
-COPY panel_binary /app/koris
-RUN chmod +x /app/koris
-EXPOSE 2026
-ENTRYPOINT ["/app/koris"]

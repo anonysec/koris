@@ -26,7 +26,16 @@ type Config struct {
 	SessionSecret  string
 	Version        string
 	ReleaseURL     string
-	PublicBase     string
+	PublicBase     string // Deprecated alias for AdminPath (kept for backward compat).
+
+	// SPA mount configuration.
+	// Either a path prefix (e.g. "/admin/") or a subdomain host (e.g. "admin.example.com").
+	// If *Host is set, subdomain routing is used; otherwise path prefix routing.
+	AdminPath     string // must start and end with slash, e.g. "/admin/"
+	PortalPath    string // must start and end with slash, e.g. "/account/"
+	AdminHost     string // optional subdomain, empty = path routing
+	PortalHost    string
+
 	AdminWebDir    string
 	PortalWebDir   string
 	LandingWebDir  string
@@ -177,7 +186,11 @@ func Load() Config {
 		SessionSecret:  sessionSecret,
 		Version:        getenv("PANEL_VERSION", readVersionFile()),
 		ReleaseURL:     getenv("PANEL_RELEASE_URL", ""),
-		PublicBase:     getenv("PANEL_PUBLIC_BASE", "/dashboard"),
+		AdminPath:      normalizePath(getenv("PANEL_ADMIN_PATH", "/admin/")),
+		PortalPath:     normalizePath(getenv("PANEL_PORTAL_PATH", "/account/")),
+		AdminHost:      getenv("PANEL_ADMIN_HOST", ""),
+		PortalHost:     getenv("PANEL_PORTAL_HOST", ""),
+		PublicBase:     getenv("PANEL_PUBLIC_BASE", ""), // derived below if empty
 		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/KorisPanel/panel/web/admin/www"),
 		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/KorisPanel/panel/web/portal/www"),
 		LandingWebDir:  getenv("PANEL_LANDING_WEB_DIR", "/opt/KorisPanel/panel/web/landing/www"),
@@ -245,4 +258,20 @@ func getenvDuration(k string, d time.Duration) time.Duration {
 		return d
 	}
 	return dur
+}
+
+
+// normalizePath ensures a URL path prefix has leading and trailing slashes.
+// Empty string is returned as "/" (root mount). Used for AdminPath/PortalPath.
+func normalizePath(p string) string {
+	if p == "" || p == "/" {
+		return "/"
+	}
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	if p[len(p)-1] != '/' {
+		p = p + "/"
+	}
+	return p
 }

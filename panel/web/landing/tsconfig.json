@@ -18,16 +18,20 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@koris/ui/*": ["../shared/components/*"],
-      "@koris/ui": ["../shared/components"],
-      "@koris/composables/*": ["../shared/composables/*"],
-      "@koris/composables": ["../shared/composables"],
-      "@koris/types/*": ["../shared/types/*"],
-      "@koris/types": ["../shared/types"],
-      "@koris/styles/*": ["../shared/styles/*"],
-      "@koris/styles": ["../shared/styles"]
+      "@koris/core":         ["../core/index.ts"],
+      "@koris/core/*":       ["../core/*"],
+      "@koris/theme":        ["../theme/index.ts"],
+      "@koris/theme/*":      ["../theme/*"],
+      "@koris/ui/*":         ["../theme/components/*"],
+      "@koris/ui":           ["../theme/components"],
+      "@koris/composables/*": ["../core/composables/*"],
+      "@koris/composables":  ["../core/composables"],
+      "@koris/types/*":      ["../core/types/*"],
+      "@koris/types":        ["../core/types"],
+      "@koris/styles/*":     ["../core/styles/*"],
+      "@koris/styles":       ["../core/styles"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../shared/**/*.ts", "../shared/**/*.vue"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../core/**/*.ts", "../core/**/*.vue", "../theme/**/*.ts", "../theme/**/*.vue"],
   "references": []
 }

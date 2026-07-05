@@ -6,6 +6,8 @@ import '@koris/styles/reset.css'
 import '@koris/styles/tokens.css'
 import '@koris/styles/utilities.css'
 import '@koris/styles/rtl.css'
+import '@koris/theme/styles/components.css'
+import '@koris/theme/styles/polish.css'
 import './i18n'
 
 const app = createApp(App)

@@ -111,7 +111,7 @@ func (s *Server) portalNodes(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id, name, address, status FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC`)
+	rows, err := s.DB.Query(`SELECT id, name, COALESCE(domain, '') as address, status FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return

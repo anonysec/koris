@@ -79,6 +79,19 @@ func (s *Server) setupOwner(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "username": in.Username, "role": "owner"})
 }
 
+
+// checkLoginAttempts returns true if the account is temporarily locked.
+func (s *Server) checkLoginAttempts(identifier string) bool {
+	var attempts int
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM login_attempts WHERE identifier=$1 AND created_at > NOW() - INTERVAL '15 minutes'`, identifier).Scan(&attempts)
+	return attempts >= 5
+}
+
+// recordLoginAttempt logs a failed login attempt.
+func (s *Server) recordLoginAttempt(identifier, ip string) {
+	_, _ = s.DB.Exec(`INSERT INTO login_attempts(identifier, ip, created_at) VALUES($1,$2,NOW())`, identifier, ip)
+}
+
 func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
@@ -94,12 +107,18 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.Username = strings.TrimSpace(in.Username)
+	ip := clientIP(r)
+	if s.checkLoginAttempts(in.Username) || s.checkLoginAttempts(ip) {
+		writeJSONCode(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": "too_many_attempts"})
+		return
+	}
 	ok, err := s.Auth.LoginAdmin(in.Username, in.Password)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	if !ok {
+		s.recordLoginAttempt(in.Username, ip)
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
 		return
 	}
@@ -156,6 +175,13 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if subtle.ConstantTimeCompare([]byte(pw), []byte(in.Password)) != 1 {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
+		return
+	}
+	// Check customer status before creating session
+	var custStatus string
+	err = s.DB.QueryRow(`SELECT status FROM customers WHERE username=$1 AND deleted_at IS NULL LIMIT 1`, in.Username).Scan(&custStatus)
+	if err == nil && (custStatus == "disabled" || custStatus == "deleted") {
+		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "account_disabled"})
 		return
 	}
 	_, _ = s.DB.Exec(`INSERT INTO customers(username,sub_token) VALUES($1,$2) ON CONFLICT (username) DO NOTHING`, in.Username, auth.RandomToken(24))

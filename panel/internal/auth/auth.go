@@ -72,11 +72,15 @@ func (s Service) LoginAdmin(username, password string) (bool, error) {
 	return active && CheckPassword(hash, password), nil
 }
 
-func MakeSession(username, secret string, ttl time.Duration) string {
+func MakeSession(username, secret string, ttl time.Duration) (string, error) {
 	encodedUser := base64.RawURLEncoding.EncodeToString([]byte(username))
 	expires := time.Now().Add(ttl).Unix()
 	payload := fmt.Sprintf("%s.%d", encodedUser, expires)
-	return payload + "." + sign(payload, secret)
+	sig, err := sign(payload, secret)
+	if err != nil {
+		return "", err
+	}
+	return payload + "." + sig, nil
 }
 
 func ReadSession(r *http.Request, cookieName, secret string) (string, bool) {
@@ -95,7 +99,11 @@ func ValidateToken(token, secret string) (string, bool) {
 		return "", false
 	}
 	payload := parts[0] + "." + parts[1]
-	if !hmac.Equal([]byte(parts[2]), []byte(sign(payload, secret))) {
+	expectedSig, err := sign(payload, secret)
+	if err != nil {
+		return "", false
+	}
+	if !hmac.Equal([]byte(parts[2]), []byte(expectedSig)) {
 		return "", false
 	}
 	expires, err := strconv.ParseInt(parts[1], 10, 64)
@@ -111,9 +119,13 @@ func ValidateToken(token, secret string) (string, bool) {
 }
 
 func SetSession(w http.ResponseWriter, cookieName, username, secret string, secure bool) {
+	session, err := MakeSession(username, secret, 24*time.Hour)
+	if err != nil {
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
-		Value:    MakeSession(username, secret, 24*time.Hour),
+		Value:    session,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   secure,
@@ -135,11 +147,11 @@ func ClearSession(w http.ResponseWriter, cookieName string, secure bool) {
 	})
 }
 
-func sign(payload, secret string) string {
+func sign(payload, secret string) (string, error) {
 	if secret == "" {
-		panic("auth: session secret must not be empty (config validation should prevent this)")
+		return "", errors.New("auth: session secret must not be empty")
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(payload))
-	return hex.EncodeToString(mac.Sum(nil))
+	return hex.EncodeToString(mac.Sum(nil)), nil
 }

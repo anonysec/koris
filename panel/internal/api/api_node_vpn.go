@@ -147,7 +147,7 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 							log.Printf("[knode] EnableCore panicked for node %d protocol %s: %v", nodeID, in.Protocol, r)
 						}
 					}()
-					ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer cancel()
 					if err := s.CoreMgr.EnableCore(ctx, nodeID, in.Protocol, in.Port, extraConfig); err != nil {
 						log.Printf("[knode] EnableCore gRPC failed for node %d protocol %s: %v (config saved to DB)", nodeID, in.Protocol, err)
@@ -163,7 +163,7 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 							log.Printf("[knode] DisableCore panicked for node %d protocol %s: %v", nodeID, in.Protocol, r)
 						}
 					}()
-					ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					defer cancel()
 					if err := s.CoreMgr.DisableCore(ctx, nodeID, in.Protocol); err != nil {
 						log.Printf("[knode] DisableCore gRPC failed for node %d protocol %s: %v (config saved to DB)", nodeID, in.Protocol, err)

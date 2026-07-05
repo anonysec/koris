@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"errors"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -86,6 +87,9 @@ func (m *Manager) Create(w http.ResponseWriter, r *http.Request, cookieName stri
 	}
 
 	token := generateToken()
+	if token == "" {
+		return "", errors.New("sessions: failed to generate secure token")
+	}
 	now := time.Now().UTC()
 
 	sess := &dbstore.Session{
@@ -213,8 +217,9 @@ func (m *Manager) clearCookie(w http.ResponseWriter, cookieName string) {
 // generateToken produces a cryptographically random hex token.
 func generateToken() string {
 	b := make([]byte, tokenLength)
-	if _, err := rand.Read(b); err != nil {
-		panic("sessions: failed to generate random token: " + err.Error())
+	_, err := rand.Read(b)
+	if err != nil {
+		return ""
 	}
 	return hex.EncodeToString(b)
 }
