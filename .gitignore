@@ -2,7 +2,9 @@
 node_modules/
 
 # Build output (rebuild with 'npm run build')
-panel/web/*/www/
+# Frontend build artifacts — always rebuilt by Vite. Keep dirs (for go:embed) via .gitkeep.
+web/*/www/*
+!web/*/www/.gitkeep
 
 # Lock files
 package-lock.json
