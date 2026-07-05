@@ -6,10 +6,10 @@ This guide covers deploying KorisPanel using Docker and Docker Compose.
 
 ```bash
 # One-liner install (interactive prompts for edition, domain, port, SSL)
-bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 
 # Or with flags
-bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh) \
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh) \
   --full --domain=panel.example.com --port=2026
 ```
 
@@ -123,8 +123,8 @@ If you prefer to deploy without the installer:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/anonysec/panel.git /opt/KorisPanel
-cd /opt/KorisPanel
+git clone https://github.com/anonysec/koris.git /opt/koris
+cd /opt/koris
 
 # 2. Create configuration
 mkdir -p /etc/koris
@@ -195,10 +195,10 @@ Reinstall preserves `koris_db-data` and reuses the existing `/etc/koris/panel.en
 install.sh --uninstall
 
 # Manually
-cd /opt/KorisPanel
+cd /opt/koris
 docker compose down -v --remove-orphans
 docker images --filter "label=com.docker.compose.project=koris" -q | xargs -r docker rmi -f
-rm -rf /opt/KorisPanel /etc/koris /usr/local/bin/koris
+rm -rf /opt/koris /etc/koris /usr/local/bin/koris
 ```
 
 ## Database Management
@@ -394,7 +394,7 @@ koris pgadmin port <number>     # Change listen port (1024–65535), restarts se
 ## Upgrading
 
 ```bash
-cd /opt/KorisPanel
+cd /opt/koris
 git pull origin main
 docker compose build
 docker compose up -d

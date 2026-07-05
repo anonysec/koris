@@ -153,7 +153,7 @@ validate_port() {
 # Validate that a version tag exists in a remote git repository.
 # Uses `git ls-remote` to check without cloning.
 # Usage: validate_version_tag <tag> <repo_url>
-#   validate_version_tag "v1.2.3" "https://github.com/anonysec/panel.git"
+#   validate_version_tag "v1.2.3" "https://github.com/anonysec/koris.git"
 validate_version_tag() {
   local tag="${1:?validate_version_tag: tag required}"
   local repo_url="${2:?validate_version_tag: repository URL required}"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # KorisPanel installer — Docker only
-# Usage: bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
+# Usage: bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 #   install.sh                          # Docker mode (recommended)
 #   install.sh --lite                   # Lite edition
 #   install.sh --port=8080 --domain=panel.example.com
@@ -11,7 +11,7 @@ set -euo pipefail
 # shellcheck source=helpers.sh
 source "$(dirname "$0")/helpers.sh" 2>/dev/null || true
 
-REPO="anonysec/panel"
+REPO="anonysec/koris"
 KNODE_REPO="anonysec/knode"
 INSTALL_DIR="/opt/koris"
 CONFIG_DIR="/etc/koris"
