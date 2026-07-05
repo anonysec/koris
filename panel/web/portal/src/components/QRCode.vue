@@ -37,7 +37,7 @@ async function drawQR() {
 function downloadPNG() {
   if (!canvasRef.value) return
   const link = document.createElement('a')
-  link.download = 'xray-config-qr.png'
+  link.download = 'config-qr.png'
   link.href = canvasRef.value.toDataURL('image/png')
   link.click()
 }
@@ -58,7 +58,7 @@ onMounted(() => {
   <div v-if="visible !== false" class="qrcode">
     <canvas ref="canvasRef" class="qrcode__canvas" :width="qrSize" :height="qrSize" />
     <button class="qrcode__download" @click="downloadPNG" type="button">
-      📥 {{ t('portal.xray.downloadQR') }}
+      📥 {{ t('portal.downloadQR') }}
     </button>
   </div>
 </template>

@@ -269,19 +269,6 @@ func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID 
 // nodeCoresRemove handles DELETE /api/nodes/{id}/cores/{name}.
 // Uses direct gRPC DisableCore call instead of creating a node_task.
 func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID int64, coreName string) {
-	// Check if any active xray_inbounds depend on this core
-	var activeCount int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM xray_inbounds WHERE node_id = $1 AND core_name = $2 AND status = 'active'`, nodeID, coreName).Scan(&activeCount)
-	if err != nil {
-		log.Printf("[cores] active inbounds check failed: %v", err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
-		return
-	}
-	if activeCount > 0 {
-		writeJSONCode(w, http.StatusConflict, map[string]any{"ok": false, "error": "core_has_active_inbounds"})
-		return
-	}
-
 	// Call DisableCore via gRPC
 	if s.CoreMgr != nil {
 		// Use 10s timeout for core disable RPC (R10.2)
@@ -298,7 +285,7 @@ func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID 
 	}
 
 	// Delete from node_cores
-	_, err = s.DB.Exec(`DELETE FROM node_cores WHERE node_id = $1 AND core_name = $2`, nodeID, coreName)
+	_, err := s.DB.Exec(`DELETE FROM node_cores WHERE node_id = $1 AND core_name = $2`, nodeID, coreName)
 	if err != nil {
 		log.Printf("[cores] node_cores delete failed: %v", err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})

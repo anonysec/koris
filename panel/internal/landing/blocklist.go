@@ -8,7 +8,7 @@ import "strings"
 // to avoid revealing the server's VPN management purpose to external observers.
 var VPNBlocklist = []string{
 	"vpn", "proxy", "tunnel", "openvpn", "wireguard", "ikev2",
-	"l2tp", "xray", "vless", "vmess", "trojan", "mtproto",
+	"l2tp", "vless", "vmess", "trojan", "mtproto",
 	"ssh tunnel", "shadowsocks", "v2ray", "koris", "korispanel",
 }
 

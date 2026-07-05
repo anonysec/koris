@@ -222,7 +222,7 @@ describe('sidebar store', () => {
         items: {
           overview: ['dashboard', 'metrics'],
           manage: ['users', 'nodes', 'plans'],
-          advanced: ['xray', 'telegram'],
+          advanced: ['telegram'],
           system: ['settings'],
         },
       }

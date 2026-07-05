@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"io/fs"
+	"os"
 	"net/http"
 	"regexp"
 	"sync"
@@ -221,14 +222,14 @@ func (s *Server) Routes() *http.ServeMux {
 
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/info", s.handleInfo)
-	mux.HandleFunc("/internal/status", s.internalStatus)
-	mux.HandleFunc("/internal/nodes", s.internalNodes)
-	mux.HandleFunc("/internal/users", s.internalUsers)
-	mux.HandleFunc("/internal/cleanup", s.internalCleanup)
-	mux.HandleFunc("/internal/workers", s.internalWorkers)
-	mux.HandleFunc("/internal/logs", s.internalLogs)
-	mux.HandleFunc("/internal/update/check", s.internalUpdateCheck)
-	mux.HandleFunc("/internal/update/apply", s.internalUpdateApply)
+	mux.HandleFunc("/internal/status", s.requireAdmin(s.internalStatus))
+	mux.HandleFunc("/internal/nodes", s.requireAdmin(s.internalNodes))
+	mux.HandleFunc("/internal/users", s.requireAdmin(s.internalUsers))
+	mux.HandleFunc("/internal/cleanup", s.requireAdmin(s.internalCleanup))
+	mux.HandleFunc("/internal/workers", s.requireAdmin(s.internalWorkers))
+	mux.HandleFunc("/internal/logs", s.requireAdmin(s.internalLogs))
+	mux.HandleFunc("/internal/update/check", s.requireAdmin(s.internalUpdateCheck))
+	mux.HandleFunc("/internal/update/apply", s.requireAdmin(s.internalUpdateApply))
 	mux.HandleFunc("/api/setup/status", s.setupStatus)
 	mux.HandleFunc("/api/setup/owner", s.setupOwner)
 	mux.HandleFunc("/api/auth/admin", s.adminLogin)
@@ -251,7 +252,6 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/nodes/bulk", s.requireFullAdmin(s.nodeBulk))
 	mux.HandleFunc("/api/admin/nodes/provision", s.requireFullAdmin(s.nodeProvision))
 	mux.HandleFunc("/api/admin/nodes/provision/status", s.requireFullAdmin(s.handleProvisionStatus))
-	mux.HandleFunc("/api/admin/nodes/migrate/status", s.requireFullAdmin(s.handleMigrationStatus))
 	mux.HandleFunc("/api/admin/nodes/tags", s.requireFullAdmin(s.nodeTagsAll))
 	mux.HandleFunc("/api/admin/nodes/", s.requireFullAdmin(s.nodeTagsByID))
 	mux.HandleFunc("/api/node/install.sh", s.nodeInstallScript)
@@ -362,6 +362,9 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/settings/tls/upload", s.requireFullAdmin(s.handleSettingsTLSUpload))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
+	mux.HandleFunc("/dashboard/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/dashboard/", http.StatusMovedPermanently)
+	})
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/", s.AdminEmbedFS))
 	mux.HandleFunc("/portal", redirectTo("/portal/"))
 	mux.Handle("/portal/", spaHandler(s.Config.PortalWebDir, "/portal/", s.PortalEmbedFS))
@@ -370,4 +373,14 @@ func (s *Server) Routes() *http.ServeMux {
 	s.registerExcludedRoutes(mux)
 
 	return mux
+}
+
+
+// radiusSecret returns the RADIUS shared secret from config or a fallback.
+func (s *Server) radiusSecret() string {
+	secret := os.Getenv("PANEL_RADIUS_SECRET")
+	if secret == "" {
+		secret = "testing123"
+	}
+	return secret
 }

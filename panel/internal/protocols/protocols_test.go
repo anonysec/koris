@@ -7,11 +7,11 @@ import (
 func TestNewDefaultRegistersAll7Protocols(t *testing.T) {
 	m := NewDefault()
 	protocols := m.List()
-	if len(protocols) != 7 {
+	if len(protocols) != 6 {
 		t.Fatalf("expected 7 protocols, got %d", len(protocols))
 	}
 
-	expected := []string{"openvpn", "l2tp", "ikev2", "wireguard", "ssh", "cisco_ipsec", "xray"}
+	expected := []string{"openvpn", "l2tp", "ikev2", "wireguard", "ssh", "cisco_ipsec"}
 	for _, name := range expected {
 		if !m.IsValid(name) {
 			t.Errorf("expected protocol %q to be registered", name)
@@ -32,7 +32,6 @@ func TestIsValidReturnsTrueForRegistered(t *testing.T) {
 		{"wireguard", true},
 		{"ssh", true},
 		{"cisco_ipsec", true},
-		{"xray", true},
 		{"pptp", false},
 		{"", false},
 		{"OPENVPN", false}, // case-sensitive
@@ -116,7 +115,6 @@ func TestDefaultPorts(t *testing.T) {
 		"wireguard":   51820,
 		"ssh":         22,
 		"cisco_ipsec": 500,
-		"xray":        443,
 	}
 
 	for name, expectedPort := range expectedPorts {
@@ -141,7 +139,6 @@ func TestServiceUnits(t *testing.T) {
 		"wireguard":   "wg-quick@wg0",
 		"ssh":         "sshd",
 		"cisco_ipsec": "strongswan",
-		"xray":        "xray",
 	}
 
 	for name, expectedUnit := range expectedUnits {

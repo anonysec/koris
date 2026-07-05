@@ -63,7 +63,7 @@ const testSessionSecret = "test-secret-key-for-integration-tests"
 
 // makeCustomerCookie creates a valid customer session cookie for the given username.
 func makeCustomerCookie(username string) *http.Cookie {
-	token := auth.MakeSession(username, testSessionSecret, 1*time.Hour)
+	token, _ := auth.MakeSession(username, testSessionSecret, 1*time.Hour)
 	return &http.Cookie{
 		Name:  auth.CustomerCookieName,
 		Value: token,

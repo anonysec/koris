@@ -70,17 +70,6 @@ func (CiscoIPSec) ValidateConfig(cfg ProtocolConfig) error {
 	return validatePort(cfg.Port)
 }
 
-// Xray implements the Protocol interface for Xray (VLESS/VMess).
-type Xray struct{}
-
-func (Xray) Name() string        { return "xray" }
-func (Xray) DisplayName() string { return "Xray" }
-func (Xray) DefaultPort() int    { return 443 }
-func (Xray) ServiceUnit() string { return "xray" }
-func (Xray) ValidateConfig(cfg ProtocolConfig) error {
-	return validatePort(cfg.Port)
-}
-
 // --- Helpers ---
 
 func validatePort(port int) error {
@@ -101,6 +90,5 @@ func NewDefault() *ProtocolManager {
 	m.Register(WireGuard{})
 	m.Register(SSH{})
 	m.Register(CiscoIPSec{})
-	m.Register(Xray{})
 	return m
 }

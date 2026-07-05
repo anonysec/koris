@@ -18,7 +18,6 @@ var vpnBlocklist = []string{
 	"wireguard",
 	"ikev2",
 	"l2tp",
-	"xray",
 	"vless",
 	"vmess",
 	"trojan",

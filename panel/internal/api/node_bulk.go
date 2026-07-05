@@ -168,7 +168,6 @@ func (s *Server) nodeBulkDisableProtocol(ctx context.Context, nodeID int64, para
 
 // nodeBulkDispatchGRPC dispatches bulk actions via gRPC.
 // For actions that don't have a direct gRPC mapping, logs and returns success
-// (these will be fully handled when xray/custom command gRPC wrappers are added).
 func (s *Server) nodeBulkDispatchGRPC(ctx context.Context, nodeID int64, action string, params map[string]any) error {
 	switch action {
 	case "restart_openvpn":
