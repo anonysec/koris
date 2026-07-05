@@ -2,6 +2,7 @@
 
 import (
 	"context"
+	"KorisPanel/panel/internal/knodepb"
 	"log"
 	"sync"
 	"time"
@@ -113,6 +114,15 @@ func (tc *TrafficCollector) collectAll(ctx context.Context) {
 // Requirement 6.4: IF the GetTraffic RPC fails, THEN the panel SHALL log the error
 // and retry on the next interval without marking the node as unhealthy.
 func (tc *TrafficCollector) collectNode(ctx context.Context, nodeID int64) {
+	// Defensive guard: a malformed/failed gRPC call (e.g. a stub proto message
+	// whose ProtoReflect() returns nil, which panics during marshaling) must
+	// never crash the whole panel. Recover here, log, and let the next tick
+	// retry (per Req 6.4: on failure, log and retry without marking unhealthy).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[grpc-client] GetTraffic panic recovered for node %d: %v", nodeID, r)
+		}
+	}()
 	report, err := tc.callGetTraffic(ctx, nodeID)
 	if err != nil {
 		// Req 6.4: Log and retry on next interval — don't mark node as unhealthy.
@@ -229,19 +239,24 @@ func (tc *TrafficCollector) callGetTraffic(ctx context.Context, nodeID int64) (*
 		return nil, nil
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.GetTraffic(ctx, &knodepb.GetTrafficRequest{})
-	//   if err != nil { return nil, err }
-	//   report := &TrafficReport{Users: make(map[string]*UserTraffic)}
-	//   for _, u := range resp.Users {
-	//       report.Users[u.Username] = &UserTraffic{RxBytes: u.RxBytes, TxBytes: u.TxBytes}
-	//   }
-	//   return report, nil
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	resp, err := client.GetTraffic(ctx, &knodepb.GetTrafficRequest{})
+	if err != nil {
+		log.Printf("[grpc-client] GetTraffic RPC failed for node %q (id=%d): %v", node.NodeName, nodeID, err)
+		return nil, err
+	}
 
-	log.Printf("[grpc-client] GetTraffic stub: called for node %q (id=%d)", node.NodeName, nodeID)
-	return nil, nil
+	report := &TrafficReport{Users: make(map[string]*UserTraffic)}
+	for username, ut := range resp.GetPerUser() {
+		if ut == nil {
+			continue
+		}
+		report.Users[username] = &UserTraffic{
+			RxBytes: ut.GetRxBytes(),
+			TxBytes: ut.GetTxBytes(),
+		}
+	}
+	return report, nil
 }
 
 // resolveUserID looks up the customer ID for a given username.
