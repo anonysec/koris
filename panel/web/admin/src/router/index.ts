@@ -24,6 +24,7 @@ const adminOnlyRoutes = new Set([
   'filter-presets',
   'protocols',
   'telegram-bot',
+  'telegram-proxies',
 ])
 
 const router = createRouter({
@@ -54,7 +55,7 @@ const router = createRouter({
         { path: 'backups', redirect: '/dashboard/settings/backup' },
         { path: 'wireguard', redirect: '/dashboard/services' },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
-        { path: 'telegram-proxies', redirect: '/dashboard/services' },
+        { path: 'telegram-proxies', name: 'telegram-proxies', component: () => import('@/views/TelegramProxiesView.vue') },
         { path: 'mtproto', redirect: '/dashboard/services' },
         { path: 'canned-responses', name: 'canned-responses', component: () => import('@/views/CannedResponsesView.vue') },
         { path: 'sla-config', name: 'sla-config', component: () => import('@/views/SLAConfigView.vue') },

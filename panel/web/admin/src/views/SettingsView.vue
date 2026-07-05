@@ -28,6 +28,13 @@ const { mode: currentMode, theme: currentTheme, setMode, setTheme } = useTheme()
 const { get, post, put, patch, del } = useApi()
 const toast = useToast()
 const activeTab = ref(props.tab || 'panel-settings')
+
+// Keep the active tab in sync when navigating via the sidebar (props.tab changes
+// without the component being re-created, so the ref alone would go stale).
+watch(
+  () => props.tab,
+  (v) => { if (v) activeTab.value = v },
+)
 const saving = ref(false)
 
 const settingsStore = useSettingsStore()
