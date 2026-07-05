@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@koris/theme":         ["./index.ts"],
+      "@koris/theme/*":       ["./*"],
+      "@koris/core":          ["../core/index.ts"],
+      "@koris/core/*":        ["../core/*"],
+      "@koris/composables":   ["../core/composables"],
+      "@koris/composables/*": ["../core/composables/*"],
+      "@koris/types":         ["../core/types"],
+      "@koris/types/*":       ["../core/types/*"],
+      "@koris/styles":        ["../core/styles"],
+      "@koris/styles/*":      ["../core/styles/*"],
+      "@koris/ui":            ["./components"],
+      "@koris/ui/*":          ["./components/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.vue"]
+}

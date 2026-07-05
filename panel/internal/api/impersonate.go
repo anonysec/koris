@@ -47,7 +47,11 @@ func (s *Server) adminImpersonateCustomer(w http.ResponseWriter, r *http.Request
 	}
 
 	// Create a short-lived portal session token for this customer
-	token := auth.MakeSession(username, s.Config.SessionSecret, impersonateSessionTTL)
+	token, err := auth.MakeSession(username, s.Config.SessionSecret, impersonateSessionTTL)
+	if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "session_failed"})
+			return
+		}
 
 	portalURL := "/portal/?token=" + token
 	expiresIn := int(impersonateSessionTTL.Seconds())

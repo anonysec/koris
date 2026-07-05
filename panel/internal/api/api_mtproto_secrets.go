@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
+	"KorisPanel/panel/internal/grpcclient"
+	"KorisPanel/panel/internal/knodepb"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -255,12 +257,32 @@ func (s *Server) syncMTProtoSecretsToKnode(_ any) {
 		return
 	}
 
-	// TODO: Push secrets to knode via SyncMTProtoSecrets gRPC call once the RPC is implemented.
-	// For now, log the sync intent. Task 7.2 will implement the actual gRPC client call.
-	log.Printf("[mtproto-secrets] sync pending: %d enabled secrets ready for knode push", len(secrets))
+	// Build proto secrets list
+	protoSecrets := make([]*knodepb.MTProtoUserSecret, 0, len(secrets))
+	for _, s := range secrets {
+		protoSecrets = append(protoSecrets, &knodepb.MTProtoUserSecret{
+			Username:       s.Username,
+			Secret:         s.Secret,
+			Enabled:        true,
+			MaxConnections: int32(s.ConnLimit),
+		})
+	}
 
-	// Serialize the secrets payload for when gRPC is wired up
-	_, _ = json.Marshal(secrets)
+	// Push to all connected knodes
+	for _, node := range s.GRPCPool.All() {
+		if node.Status == grpcclient.StatusOffline {
+			continue
+		}
+		client := knodepb.NewKnodeServiceClient(node.Conn)
+		_, err := client.SyncMTProtoSecrets(context.Background(), &knodepb.SyncMTProtoSecretsRequest{
+			Secrets: protoSecrets,
+		})
+		if err != nil {
+			log.Printf("[mtproto-secrets] SyncMTProtoSecrets failed on node %q (id=%d): %v", node.NodeName, node.NodeID, err)
+		} else {
+			log.Printf("[mtproto-secrets] SyncMTProtoSecrets succeeded on node %q (id=%d): %d secrets", node.NodeName, node.NodeID, len(protoSecrets))
+		}
+	}
 }
 
 // handleMTProtoEnable handles POST /api/admin/customers/{id}/mtproto-secret/enable.

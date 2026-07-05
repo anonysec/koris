@@ -2,4 +2,6 @@ packages:
   - admin
   - portal
   - landing
-  - shared
+  - core
+  - theme
+  - shared  # deprecated: kept for compat during migration

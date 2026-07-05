@@ -50,7 +50,7 @@ func (e *Enforcer) EnforceConnLimit() {
 		// Kill oldest excess sessions (PostgreSQL doesn't support LIMIT on UPDATE)
 		_, err := e.db.Exec(`
 			UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Connection-Limit'
-			WHERE ctid IN (SELECT ctid FROM radacct WHERE username=$1 AND acctstoptime IS NULL
+			WHERE (username, acctstarttime) IN (SELECT username, acctstarttime FROM radacct WHERE username=$1 AND acctstoptime IS NULL
 			ORDER BY acctstarttime ASC LIMIT $2)
 		`, username, excess)
 		if err != nil {

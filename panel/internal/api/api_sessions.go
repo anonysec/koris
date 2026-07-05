@@ -135,7 +135,7 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", username, sessionID)
-		cmd := exec.Command("radclient", "-x", nasIP+":3799", "disconnect", "testing123")
+		cmd := exec.Command("radclient", "-x", nasIP+":3799", "disconnect", s.radiusSecret())
 		cmd.Stdin = strings.NewReader(attrs)
 		_ = cmd.Run()
 	}()
@@ -270,7 +270,7 @@ func (s *Server) disconnectCustomerSessions(username string) {
 					ip = "127.0.0.1"
 				}
 				attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", u, sID)
-				cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", "testing123")
+				cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", s.radiusSecret())
 				cmd.Stdin = strings.NewReader(attrs)
 				_ = cmd.Run()
 			}(username, sessionID, nasIP)

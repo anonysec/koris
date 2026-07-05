@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"KorisPanel/panel/internal/knodepb"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -60,30 +61,28 @@ func (sm *SessionManager) ListSessions(ctx context.Context, nodeID int64) ([]VPN
 		return nil, fmt.Errorf("node %q is offline, cannot list sessions", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.ListSessions(ctx, &knodepb.ListSessionsRequest{})
-	//   if err != nil {
-	//       log.Printf("[knode] ListSessions RPC failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
-	//       return nil, fmt.Errorf("ListSessions RPC on node %q: %w", node.NodeName, err)
-	//   }
-	//   sessions := make([]VPNSession, 0, len(resp.Sessions))
-	//   for _, s := range resp.Sessions {
-	//       sessions = append(sessions, VPNSession{
-	//           Username:    s.Username,
-	//           CoreType:    s.CoreType,
-	//           ConnectedAt: s.ConnectedAt.AsTime(),
-	//           BytesIn:     s.BytesIn,
-	//           BytesOut:    s.BytesOut,
-	//           ClientIP:    s.ClientIp,
-	//       })
-	//   }
-	//   return sessions, nil
-	_ = node.Conn // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	resp, err := client.ListSessions(ctx, &knodepb.ListSessionsRequest{})
+	if err != nil {
+		log.Printf("[knode] ListSessions RPC failed on node %q (id=%d): %v", node.NodeName, nodeID, err)
+		return nil, fmt.Errorf("ListSessions RPC on node %q: %w", node.NodeName, err)
+	}
 
-	log.Printf("[knode] ListSessions: fetching live sessions from node %q (id=%d)", node.NodeName, nodeID)
-	return []VPNSession{}, nil
+	sessions := make([]VPNSession, 0, len(resp.GetSessions()))
+	for _, s := range resp.GetSessions() {
+		if s == nil {
+			continue
+		}
+		sessions = append(sessions, VPNSession{
+			Username:    s.GetUsername(),
+			CoreType:    s.GetCore(),
+			ConnectedAt: s.GetConnectedAt().AsTime(),
+			BytesIn:     s.GetRxBytes(),
+			BytesOut:    s.GetTxBytes(),
+			ClientIP:    s.GetClientIp(),
+		})
+	}
+	return sessions, nil
 }
 
 // DisconnectUser disconnects a user from the specified node, optionally filtering
@@ -110,15 +109,11 @@ func (sm *SessionManager) DisconnectUser(ctx context.Context, nodeID int64, user
 		return fmt.Errorf("node %q is offline, cannot disconnect user", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.DisconnectUser(ctx, &knodepb.DisconnectUserRequest{
-	//       Username:   username,
-	//       CoreFilter: coreFilter,
-	//   })
-	var rpcErr error // placeholder for actual RPC error
-	_ = node.Conn    // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	_, rpcErr := client.DisconnectUser(ctx, &knodepb.DisconnectRequest{
+		Username: username,
+		Core:     coreFilter,
+	})
 
 	if rpcErr != nil {
 		if status.Code(rpcErr) == codes.NotFound {

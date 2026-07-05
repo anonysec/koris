@@ -268,11 +268,12 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request, id int64, s
 }
 
 func (s *Server) setTicketStatus(w http.ResponseWriter, r *http.Request, id int64, status string) {
-	closedExpr := "NULL"
+	closedAt := "NULL"
 	if status == "closed" {
-		closedExpr = "NOW()"
+		closedAt = "NOW()"
 	}
-	if _, err := s.DB.Exec(`UPDATE tickets SET status=$1,closed_at=`+closedExpr+`,updated_at=NOW() WHERE id=$1 AND deleted_at IS NULL`, status, id); err != nil {
+	query := `UPDATE tickets SET status=$1,closed_at=` + closedAt + `,updated_at=NOW() WHERE id=$2 AND deleted_at IS NULL`
+	if _, err := s.DB.Exec(query, status, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

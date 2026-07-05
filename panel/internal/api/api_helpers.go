@@ -111,3 +111,14 @@ type NodeVPNConfig struct {
 	Network  string          `json:"network"`
 	Extra    json.RawMessage `json:"extra_json,omitempty"`
 }
+
+// SecurityHeadersMiddleware adds HSTS, X-Frame-Options, CSP, and other security headers.
+func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;")
+		next.ServeHTTP(w, r)
+	})
+}

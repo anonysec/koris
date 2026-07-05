@@ -1,0 +1,28 @@
+{
+  "name": "@koris/theme",
+  "version": "1.0.0",
+  "description": "Default visual theme for Koris. Swap this package to skin the app. Depends on @koris/core.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./manifest": "./manifest.ts",
+    "./components/*": "./components/*",
+    "./styles/*": "./styles/*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@koris/core": "workspace:*",
+    "sortablejs": "^1.15.7",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/sortablejs": "^1.15.9",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
+    "vitest": "^3.2.6"
+  }
+}

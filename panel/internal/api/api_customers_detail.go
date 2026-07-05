@@ -485,3 +485,9 @@ func (s *Server) setCustomerStatus(w http.ResponseWriter, id int64, status strin
 
 	writeJSON(w, map[string]any{"ok": true})
 }
+
+// sanitizeHTML strips HTML tags from a string to prevent XSS.
+// The Vue frontend should also escape all user content; this is a defense-in-depth helper.
+func sanitizeHTML(input string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(input, "<", "&lt;"), ">", "&gt;")
+}

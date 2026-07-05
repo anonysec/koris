@@ -1,0 +1,251 @@
+/* =====================================================================
+   KorisPanel — Premium Polish Layer (v2)
+   Loaded LAST — refines the existing design system without replacing it.
+   All rules are token-safe (theme-aware via CSS variables).
+   ===================================================================== */
+
+/* ── Signature backdrop: subtle grid + brand aurora ─────────────────── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-text) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 3%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(1200px 800px at 50% 20%, #000 0%, transparent 75%);
+  -webkit-mask-image: radial-gradient(1200px 800px at 50% 20%, #000 0%, transparent 75%);
+  opacity: 0.7;
+}
+body::after {
+  content: "";
+  position: fixed;
+  top: -25vh; right: -20vw;
+  width: 70vw; height: 70vw;
+  pointer-events: none; z-index: 0;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--color-accent) 10%, transparent),
+    transparent 70%);
+  filter: blur(30px);
+  opacity: 0.55;
+  animation: k-aurora 18s ease-in-out infinite alternate;
+}
+@keyframes k-aurora {
+  0%   { transform: translate3d(0,0,0)      scale(1);    opacity: 0.55; }
+  50%  { transform: translate3d(-4vw,3vh,0) scale(1.06); opacity: 0.65; }
+  100% { transform: translate3d(2vw,-2vh,0) scale(0.98); opacity: 0.5;  }
+}
+#app, main, .app-shell { position: relative; z-index: 1; }
+
+/* Light-mode adaptation */
+:root[data-theme="light"] body::before { opacity: 0.35; }
+:root[data-theme="light"] body::after  { opacity: 0.3; }
+
+/* ── Typography refinements ─────────────────────────────────────────── */
+html { font-feature-settings: "cv02","cv03","cv04","cv11"; }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1 { font-size: clamp(1.6rem, 2.2vw, 2.05rem); letter-spacing: -0.025em; }
+h2 { font-size: clamp(1.25rem, 1.6vw, 1.55rem); letter-spacing: -0.02em; }
+h3 { font-size: 1.125rem; letter-spacing: -0.015em; }
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "calt" 0;
+}
+kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  font-size: 0.82em;
+  color: var(--color-muted);
+}
+
+/* ── Buttons: signature primary with sheen ──────────────────────────── */
+.btn-primary, button.btn-primary {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn-primary::after, button.btn-primary::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(120deg,
+    transparent 30%,
+    color-mix(in srgb, #fff 26%, transparent) 50%,
+    transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.65s cubic-bezier(.2,.7,.2,1);
+  pointer-events: none;
+}
+.btn-primary:hover::after, button.btn-primary:hover::after { transform: translateX(120%); }
+
+.btn, button.btn { position: relative; }
+.btn:focus-visible, button.btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 4px color-mix(in srgb, var(--color-primary) 60%, transparent);
+}
+
+/* ── Card elevation: brand-tinted shadow on hover ───────────────────── */
+.k-card, .card, .panel {
+  position: relative;
+  transition:
+    transform var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out);
+}
+.k-card:hover, .card:hover {
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 25%, transparent),
+    0 20px 45px -18px color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
+/* ── Stat cards: gleaming top edge ──────────────────────────────────── */
+.k-stat { isolation: isolate; }
+.k-stat::after {
+  content: "";
+  position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--color-accent) 65%, transparent),
+    transparent);
+  opacity: 0.7;
+}
+.k-stat-value {
+  background: linear-gradient(180deg,
+    var(--color-text),
+    color-mix(in srgb, var(--color-text) 78%, var(--color-muted)));
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tables: sticky header, zebra hover, tabular numbers ────────────── */
+table { font-variant-numeric: tabular-nums; }
+thead th { position: sticky; top: 0; z-index: 2; backdrop-filter: blur(6px); }
+tbody tr { position: relative; }
+tbody tr:hover td:first-child::before {
+  content: "";
+  position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px;
+  background: var(--gradient-brand); border-radius: 0 3px 3px 0;
+}
+
+/* ── Inputs: refined focus glow ─────────────────────────────────────── */
+input, select, textarea {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface))
+      padding-box,
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--color-text) 8%, transparent),
+      color-mix(in srgb, var(--color-text) 3%, transparent))
+      border-box;
+  border: 1px solid transparent;
+}
+input:focus, select:focus, textarea:focus {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface))
+      padding-box,
+    var(--gradient-brand) border-box;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+/* ── Sidebar: brand halo behind active item ─────────────────────────── */
+.sidebar .nav-item.active::before {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(60% 100% at 0% 50%,
+    color-mix(in srgb, var(--color-primary) 22%, transparent),
+    transparent 70%);
+  pointer-events: none;
+}
+.sidebar .brand .logo {
+  position: relative;
+  isolation: isolate;
+}
+.sidebar .brand .logo::after {
+  content: "";
+  position: absolute; inset: -6px;
+  border-radius: inherit;
+  background: var(--gradient-brand);
+  filter: blur(14px);
+  opacity: 0.45;
+  z-index: -1;
+}
+
+/* ── Topbar: subtle glass and border-glow on scroll ─────────────────── */
+.topbar {
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  backdrop-filter: saturate(140%) blur(14px);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+}
+
+/* ── Skeleton shimmer ───────────────────────────────────────────────── */
+.k-skeleton, .skeleton {
+  position: relative; overflow: hidden;
+  background: var(--color-surface-2); border-radius: var(--radius-sm);
+}
+.k-skeleton::after, .skeleton::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--color-text) 8%, transparent),
+    transparent);
+  animation: k-shimmer 1.4s ease-in-out infinite;
+  transform: translateX(-100%);
+}
+@keyframes k-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* ── Empty state polish ─────────────────────────────────────────────── */
+.k-empty {
+  padding: 64px 20px;
+  background:
+    radial-gradient(400px 200px at 50% 0%,
+      color-mix(in srgb, var(--color-primary) 6%, transparent),
+      transparent 70%);
+  border-radius: var(--radius-lg);
+}
+.k-empty svg {
+  filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--color-primary) 30%, transparent));
+  animation: k-float 4s ease-in-out infinite;
+}
+@keyframes k-float {
+  50% { transform: translateY(-4px); }
+}
+
+/* ── Badges: glow variants for stronger status signal ───────────────── */
+.k-badge--success { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-success) 35%, transparent); }
+.k-badge--warning { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 35%, transparent); }
+.k-badge--danger  { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-danger) 35%, transparent); }
+
+/* ── Route transition (used by <RouterView v-slot> if wired) ────────── */
+.route-enter-active, .route-leave-active {
+  transition: opacity 180ms var(--ease-out), transform 220ms var(--ease-out);
+}
+.route-enter-from { opacity: 0; transform: translateY(6px); }
+.route-leave-to   { opacity: 0; transform: translateY(-4px); }
+
+/* ── Reduced motion: respect user preference ────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body::after, .k-empty svg, .btn-primary::after { animation: none !important; }
+  * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+}
+
+/* ── Print polish ───────────────────────────────────────────────────── */
+@media print {
+  body::before, body::after { display: none !important; }
+  .sidebar, .topbar { display: none !important; }
+  .k-card, .card, .panel { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+}

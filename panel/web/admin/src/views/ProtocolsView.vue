@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useApi } from '@koris/composables/useApi'
+import { useApi, getCsrfToken } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import { useConfirm } from '@koris/composables/useConfirm'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KButton from '@koris/ui/KButton.vue'
@@ -13,6 +14,7 @@ import KSlideOver from '@koris/ui/KSlideOver.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 
 const { get, post } = useApi()
+const { confirm } = useConfirm()
 const toast = useToast()
 const { t } = useI18n()
 
@@ -120,7 +122,7 @@ async function fetchVpnConfig(nodeId: number) {
     config.value = map
   } catch { /* node offline */ } finally { loadingConfig.value = false }
 }
-watch(selectedNodeId, (id) => { if (id != null) fetchVpnConfig(id) })
+watch(selectedNodeId, (id) => { if (id != null) { fetchVpnConfig(id); loadTeleProxies() } })
 onMounted(fetchNodes)
 
 function openProtocolPanel(protocolKey: string) {
@@ -184,6 +186,53 @@ async function toggleProtocol(protocolKey: string) {
     toast.success(t(newEnabled ? 'services.enabled' : 'services.disabled').replace('{proto}', proto.name))
   } catch { config.value[protocolKey].enabled = !newEnabled }
 }
+
+
+// ─── Telegram Proxy (MTProto) — managed per node, part of Protocols ──────────
+const teleProxies = ref<any[]>([])
+const loadingTele = ref(false)
+const showTeleForm = ref(false)
+const creatingTele = ref(false)
+const teleForm = ref<{ port: number; tag: string }>({ port: 443, tag: '' })
+const nodeTeleProxies = computed(() => teleProxies.value.filter((p: any) => p.node_id === selectedNodeId.value))
+
+async function loadTeleProxies() {
+  if (!selectedNodeId.value) return
+  loadingTele.value = true
+  try {
+    const res = await get<{ ok: boolean; proxies: any[] }>('/api/admin/telegram-proxies')
+    teleProxies.value = res.proxies || []
+  } catch { /* surfaced by useApi */ } finally { loadingTele.value = false }
+}
+async function createTeleProxy() {
+  if (!selectedNodeId.value || !teleForm.value.port) { toast.error(t('teleproxy.field_port') + ' required'); return }
+  creatingTele.value = true
+  try {
+    const res = await post<{ ok: boolean }>('/api/admin/telegram-proxies', { node_id: selectedNodeId.value, port: teleForm.value.port, tag: teleForm.value.tag })
+    if (res.ok) { toast.success(t('teleproxy.created_success')); showTeleForm.value = false; teleForm.value = { port: 443, tag: '' }; await loadTeleProxies() }
+  } catch { /* surfaced */ } finally { creatingTele.value = false }
+}
+async function startTeleProxy(p: any) {
+  try { const res = await post<{ ok: boolean }>(`/api/admin/telegram-proxies/${p.id}/start`, {}); if (res.ok) { toast.success(t('teleproxy.start_success')); await loadTeleProxies() } } catch {}
+}
+async function stopTeleProxy(p: any) {
+  try { const res = await post<{ ok: boolean }>(`/api/admin/telegram-proxies/${p.id}/stop`, {}); if (res.ok) { toast.success(t('teleproxy.stop_success')); await loadTeleProxies() } } catch {}
+}
+async function deleteTeleProxy(p: any) {
+  const ok = await confirm({ title: t('teleproxy.confirm_delete_title'), message: t('teleproxy.confirm_delete_msg'), variant: 'danger' })
+  if (!ok) return
+  const token = getCsrfToken()
+  try {
+    const res = await fetch('/api/admin/telegram-proxies', { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...(token ? { 'X-CSRF-Token': token } : {}) }, credentials: 'same-origin', body: JSON.stringify({ id: p.id }) })
+    const data = await res.json()
+    if (data.ok) { toast.success(t('teleproxy.deleted_success')); await loadTeleProxies() } else toast.error(data.error || 'Delete failed')
+  } catch { toast.error('Delete failed') }
+}
+async function copyTeleLink(p: any) {
+  const link = p.share_link || p.tg_link
+  if (!link) return
+  try { await navigator.clipboard.writeText(link); toast.success(t('teleproxy.link_copied')) } catch { toast.error('Copy failed') }
+}
 </script>
 
 <template>
@@ -229,6 +278,48 @@ async function toggleProtocol(protocolKey: string) {
         </div>
       </div>
     </template>
+
+
+
+    <!-- Telegram Proxy (MTProto) — part of Protocols, managed per node -->
+    <section class="tele-section">
+      <div class="tele-head">
+        <div>
+          <h3>Telegram Proxy (MTProto)</h3>
+          <p class="muted">Per-node MTProto proxy. Each customer gets their own secret/token with limits (managed per user).</p>
+        </div>
+        <KButton variant="primary" size="sm" @click="showTeleForm = !showTeleForm">{{ t('teleproxy.add_proxy') }}</KButton>
+      </div>
+
+      <div v-if="showTeleForm" class="tele-form card">
+        <KInput v-model.number="teleForm.port" type="number" :placeholder="t('teleproxy.field_port')" />
+        <KInput v-model="teleForm.tag" :placeholder="t('teleproxy.tag_placeholder')" />
+        <div class="form-actions-row">
+          <KButton variant="primary" size="sm" :loading="creatingTele" @click="createTeleProxy">{{ t('teleproxy.add_proxy') }}</KButton>
+          <KButton variant="ghost" size="sm" @click="showTeleForm = false">Cancel</KButton>
+        </div>
+      </div>
+
+      <div v-if="loadingTele" class="skeleton-wrap">
+        <KSkeleton v-for="i in 2" :key="i" variant="rect" width="100%" :height="56" />
+      </div>
+      <div v-else-if="!nodeTeleProxies.length" class="muted tele-empty">No Telegram proxies on this node yet.</div>
+      <div v-else class="tele-list">
+        <div v-for="p in nodeTeleProxies" :key="p.id" class="tele-row card">
+          <div class="tele-row-main">
+            <KStatusPill :status="p.status" size="sm" />
+            <span class="tele-port">:{{ p.port }}</span>
+            <span v-if="p.tag" class="tele-tag">{{ p.tag }}</span>
+          </div>
+          <div class="row-actions">
+            <KButton v-if="p.status !== 'active'" variant="ghost" size="sm" @click="startTeleProxy(p)">{{ t('teleproxy.start') }}</KButton>
+            <KButton v-else variant="ghost" size="sm" @click="stopTeleProxy(p)">{{ t('teleproxy.stop') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="copyTeleLink(p)">{{ t('teleproxy.copy_link') }}</KButton>
+            <KButton variant="danger" size="sm" @click="deleteTeleProxy(p)">X</KButton>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <KSlideOver :open="panelOpen" :title="panelTitle" width="440px" @close="closePanel">
       <div class="panel-body">

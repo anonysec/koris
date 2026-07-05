@@ -8,8 +8,9 @@ import '@koris/styles/transitions.css'
 import '@koris/styles/utilities.css'
 import '@koris/styles/rtl.css'
 import './style.css'
-import '@koris/styles/components.css'
+import '@koris/theme/styles/components.css'
 import './styles/micro-interactions.css'
+import '@koris/theme/styles/polish.css'
 
 // Import i18n to register admin translation messages with the shared i18n system
 import './i18n'
