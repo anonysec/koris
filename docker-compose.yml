@@ -1,5 +1,9 @@
 name: koris
 
+# KorisPanel development / single-host deployment stack.
+# NOTE: for production, override secrets (POSTGRES_PASSWORD, PGADMIN_PASSWORD,
+# PANEL_*) via environment or a secrets manager - never commit them.
+
 services:
   panel:
     container_name: koris
@@ -11,8 +15,12 @@ services:
     ports:
       - "${PANEL_PORT:-2026}:${PANEL_PORT:-2026}"
       - "80:80"
-    env_file:
-      - docker/panel.env
+    environment:
+      PANEL_PG_DSN: "postgres://${POSTGRES_USER:-koris}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-koris}?sslmode=disable"
+      PANEL_DOMAIN: "${PANEL_DOMAIN:-localhost}"
+      PANEL_DEV_MODE: "${PANEL_DEV_MODE:-false}"
+      PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET:-change-me-in-prod}"
+      PANEL_SETUP_KEY: "${PANEL_SETUP_KEY:-}"
     depends_on:
       db:
         condition: service_healthy
@@ -20,6 +28,8 @@ services:
       - panel-data:/var/lib/koris
       - /etc/koris:/etc/koris
     restart: unless-stopped
+    mem_limit: 1024m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "wget", "--no-check-certificate", "-q", "--spider", "https://localhost:2026/api/health"]
       interval: 10s
@@ -34,8 +44,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-koris}
       POSTGRES_USER: ${POSTGRES_USER:-koris}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Bound to localhost only; the panel reaches it over the internal network.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -44,22 +55,29 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    mem_limit: 2048m
+    cpus: "2.0"
 
   pgadmin:
     container_name: koris-pgadmin
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:latest
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@koris.local}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      # SECURITY: no insecure default - PGADMIN_PASSWORD must be provided.
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_ENFORCE_PWD_PASSWORD: "True"
+    # Do not expose pgAdmin publicly; bind to localhost (use a VPN/SSH tunnel).
     ports:
-      - "${PGADMIN_PORT:-5050}:80"
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
 
 volumes:
   panel-data:
