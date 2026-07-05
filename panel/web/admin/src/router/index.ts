@@ -22,6 +22,8 @@ const adminOnlyRoutes = new Set([
   'knowledge-base',
   'user-tags',
   'filter-presets',
+  'protocols',
+  'telegram-bot',
 ])
 
 const router = createRouter({
@@ -60,6 +62,8 @@ const router = createRouter({
         { path: 'knowledge-base', name: 'knowledge-base', component: () => import('@/views/KnowledgeBaseView.vue') },
         { path: 'user-tags', name: 'user-tags', component: () => import('@/views/UserTagsView.vue') },
         { path: 'filter-presets', name: 'filter-presets', component: () => import('@/views/FilterPresetsView.vue') },
+        { path: 'protocols', name: 'protocols', component: () => import('@/views/ProtocolsView.vue') },
+        { path: 'telegram-bot', name: 'telegram-bot', component: () => import('@/views/TelegramBotView.vue') },
         // Redirects from old paths
         { path: 'customers', redirect: '/dashboard/users' },
         { path: 'customers/:id', redirect: (to: any) => `/dashboard/users/${to.params.id}` },
