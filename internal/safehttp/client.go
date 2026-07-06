@@ -96,3 +96,47 @@ func AllowlistClient(allowedHosts []string, timeout time.Duration) *http.Client 
 		},
 	}
 }
+
+// LocalhostClient creates a client that ONLY allows connections to 127.0.0.1 or ::1.
+// Use for CLI commands that talk to the local panel process.
+func LocalhostClient(timeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			// Only allow loopback addresses
+			ip := net.ParseIP(host)
+			if ip == nil {
+				// Resolve hostname and check all IPs
+				ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+				if err != nil {
+					return nil, fmt.Errorf("DNS lookup failed for %q: %w", host, err)
+				}
+				for _, ipAddr := range ips {
+					if !ipAddr.IP.IsLoopback() {
+						return nil, fmt.Errorf("host %q resolves to non-loopback address %s", host, ipAddr.IP)
+					}
+				}
+			} else if !ip.IsLoopback() {
+				return nil, fmt.Errorf("address %s is not loopback", host)
+			}
+			return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
+		},
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+}

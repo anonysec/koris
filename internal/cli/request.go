@@ -72,9 +72,7 @@ func (c *CLI) requestViaSocket(method, path string, body []byte) (*http.Response
 
 // requestViaHTTP attempts the request over TCP to 127.0.0.1:8080.
 func (c *CLI) requestViaHTTP(method, path string, body []byte) (*http.Response, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+	client := c.Client() // uses safehttp.LocalhostClient (loopback-only)
 
 	url := "http://127.0.0.1:8080" + path
 	var req *http.Request

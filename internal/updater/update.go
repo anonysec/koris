@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/anonysec/koris/internal/safehttp"
 )
 
 // NotifyFunc is a callback used to send notifications (e.g., Telegram) on update events.
@@ -42,7 +44,7 @@ func NewPanelUpdater(releaseURL, binaryPath, rollbackPath string, notifier Notif
 
 // CheckLatest queries the release endpoint and returns available version info.
 func (u *PanelUpdater) CheckLatest() (*ReleaseInfo, error) {
-	resp, err := http.Get(u.ReleaseURL)
+	resp, err := safehttp.NewClient(60 * 1e9).Get(u.ReleaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("[update] check latest: %w", err)
 	}
@@ -65,7 +67,7 @@ func (u *PanelUpdater) CheckLatest() (*ReleaseInfo, error) {
 // and writes the new binary to BinaryPath.
 func (u *PanelUpdater) Apply(info *ReleaseInfo) error {
 	// Download binary from info.URL
-	resp, err := http.Get(info.URL)
+	resp, err := safehttp.NewClient(120 * 1e9).Get(info.URL)
 	if err != nil {
 		return fmt.Errorf("[update] download binary: %w", err)
 	}

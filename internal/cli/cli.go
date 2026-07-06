@@ -18,6 +18,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/anonysec/koris/internal/safehttp"
 )
 
 // CLI provides the command-line interface for panel management.
@@ -37,7 +40,7 @@ func New(opts ...Option) *CLI {
 	c := &CLI{
 		output:     os.Stdout,
 		socketPath: "/var/run/panel.sock",
-		client:     http.DefaultClient,
+		client:     safehttp.LocalhostClient(15 * time.Second),
 	}
 	for _, opt := range opts {
 		opt(c)
