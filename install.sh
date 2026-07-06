@@ -272,10 +272,11 @@ clone_source() {
 # --- Write panel.env configuration ---
 write_panel_env() {
   mkdir -p "${CONFIG_DIR}"
-  local session_secret setup_key pgadmin_pass
+  local session_secret setup_key pgadmin_pass radius_secret
   session_secret="$(gen_secret 32)"
   setup_key="$(gen_secret 16)"
   pgadmin_pass="$(gen_secret 8)"
+  radius_secret="$(gen_secret 16)"
 
   cat > "${CONFIG_DIR}/panel.env" <<EOF
 # KorisPanel Docker Configuration
@@ -293,6 +294,7 @@ PANEL_ADDR=0.0.0.0:${PANEL_PORT}
 PANEL_PORT=${PANEL_PORT}
 PANEL_SESSION_SECRET=${session_secret}
 PANEL_SETUP_KEY=${setup_key}
+PANEL_RADIUS_SECRET=${radius_secret}
 PANEL_MIGRATIONS=/app/migrations
 PANEL_TLS_MODE=${TLS_MODE}
 PANEL_DOMAIN=${DOMAIN:-}

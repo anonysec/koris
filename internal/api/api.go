@@ -405,11 +405,5 @@ func (s *Server) Routes() *http.ServeMux {
 
 // radiusSecret returns the RADIUS shared secret from config or a fallback.
 func (s *Server) radiusSecret() string {
-	secret := os.Getenv("PANEL_RADIUS_SECRET")
-	if secret == "" {
-		// No default: RADIUS secret MUST be configured via PANEL_RADIUS_SECRET env var.
-		// FreeRADIUS default for localhost is "testing123" but we do not hardcode it.
-		return "testing123" // FreeRADIUS localhost default; override via PANEL_RADIUS_SECRET
-	}
-	return secret
+	return os.Getenv("PANEL_RADIUS_SECRET")
 }
