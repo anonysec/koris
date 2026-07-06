@@ -12,6 +12,9 @@ services:
       dockerfile: docker/Dockerfile
       args:
         BUILD_TAGS: ${BUILD_TAGS:-}
+        # Vite base path — bundled asset URLs match runtime routing.
+        KORIS_ADMIN_BASE: ${KORIS_ADMIN_BASE:-/admin/}
+        KORIS_PORTAL_BASE: ${KORIS_PORTAL_BASE:-/account/}
     ports:
       - "${PANEL_PORT:-2026}:${PANEL_PORT:-2026}"
       - "80:80"
@@ -21,6 +24,11 @@ services:
       PANEL_DEV_MODE: "${PANEL_DEV_MODE:-false}"
       PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET:-change-me-in-prod}"
       PANEL_SETUP_KEY: "${PANEL_SETUP_KEY:-}"
+      # URL routing — path prefixes or subdomains. See panel.env.
+      PANEL_ADMIN_PATH: "${PANEL_ADMIN_PATH:-/admin/}"
+      PANEL_PORTAL_PATH: "${PANEL_PORTAL_PATH:-/account/}"
+      PANEL_ADMIN_HOST: "${PANEL_ADMIN_HOST:-}"
+      PANEL_PORTAL_HOST: "${PANEL_PORTAL_HOST:-}"
     depends_on:
       db:
         condition: service_healthy
