@@ -10,6 +10,7 @@ import { formatDate } from '@koris/composables/useFormatDate'
 import Chart from '@koris/ui/Chart.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
+import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -188,6 +189,7 @@ function formatDuration(seconds: number): string {
 
 <template>
   <div class="page dashboard">
+    <OnboardingChecklist />
     <!-- Stats Grid -->
     <section class="stats-grid" aria-label="Overview statistics">
       <div v-for="stat in statCards" :key="stat.label" class="stat-card stat-card--clickable" @click="handleStatClick(stat.route)">
