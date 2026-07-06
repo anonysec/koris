@@ -244,7 +244,6 @@ const navGroups = computed<NavGroup[]>(() => {
     items: [
       { route: 'services', label: t('nav.services'), icon: 'services' },
       { route: 'protocols', label: t('nav.protocols'), icon: 'wireguard' },
-      { route: 'protocols', label: t('nav.telegram_proxies'), icon: 'telegram' },
     ],
   })
 

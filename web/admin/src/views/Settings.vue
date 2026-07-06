@@ -7,7 +7,6 @@ import { useTheme, availableThemes } from '@koris/composables/useTheme'
 import { useSettingsStore } from '@/stores/settings'
 import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 import type { Locale } from '@koris/composables/useI18n'
-import Tabs from '@koris/ui/Tabs.vue'
 import PageHeader from '@koris/ui/PageHeader.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Input from '@koris/ui/Input.vue'
@@ -471,9 +470,19 @@ onMounted(async () => {
 <template>
   <div class="page settings-view">
     <PageHeader :title="t('settings.title') || 'Settings'" subtitle="Configure your panel, TLS, database and integrations" />
-    <Tabs v-model="activeTab" :tabs="tabs" aria-label="Settings sections">
+    <div class="settings-layout">
+      <nav class="set-nav" aria-label="Settings sections">
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'panel-settings' }" @click="activeTab = 'panel-settings'"><span class="set-nav__ico">⚙️</span><span>Panel</span></button>
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'system' }" @click="activeTab = 'system'"><span class="set-nav__ico">🖥️</span><span>System</span></button>
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'data-warnings' }" @click="activeTab = 'data-warnings'"><span class="set-nav__ico">⚠️</span><span>Warnings</span></button>
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'app-links' }" @click="activeTab = 'app-links'"><span class="set-nav__ico">🔗</span><span>App Links</span></button>
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'telegram' }" @click="activeTab = 'telegram'"><span class="set-nav__ico">✈️</span><span>Telegram</span></button>
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'certificates' }" @click="activeTab = 'certificates'"><span class="set-nav__ico">🔒</span><span>Certificates</span></button>
+        <button class="set-nav__item" :class="{ 'set-nav__item--active': activeTab === 'backup' }" @click="activeTab = 'backup'"><span class="set-nav__ico">📦</span><span>Backup</span></button>
+      </nav>
+      <div class="settings-content">
       <!-- Panel Settings -->
-      <template #panel-settings>
+      <div v-show="activeTab === 'panel-settings'" class="settings-pane">
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.panel_settings') }}</h4>
           <form class="settings-form" autocomplete="off" @submit.prevent="savePanelSettings">
@@ -557,10 +566,10 @@ onMounted(async () => {
             </Button>
           </form>
         </div>
-      </template>
+      </div>
 
       <!-- System: DB, TLS, Workers, Alerts, gRPC, Info -->
-      <template #system>
+      <div v-show="activeTab === 'system'" class="settings-pane">
         <div class="settings-panel system-sections">
           <SettingsPanelInfoSection />
           <SettingsDatabaseSection />
@@ -569,10 +578,10 @@ onMounted(async () => {
           <SettingsAlertsSection />
           <SettingsGrpcSection />
         </div>
-      </template>
+      </div>
 
       <!-- Data Usage Warnings -->
-      <template #data-warnings>
+      <div v-show="activeTab === 'data-warnings'" class="settings-pane">
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.thresholds') }}</h4>
           <p class="text-muted text-sm">
@@ -699,10 +708,10 @@ onMounted(async () => {
             </form>
           </div>
         </div>
-      </template>
+      </div>
 
       <!-- App Links -->
-      <template #app-links>
+      <div v-show="activeTab === 'app-links'" class="settings-pane">
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.app_links') }}</h4>
           <p class="text-muted text-sm">{{ t('settings.app_links_desc') }}</p>
@@ -728,10 +737,10 @@ onMounted(async () => {
             <Button type="submit" variant="primary" :loading="savingAppLinks">{{ t('settings.save_app_links') }}</Button>
           </form>
         </div>
-      </template>
+      </div>
 
       <!-- Telegram Bot -->
-      <template #telegram>
+      <div v-show="activeTab === 'telegram'" class="settings-pane">
         <div class="settings-panel telegram-panel">
           <div class="telegram-head">
             <div>
@@ -766,10 +775,10 @@ onMounted(async () => {
             <p>Save the token, then press <em>Test &amp; Restart</em> to bring the bot online. It reads its configuration from the database and alerts the admin chats you specify.</p>
           </div>
         </div>
-      </template>
+      </div>
 
       <!-- Certificates -->
-      <template #certificates>
+      <div v-show="activeTab === 'certificates'" class="settings-pane">
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.panel_https') }}</h4>
           <p class="text-muted text-sm">{{ t('settings.panel_https_desc') }}</p>
@@ -811,13 +820,14 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-      </template>
+      </div>
 
       <!-- Backup -->
-      <template #backup>
+      <div v-show="activeTab === 'backup'" class="settings-pane">
         <Backup />
-      </template>
-    </Tabs>
+      </div>
+    </div>
+    </div>
   </div>
 </template>
 
@@ -940,4 +950,17 @@ onMounted(async () => {
 .telegram-help strong { color: var(--color-text, #e6edf3); font-size: var(--text-sm, 13px); }
 .telegram-help p { margin: 6px 0 0; color: var(--color-muted, #8b98a5); font-size: var(--text-sm, 13px); line-height: 1.55; }
 .telegram-help em { color: var(--color-primary, #2563eb); font-style: normal; font-weight: var(--font-semibold, 600); }
+
+/* ── Two-pane settings layout ── */
+.settings-layout { display: grid; grid-template-columns: 220px 1fr; gap: var(--space-6); align-items: start; }
+@media (max-width: 820px) { .settings-layout { grid-template-columns: 1fr; } }
+.set-nav { position: sticky; top: var(--space-4); display: flex; flex-direction: column; gap: 2px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-2); }
+@media (max-width: 820px) { .set-nav { position: static; flex-direction: row; flex-wrap: wrap; } }
+.set-nav__item { display: flex; align-items: center; gap: var(--space-2); padding: 9px 12px; border-radius: var(--radius-md); border: none; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--font-medium); text-align: left; cursor: pointer; transition: background var(--duration-fast), color var(--duration-fast); width: 100%; }
+.set-nav__item:hover { background: var(--color-surface-2); color: var(--color-text); }
+.set-nav__item--active { background: color-mix(in srgb, var(--color-primary) 14%, transparent); color: var(--color-primary); font-weight: var(--font-semibold); }
+.set-nav__ico { font-size: 1rem; }
+.settings-content { min-width: 0; }
+.settings-pane { animation: fade-in var(--duration-normal) var(--ease-out); }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 </style>
