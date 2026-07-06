@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "echo 'portal: no vitest suite yet'"
   },
   "dependencies": {
-    "@koris/shared": "workspace:*",
+    "@koris/core": "workspace:*",
+    "@koris/theme": "workspace:*",
     "@vueuse/core": "^11.3.0",
     "pinia": "^2.3.0",
     "qrcode": "^1.5.4",

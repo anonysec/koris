@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestVerifyChecksum(t *testing.T) {
+func TestVerifyChecksum_PanelUpdater(t *testing.T) {
 	tests := []struct {
 		name     string
 		data     []byte
