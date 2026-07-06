@@ -4,7 +4,47 @@ All notable changes to the clean Go + Vue rewrite are tracked here.
 
 ## Unreleased
 
+## 0.93.0 - 2026-07-06
+
+### Fixed
+- **`GetTraffic` nil-panic** — hand-rolled proto stubs whose `ProtoReflect()` returned nil caused the panel to log "GetTraffic panic recovered" every 10s and silently drop traffic collection. Regenerated real stubs via `buf` in both panel and knode. Added missing `GenerateClientCert` RPC to the proto (previously only in stubs).
+- **Admin build drift** — Dockerfile only ran `pnpm build` for portal + landing, then copied a stale committed `admin/www/`. Fixed so admin also rebuilds every image; added `.gitkeep` files to keep dirs alive for `//go:embed`.
+- **Router history mismatch** — admin/portal routers had `createWebHistory('/dashboard/')` hardcoded; would break after URL rename. Now use `import.meta.env.BASE_URL` matching Vite's env-driven base.
+
+### Added
+- **Releases**: pre-built binaries + multi-arch Docker images to GHCR, triggered by `v*` git tags. See `RELEASING.md`.
+- **`--from-release` installer mode** (default): pulls `ghcr.io/anonysec/koris:<tag>` instead of building locally (~5s vs ~2min). Use `--from-source` to keep the old behavior.
+- **Configurable URL routing**: `PANEL_ADMIN_PATH`, `PANEL_PORTAL_PATH`, `PANEL_ADMIN_HOST`, `PANEL_PORTAL_HOST` env vars. Interactive prompt in `install.sh` for path-vs-subdomain choice. Vite base is env-driven via `KORIS_ADMIN_BASE` / `KORIS_PORTAL_BASE` at build time.
+- **Onboarding checklist** (admin Dashboard) — new admins see a 3-step "add node · create plan · add customer" guide with progress bar. Auto-hides once populated.
+- **Portal welcome** (customer SinglePage) — new customers see a "download config · install client · connect" guide. Auto-hides once traffic is recorded.
+- **Revenue trend card** — new `/api/admin/revenue-trend` endpoint + SVG area chart on Dashboard with MRR, month-over-month delta, and 7d/30d/90d/365d switcher.
+- **Themes starter kit** at `web/themes/example/` demonstrating how fan-made themes plug in via the swappable `@koris/theme` alias.
+- **GitHub Actions CI** — build + test + lint + Docker smoke-check on every push and PR.
+
 ### Changed
+- **Repo rename**: `anonysec/panel` → `anonysec/koris`. GitHub redirects the old URL.
+- **Go module**: `KorisPanel` → `github.com/anonysec/koris`.
+- **Directory flatten**: `panel/panel/*` → `koris/*`. No more nested duplication.
+- **Frontend split**: `@koris/shared` → `@koris/core` (framework — composables, types, base CSS) + `@koris/theme` (visual — components, polish CSS). Backward-compatible aliases keep old imports working.
+- **Naming pass**: dropped `View` suffix from all 58 view files and `K` prefix from 26 design-system components (`KButton.vue` → `Button.vue`, `CustomersView.vue` → `Customers.vue`). Router imports updated in one pass.
+- **Design system polish layer** (`web/theme/styles/polish.css`) added — aurora backdrop, gradient stat numerals, glass topbar, sheen buttons, skeleton shimmer, sidebar halos. Token-safe, adapts to all 6 themes.
+- **URL scheme defaults**: admin at `/admin/` (was `/dashboard/`), portal at `/account/` (was `/portal/`). Legacy paths redirect 302.
+- **Single `main` branch** — 5 stale remote branches deleted; all history on main.
+
+### Removed
+- **Buzzword purge** from all code, filenames, and comments: `premium`, `pro`, `ultimate`, `enterprise` all gone. `premium.css` → `polish.css`.
+- **Dead packages**: `internal/tlsmanager/` (932 LOC, zero callers) and `internal/autocert/` (723 LOC, thin wrapper never wired). Recoverable via git history.
+- **Build artifacts from git**: `web/*/www/` untracked; always rebuilt fresh.
+- **Nested `panel/` directory**: was outer `panel/panel/panel/`, cleanest layout possible.
+
+### Refactored
+- **Backend package consolidation**: 42 → 38 packages.
+  - `internal/wireguard/` → `internal/protocols/wireguard/`
+  - `internal/email/` → `internal/notify/` (exports renamed: `Config` → `EmailConfig`, etc.)
+  - `internal/update/` → `internal/updater/`
+- **Server cleanup**: `/root` on the dev VPS reduced from 46 items to 6 real projects + `_archive/`.
+
+### Changed (previously unreleased)
 - **OpenVPN auth mode** — Cores config now offers three auth modes: Hybrid (cert + password per user, new default), Username/Password only, Certificate only. Previous default was userpass.
 - **Passwordless OpenVPN profiles** — when `?passwordless=true` is used, the generated `.ovpn` file now embeds credentials inline via `<auth-user-pass>` block instead of omitting `auth-user-pass` entirely. This prevents the OpenVPN client from prompting the user for credentials while maintaining server-side authentication.
 

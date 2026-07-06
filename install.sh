@@ -65,6 +65,11 @@ ADMIN_PATH="/admin/"       # served at https://<host>/admin/
 PORTAL_PATH="/account/"    # served at https://<host>/account/
 ADMIN_HOST=""              # optional: subdomain override, e.g. admin.example.com
 PORTAL_HOST=""             # optional: subdomain override, e.g. account.example.com
+
+# Installation mode: "release" (pull pre-built image, fast) or "source" (git clone + build)
+INSTALL_MODE="release"
+# Container registry to pull from when INSTALL_MODE=release.
+IMAGE_REGISTRY="ghcr.io/anonysec/koris"
 FORCE_REINSTALL=""
 
 parse_args() {
@@ -83,6 +88,9 @@ parse_args() {
       --portal-path=*)  PORTAL_PATH="${arg#*=}" ;;
       --admin-host=*)   ADMIN_HOST="${arg#*=}" ;;
       --portal-host=*)  PORTAL_HOST="${arg#*=}" ;;
+      --from-source)    INSTALL_MODE="source" ;;
+      --from-release)   INSTALL_MODE="release" ;;
+      --registry=*)     IMAGE_REGISTRY="${arg#*=}" ;;
       -h|--help)      banner; usage; exit 0 ;;
       *)              err "Unknown flag: ${arg}" ;;
     esac
@@ -105,6 +113,11 @@ usage() {
   echo "  --portal-path=/y/   Customer portal URL prefix (default: /account/)"
   echo "  --admin-host=X      Serve admin at subdomain (e.g. admin.example.com)"
   echo "  --portal-host=X     Serve portal at subdomain (e.g. account.example.com)"
+  echo ""
+  echo "Install method:"
+  echo "  --from-release      Use pre-built image from GHCR (default, ~5s)"
+  echo "  --from-source       Clone repo and build locally with Docker (~2min)"
+  echo "  --registry=X        Custom image registry (default: ghcr.io/anonysec/koris)"
 }
 
 prompt_config() {
@@ -336,7 +349,8 @@ install_docker() {
     apt-get update -qq && apt-get install -y -qq git >/dev/null 2>&1
   fi
 
-  # Clone or update source
+  # Fetch/refresh source. For --from-release mode we still need the docker-compose.yml,
+  # migrations, and deploy/ files — but we skip the pnpm+go build.
   clone_source
 
   # Write config (skip if reinstalling with existing config)
@@ -353,17 +367,29 @@ install_docker() {
     fi
   fi
 
-  # Build and start the Docker Compose stack
-  log "Building and starting Docker Compose stack..."
   cd "${INSTALL_DIR}"
-  docker compose build || err "Docker build failed — check output above"
-  docker compose up -d || err "Docker Compose failed to start services"
+
+  if [[ "${INSTALL_MODE}" == "release" ]]; then
+    # Pull pre-built image, no local compile.
+    local tag="${IMAGE_TAG:-latest}"
+    tag="${tag#v}"  # strip leading v — GHCR tags don't include it
+    export KORIS_IMAGE="${IMAGE_REGISTRY}:${tag}"
+    log "Pulling ${KORIS_IMAGE}..."
+    docker pull "${KORIS_IMAGE}" || err "docker pull failed — falling back to --from-source retries this"
+    log "Starting Docker Compose stack..."
+    docker compose up -d --pull never || err "Docker Compose failed to start services"
+  else
+    # Legacy path: build from source. Slower, but works without a release.
+    log "Building Docker Compose stack from source (this takes ~2 minutes)..."
+    docker compose build || err "Docker build failed — check output above"
+    docker compose up -d || err "Docker Compose failed to start services"
+  fi
 
   # Wait for panel to become healthy
   log "Waiting for panel to become healthy..."
   local attempts=0
   while [[ ${attempts} -lt 30 ]]; do
-    if docker inspect --format='{{.State.Health.Status}}' koris 2>/dev/null | grep -q "healthy"; then
+    if docker inspect --format='{{.State.Health.Status}}' panel 2>/dev/null | grep -q "healthy"; then
       log "Panel is healthy"
       write_version_file
       return

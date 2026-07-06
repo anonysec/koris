@@ -7,6 +7,9 @@ name: koris
 services:
   panel:
     container_name: koris
+    # Release mode: docker pull $KORIS_IMAGE first, then `docker compose up`.
+    # Source mode: leave KORIS_IMAGE unset, run `docker compose build && up`.
+    image: ${KORIS_IMAGE:-koris:local}
     build:
       context: .
       dockerfile: docker/Dockerfile
