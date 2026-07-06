@@ -1,39 +1,66 @@
-# Dependencies
-node_modules/
+# ═══════════════════════════════════════════════════
+# Koris .gitignore — comprehensive
+# ═══════════════════════════════════════════════════
 
-# Build output (rebuild with 'npm run build')
-# Frontend build artifacts — always rebuilt by Vite. Keep dirs (for go:embed) via .gitkeep.
-web/*/www/*
-!web/*/www/.gitkeep
-
-# Lock files
-package-lock.json
-
-# Go build artifacts
-dist/
+# ── Compiled binaries ──
+/panel
+/koris
+/koris-full-*
+/koris-lite-*
 /panel-binary
 /node-binary
 *.exe
 
-# OS files
+# ── Go build artifacts ──
+dist/
+*.test
+*.out
+coverage.html
+
+# ── Dependencies ──
+node_modules/
+vendor/
+
+# ── Frontend build artifacts ──
+# Keep directories (for go:embed) via .gitkeep, ignore everything else
+web/*/www/*
+!web/*/www/.gitkeep
+web/*/dist/
+package-lock.json
+
+# ── Secrets & credentials ──
+*.pem
+*.key
+*.crt
+.env
+.env.*
+!.env.example
+!deploy/.env.example
+deploy/.env
+deploy/panel.env
+docker/panel.env
+
+# ── Runtime files ──
+*.log
+*.pid
+*.sock
+*.tmp
+*.bak
+*.bak-*
+
+# ── OS files ──
 .DS_Store
 Thumbs.db
 
-# Secrets / TLS
-*.pem
-.env
-
-# IDE
+# ── IDE / editor ──
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
-# Stray migration backup dirs
+# ── Stray backup dirs ──
 web/_shared.bak*
-*.bak-*
 
-# Generated docs site (GitHub Pages)
+# ── Generated docs site (GitHub Pages) ──
 _site/
-deploy/.env
-deploy/panel.env
