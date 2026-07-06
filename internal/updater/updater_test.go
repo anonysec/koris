@@ -87,6 +87,7 @@ func TestCheck(t *testing.T) {
 	defer server.Close()
 
 	u := New("v0.92.0", server.URL, "/usr/local/bin/koris")
+	u.skipURLValidation = true
 
 	info, err := u.Check()
 	if err != nil {
@@ -125,6 +126,7 @@ func TestCheckNoUpdate(t *testing.T) {
 	defer server.Close()
 
 	u := New("v0.92.0", server.URL, "/usr/local/bin/koris")
+	u.skipURLValidation = true
 
 	info, err := u.Check()
 	if err != nil {
@@ -144,6 +146,7 @@ func TestCheckServerError(t *testing.T) {
 	defer server.Close()
 
 	u := New("v0.92.0", server.URL, "/usr/local/bin/koris")
+	u.skipURLValidation = true
 
 	_, err := u.Check()
 	if err == nil {
@@ -195,6 +198,7 @@ func TestApplySuccess(t *testing.T) {
 	os.WriteFile(binaryPath, []byte("old binary"), 0755)
 
 	u := New("v0.92.0", "", binaryPath)
+	u.skipURLValidation = true
 	// Override signalRestart to not actually restart anything in tests
 	// We test up to the point before restart by checking binary was replaced
 

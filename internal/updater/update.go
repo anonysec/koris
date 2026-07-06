@@ -31,6 +31,7 @@ type PanelUpdater struct {
 	BinaryPath   string
 	RollbackPath string
 	Notifier     NotifyFunc
+	Client       *http.Client // injectable for tests; defaults to safehttp.NewClient
 }
 
 // NewPanelUpdater creates a new PanelUpdater instance.
@@ -45,7 +46,11 @@ func NewPanelUpdater(releaseURL, binaryPath, rollbackPath string, notifier Notif
 
 // CheckLatest queries the release endpoint and returns available version info.
 func (u *PanelUpdater) CheckLatest() (*ReleaseInfo, error) {
-	resp, err := safehttp.NewClient(60 * 1e9).Get(u.ReleaseURL)
+	client := u.Client
+	if client == nil {
+		client = safehttp.NewClient(60 * 1e9)
+	}
+	resp, err := client.Get(u.ReleaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("[update] check latest: %w", err)
 	}
@@ -68,7 +73,11 @@ func (u *PanelUpdater) CheckLatest() (*ReleaseInfo, error) {
 // and writes the new binary to BinaryPath.
 func (u *PanelUpdater) Apply(info *ReleaseInfo) error {
 	// Download binary from info.URL
-	resp, err := safehttp.NewClient(120 * 1e9).Get(info.URL)
+	client := u.Client
+	if client == nil {
+		client = safehttp.NewClient(120 * 1e9)
+	}
+	resp, err := client.Get(info.URL)
 	if err != nil {
 		return fmt.Errorf("[update] download binary: %w", err)
 	}

@@ -68,6 +68,7 @@ type Updater struct {
 	binaryPath     string // path to the current binary
 	backupPath     string // path to store backup
 	client         *http.Client
+	skipURLValidation bool // set in tests to allow http:// and localhost
 }
 
 // releaseResponse is the expected JSON format from the release endpoint.
@@ -103,8 +104,10 @@ func New(version, releaseURL, binaryPath string) *Updater {
 
 // Check queries the release URL for the latest version and returns UpdateInfo.
 func (u *Updater) Check() (*UpdateInfo, error) {
-	if err := validateURL(u.releaseURL); err != nil {
-		return nil, fmt.Errorf("[updater] release URL validation: %w", err)
+	if !u.skipURLValidation {
+		if err := validateURL(u.releaseURL); err != nil {
+			return nil, fmt.Errorf("[updater] release URL validation: %w", err)
+		}
 	}
 	req, err := http.NewRequest(http.MethodGet, u.releaseURL, nil)
 	if err != nil {
@@ -250,8 +253,10 @@ func (u *Updater) Rollback() error {
 // download fetches the binary from the given URL and returns its contents.
 // The URL is validated against SSRF and the response is capped at maxDownloadSize.
 func (u *Updater) download(dlURL string) ([]byte, error) {
-	if err := validateURL(dlURL); err != nil {
-		return nil, fmt.Errorf("download URL validation: %w", err)
+	if !u.skipURLValidation {
+		if err := validateURL(dlURL); err != nil {
+			return nil, fmt.Errorf("download URL validation: %w", err)
+		}
 	}
 
 	req, err := http.NewRequest(http.MethodGet, dlURL, nil)

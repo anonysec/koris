@@ -94,6 +94,7 @@ func TestCheckLatest(t *testing.T) {
 	defer srv.Close()
 
 	u := NewPanelUpdater(srv.URL, "/tmp/panel", "/tmp/panel.bak", nil)
+	u.Client = http.DefaultClient
 	info, err := u.CheckLatest()
 	if err != nil {
 		t.Fatalf("CheckLatest() error: %v", err)
@@ -121,6 +122,7 @@ func TestCheckLatest_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	u := NewPanelUpdater(srv.URL, "/tmp/panel", "/tmp/panel.bak", nil)
+	u.Client = http.DefaultClient
 	_, err := u.CheckLatest()
 	if err == nil {
 		t.Fatal("CheckLatest() expected error for HTTP 500")
@@ -149,6 +151,7 @@ func TestApply_Success(t *testing.T) {
 	defer srv.Close()
 
 	u := NewPanelUpdater("", binaryPath, rollbackPath, nil)
+	u.Client = http.DefaultClient
 
 	info := &ReleaseInfo{
 		Version:  "0.95.0",
@@ -194,6 +197,7 @@ func TestApply_ChecksumMismatch(t *testing.T) {
 	defer srv.Close()
 
 	u := NewPanelUpdater("", binaryPath, rollbackPath, nil)
+	u.Client = http.DefaultClient
 
 	info := &ReleaseInfo{
 		Version:  "0.95.0",
