@@ -1,3 +1,21 @@
+# 📖 Koris Documentation
+
+Welcome to the Koris docs. Start here:
+
+| Guide | What it covers |
+|-------|----------------|
+| 📘 [Installation](installation.md) | Docker, binary, GHCR, source |
+| 🏛️ [Architecture](architecture.md) | How the pieces fit together |
+| ⚙️ [Configuration](configuration.md) | Env vars, TLS, routing |
+| 🛰️ [Node Management](nodes.md) | Adding & operating knode agents |
+| 🎨 [UI / UX](ui-ux.md) | Design system, themes, overhaul layer |
+| 🛠️ [Admin Guide](ADMIN.md) | Day-to-day admin tasks |
+| 📡 [API Reference](API.md) | HTTP API |
+| 🐳 [Docker](DOCKER.md) | Compose stack details |
+| 🧠 [Low-memory Tuning](low-memory-tuning.md) | Small-VPS profiles |
+
+---
+
 # KorisPanel Installation Guide
 
 ## Requirements
@@ -13,7 +31,7 @@ No other dependencies are required — the panel, database, and frontend are all
 ### Quick Install (recommended)
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/anonysec/KorisPanel/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 ```
 
 The installer accepts the following flags:

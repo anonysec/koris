@@ -1,266 +1,204 @@
-# KorisPanel
+<div align="center">
 
-**Multi-protocol VPN management platform** with real-time node monitoring, customer billing, reseller system, and modern web UI.
+# 🛡️ Koris
 
-Manage your entire VPN infrastructure from a single dashboard: nodes, customers, subscriptions, payments, support tickets, and more.
+### Multi-protocol VPN management platform — nodes, billing, resellers & a modern web UI, all from one dashboard.
 
----
+[![Release](https://img.shields.io/github/v/tag/anonysec/koris?label=release&sort=semver)](https://github.com/anonysec/koris/releases)
+[![CI](https://github.com/anonysec/koris/actions/workflows/ci.yml/badge.svg)](https://github.com/anonysec/koris/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/badge/ghcr.io-anonysec%2Fkoris-2496ED?logo=docker&logoColor=white)](https://github.com/anonysec/koris/pkgs/container/koris)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Vue](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)](https://vuejs.org)
 
-## Key Features
+Manage your **entire VPN infrastructure** — nodes, customers, subscriptions, payments, support tickets and more — from a single, self-contained binary. 🚀
 
-### VPN & Networking
-- **Multi-Protocol** — OpenVPN, WireGuard, L2TP/IPsec, IKEv2, SSH Tunnel, MTProto
-- **Multi-Node** — Manage unlimited VPN nodes via gRPC with mTLS
-- **Outbound Tunnels** — VLESS+Reality, WireGuard, SSH, Rathole, GRE/IPIP
-- **FreeRADIUS Integration** — Standards-based AAA with session accounting
-- **Real-Time Monitoring** — Live metrics streaming, health checks, bandwidth tracking
-
-### Business & Billing
-- **Subscription Plans** — Quota-based or pay-as-you-go pricing
-- **Wallet & Payments** — Per-user wallet, manual/crypto payments, payment gateways
-- **Reseller System** — Sub-accounts with credit allocation and customer provisioning
-- **Invoices** — Auto-generated invoices with PDF export
-
-### Customer Experience
-- **Self-Service Portal** — Single-page app for usage, profiles, VPN configs, support
-- **Telegram Bot** — Admin management and customer self-service via inline buttons
-- **Ticket System** — Customer support with canned responses and knowledge base
-
-### Admin Dashboard
-- **Drag-and-Drop Sidebar** — Customizable navigation with category/item reordering
-- **Theming** — Multiple themes with 18 CSS tokens, dark/light/system mode
-- **Multi-Language** — English, Persian (RTL), Chinese, Russian
-- **Sliding Panels** — Consistent slide-over pattern for all entity creation forms
-
-### Infrastructure
-- **Two Editions** — Full and Lite from same codebase via Go build tags
-- **Docker Deploy** — TimescaleDB + pgAdmin + Panel in one compose file
-- **Auto-TLS** — Let's Encrypt (ACME), manual cert, or self-signed modes
-- **HTTPS Enforced** — External traffic requires TLS; HTTP restricted to loopback
-- **Decoy Landing Page** — Neutral business content with VPN blocklist validation
+</div>
 
 ---
 
-## Quick Install
+## ✨ Highlights
 
-### Docker (recommended)
+- 🔌 **6 VPN protocols** — OpenVPN, WireGuard, L2TP/IPsec, IKEv2, SSH Tunnel, MTProto
+- 🌐 **Multi-node fleet** — unlimited [knode](https://github.com/anonysec/knode) agents over gRPC + mTLS
+- 💳 **Billing built-in** — plans, wallets, invoices, crypto & gateway payments
+- 🧑‍💼 **Reseller system** — sub-accounts, credit allocation, customer provisioning
+- 📊 **Real-time metrics** — live streaming, health checks, bandwidth accounting
+- 🎨 **Modern UI** — Vue 3 SPA, 6 themes, dark/light/system, RTL, drag-and-drop nav
+- 📦 **One binary** — frontends + migrations embedded; no external assets to ship
+- 🐳 **Docker-native** — TimescaleDB + pgAdmin + Panel in one `compose` file
+
+---
+
+## 📚 Table of Contents
+
+- [🚀 Quick Install](#-quick-install)
+- [🧩 Feature Tour](#-feature-tour)
+- [🏗️ Architecture](#️-architecture)
+- [🛠️ Development](#️-development)
+- [📦 Releases](#-releases)
+- [🔐 Security](#-security)
+- [📖 Documentation](#-documentation)
+- [🤝 Contributing](#-contributing)
+
+---
+
+## 🚀 Quick Install
+
+### 🐳 Docker (recommended)
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 ```
 
-Running without flags launches an interactive prompt for edition, domain, port, DB, and SSL configuration. If an existing installation is detected, the installer offers reinstall, full wipe, update, or cancel options before proceeding.
+Run without flags for an **interactive setup** (edition, domain, port, DB, SSL). If an install is detected, you'll be offered reinstall / wipe / update / cancel.
 
-Options:
-```bash
-install.sh --lite              # Lite edition
-install.sh --full             # Full edition (default)
-install.sh --port=8080         # Custom port
-install.sh --domain=panel.example.com
-install.sh --no-knode          # Skip knode agent installation
-install.sh --version=v1.2.0    # Install a specific version tag
-install.sh --reinstall         # Force reinstall (preserves DB data)
-install.sh --uninstall         # Remove KorisPanel
-```
-
-### Node Agent (on each VPN server)
+<details>
+<summary>⚙️ Non-interactive flags</summary>
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/anonysec/knode/master/install.sh)
+install.sh --full                       # Full edition (default)
+install.sh --lite                       # Lite edition
+install.sh --port=8080                  # Custom port
+install.sh --domain=panel.example.com   # Public domain (enables ACME TLS)
+install.sh --no-knode                   # Skip bundling the knode agent
 ```
+</details>
 
----
+### 📥 Pre-built binary
 
-## Architecture
-
-```
-                    Panel Server (Docker)
- +-------------------------------------------------+
- |  Panel Binary (:443 HTTPS / :8080 HTTP local)   |
- |      |                                          |
- |      v                                          |
- |  TimescaleDB (pg16)     pgAdmin (:5050)         |
- |      (metrics + data)                           |
- +-------------------------------------------------+
-          |  gRPC + mTLS (bidirectional sync)
-          v
- +-------------------------------------------------+
- |              knode Server(s)                     |
- |                                                  |
- |  gRPC/REST API --> OpenVPN, WireGuard, L2TP,    |
- |                    IKEv2, SSH, MTProto           |
- |                --> Outbound tunnels              |
- |                --> Traffic shaping               |
- +-------------------------------------------------+
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go 1.25+, `net/http` (no framework) |
-| Frontend | Vue 3, TypeScript, Vite, Pinia |
-| Database | TimescaleDB (PostgreSQL 16) |
-| Node Communication | gRPC with mTLS, protobuf |
-| Frontend Workspaces | pnpm monorepo (admin, portal, landing, core, theme) |
-| Testing | gopter (Go PBT), fast-check (TS PBT), vitest |
-| Containerization | Docker Compose |
-
----
-
-## Development
+Grab a self-contained binary from the [**Releases**](https://github.com/anonysec/koris/releases) page:
 
 ```bash
-# Clone
-git clone https://github.com/anonysec/koris.git
-cd koris
-
-# Backend
-go run ./cmd/panel
-
-# Frontend (pnpm workspace)
-cd web
-pnpm install
-pnpm --filter admin dev     # Admin dashboard
-pnpm --filter portal dev    # Customer portal
-pnpm --filter landing dev   # Marketing landing page
-
-# Build everything
-make build          # Frontend + full backend
-make build-lite     # Frontend + lite backend
-
-# Tests
-make test           # Go tests
-make test-frontend  # Vitest
+curl -LO https://github.com/anonysec/koris/releases/latest/download/koris-full-linux-amd64
+chmod +x koris-full-linux-amd64
+./koris-full-linux-amd64
 ```
 
----
+> 💡 Binaries are named `koris-<edition>-linux-<arch>` (`full`/`lite` × `amd64`/`arm64`). Verify with the `SHA256SUMS` attached to each release.
 
-## Build Commands
+### 🧱 From source
 
 ```bash
-make frontend       # Build all frontend apps (admin, portal, landing)
-make backend        # Build full Go binary
-make backend-lite   # Build lite Go binary (excludes billing / reseller / bot)
-make build          # frontend + backend
-make build-lite     # frontend + backend-lite
-make test           # go test ./...
-make test-frontend  # pnpm test
-make clean          # Remove all build artifacts
+git clone https://github.com/anonysec/koris.git && cd koris
+make build          # frontends + backend  →  ./koris
+make help           # list all targets
 ```
 
 ---
 
-## Editions
+## 🧩 Feature Tour
 
-Both editions are built from this single repository using Go build tags:
+### 🔒 VPN & Networking
+- **Multi-protocol** cores per node — OpenVPN, WireGuard, L2TP/IPsec, IKEv2, SSH, MTProto
+- **Outbound tunnels** — VLESS+Reality, WireGuard, SSH, Rathole, GRE/IPIP
+- **FreeRADIUS** AAA with session accounting
+- **Anti-DPI / teleproxy** helpers for censored networks
 
-| Feature | Full | Lite |
-|---------|------|------|
-| Node management, users, VPN protocols | ✓ | ✓ |
-| gRPC sync, monitoring, health checks | ✓ | ✓ |
-| Backup, certificates, sessions | ✓ | ✓ |
-| Billing, invoices, payment gateways | ✓ | ✗ |
-| Xray, MTProto, AnyConnect | ✓ | ✗ |
-| Tickets, knowledge base, SLA | ✓ | ✗ |
-| Reseller, LDAP, reports, segments | ✓ | ✗ |
+### 💼 Business & Billing
+- **Subscription plans** — quota-based or pay-as-you-go
+- **Wallets & payments** — manual, crypto, and gateway (e.g. Zarinpal)
+- **Resellers** — sub-accounts with credit and their own customers
+- **Invoices** — auto-generated, PDF export
+
+### 🙋 Customer Experience
+- **Self-service portal** — usage, profiles, VPN configs, support
+- **Telegram bot** — admin ops + customer self-service via inline buttons
+- **Ticketing** — canned responses + knowledge base
+
+### 🖥️ Admin Dashboard
+- **Drag-and-drop sidebar**, command palette, onboarding checklist
+- **6 UI themes** (Default, Kiro, GitHub, Soft-Dark, Corporate, Midnight) + dark/light/system
+- **i18n** — English, Persian (RTL), Chinese, Russian
+
+### 🏭 Infrastructure
+- **Two editions** — Full & Lite from one codebase via Go build tags
+- **Auto-TLS** — Let's Encrypt (ACME), manual, or self-signed
+- **HTTPS enforced** externally; plain HTTP restricted to loopback
+- **Decoy landing page** to blend in
+
+---
+
+## 🏗️ Architecture
+
+```
+┌──────────────┐        gRPC + mTLS        ┌──────────────┐
+│              │  ───────────────────────▶ │   knode 🛰️   │  VPN node agent
+│   Koris 🛡️   │  ◀─────────────────────── │  (OpenVPN,   │
+│    Panel     │     metrics / health      │  WireGuard…) │
+│              │                           └──────────────┘
+│  Vue 3 SPA   │        ┌───────────────┐
+│  + Go API    │ ─────▶ │ TimescaleDB 🐘 │  metrics + relational data
+└──────────────┘        └───────────────┘
+```
+
+- **Backend:** Go 1.25, `./cmd/panel`, ~40 internal packages
+- **Frontend:** pnpm workspace — `admin`, `portal`, `landing` (+ shared `core`/`theme`), embedded via `go:embed`
+- **Nodes:** [`anonysec/knode`](https://github.com/anonysec/knode) — see its README
+
+---
+
+## 🛠️ Development
 
 ```bash
-go build ./cmd/panel              # Full
-go build -tags lite ./cmd/panel   # Lite
+make help            # 📋 list every target
+make build           # 🏗️  frontends + backend (full)
+make build-lite      # 🪶 lite edition
+make backend         # ⚙️  Go binary only
+make frontend        # 🎨 all three SPAs
+make vet             # 🔍 go vet ./...
+make test            # 🧪 go test ./...
+make check           # ✅ vet + test (CI gate)
+make clean           # 🧹 remove artifacts
 ```
 
-The `/api/info` endpoint returns `{"edition": "full"}` or `{"edition": "lite"}`.
+**Requirements:** Go 1.25+, Node 20+, pnpm 9+.
 
 ---
 
-## Configuration
+## 📦 Releases
 
-Panel config directory: `/etc/koris/`
-- `panel.env` — environment variables for the Docker stack
-- `version` — installed version tag (written on install/update)
+Each tagged release publishes:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PANEL_ADDR` | HTTP listen address | `127.0.0.1:8080` |
-| `PANEL_TLS_ADDR` | HTTPS listen address | `0.0.0.0:443` |
-| `PANEL_TLS_MODE` | TLS mode (acme/manual/selfsigned) | `selfsigned` |
-| `PANEL_TLS_CERT` | Cert path (manual mode) | — |
-| `PANEL_TLS_KEY` | Key path (manual mode) | — |
-| `PANEL_DOMAIN` | Domain for ACME | — |
-| `POSTGRES_DB` | Database name | `koris` |
-| `POSTGRES_USER` | Database user | `koris` |
-| `POSTGRES_PASSWORD` | Database password | — |
-| `PANEL_ADMIN_PATH` | Admin panel URL prefix | `/admin/` |
-| `PANEL_PORTAL_PATH` | Customer portal URL prefix | `/account/` |
-| `PANEL_ADMIN_HOST` | Serve admin at subdomain (empty = path routing) | — |
-| `PANEL_PORTAL_HOST` | Serve portal at subdomain (empty = path routing) | — |
+- 🔗 **Raw binaries** — `koris-{full,lite}-linux-{amd64,arm64}` + `SHA256SUMS`
+- 🐳 **Multi-arch image** — `ghcr.io/anonysec/koris:<version>` (amd64 + arm64)
 
-### URL routing
+> Want a tarball? Clone the repo — GitHub's auto-generated **Source code (zip/tar.gz)** is on every release. We intentionally keep release assets to binaries only. 📉
 
-By default the panel serves the admin dashboard at `/admin/` and the customer
-portal at `/account/`. Legacy paths `/dashboard/` and `/portal/` redirect to
-the new locations for backward compatibility.
+Cut a release:
 
-**Path mode** (default) — everything on one host:
+```bash
+git tag v0.94.0 && git push origin v0.94.0
 ```
-https://your-domain/admin/       # admin dashboard
-https://your-domain/account/     # customer portal
-https://your-domain/             # decoy landing page
-```
-
-**Subdomain mode** — dedicated subdomains:
-```yaml
-# In panel.env:
-PANEL_ADMIN_HOST=admin.your-domain
-PANEL_PORTAL_HOST=account.your-domain
-PANEL_ADMIN_PATH=/     # path becomes root under the subdomain
-PANEL_PORTAL_PATH=/
-```
-
-The interactive installer prompts for this at setup; also settable
-via `--admin-path=`, `--portal-path=`, `--admin-host=`, `--portal-host=`
-flags. Changing after install: edit `/etc/koris/panel.env` and
-`docker compose up -d panel` (also rebuild if you changed a path — the
-Vite base path is baked in at build time via `KORIS_ADMIN_BASE` /
-`KORIS_PORTAL_BASE`).
 
 ---
 
-## Theming
+## 🔐 Security
 
-The frontend lives in two swappable packages:
-
-| Package | Role | Swappable? |
-|---------|------|------------|
-| `@koris/core` | Framework layer — composables, API client, types, base CSS (reset/tokens/utilities) | **No** — required |
-| `@koris/theme` | Visual layer — 30+ UI components (Button, DataTable, Modal, …), component CSS, polish CSS | **Yes** — replace to reskin |
-
-To create a custom theme:
-1. Copy `web/theme/` to `web/themes/my-theme/`
-2. Edit `manifest.ts` — change `id`, `name`, `author`
-3. Override any subset of `.vue` components or `.css` files
-4. Update the Vite alias `@koris/theme` in each app to point at your directory
-
-Both apps (admin, portal) resolve visual components via the alias, so a
-theme swap doesn'''t touch app code. See `web/theme/manifest.ts` for the
-component slot registry.
+- 🔑 mTLS between panel and every node
+- 🍪 CSRF protection, session management, rate limiting
+- 🔒 HTTPS enforced for external traffic
+- 🛡️ See [SECURITY.md](SECURITY.md) to report vulnerabilities
 
 ---
 
-## Docker Services
+## 📖 Documentation
 
-| Service | Image | Port |
-|---------|-------|------|
-| `panel` | Built from source | 443 (HTTPS), 80 (HTTP) |
-| `knode` | Built from anonysec/knode | 62050 (gRPC, per-node) |
-| `koris-db` | `timescale/timescaledb:latest-pg16` | 5432 (internal) |
-| `pgadmin` | `dpage/pgadmin4` | 5050 (localhost only) |
+Full guides live in [`docs/`](docs/) and the [project wiki](https://github.com/anonysec/koris/wiki):
+
+- 📘 [Installation](docs/installation.md)
+- 🏛️ [Architecture](docs/architecture.md)
+- ⚙️ [Configuration](docs/configuration.md)
+- 🛰️ [Node Management](docs/nodes.md)
+- 🚀 [Release Process](RELEASING.md)
 
 ---
 
-## License
+## 🤝 Contributing
 
-Private repository. All rights reserved.
+PRs welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md), run `make check` before pushing, and keep commits conventional (`feat:`, `fix:`, `docs:` …).
+
+<div align="center">
+
+Made with 🛡️ by the Koris team · [Report a bug](https://github.com/anonysec/koris/issues) · [Nodes → knode](https://github.com/anonysec/knode)
+
+</div>
