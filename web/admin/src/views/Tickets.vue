@@ -118,7 +118,10 @@ onMounted(() => {
   <div class="page tickets-view">
     <!-- Header bar -->
     <header class="tickets-header">
-      <h2 class="page-title">{{ t('tickets.title') }}</h2>
+      <div>
+        <h2 class="page-title">{{ t('tickets.title') }}</h2>
+        <p class="tickets-subtitle">Customer support tickets and SLAs</p>
+      </div>
       <div class="tickets-header__controls">
         <!-- Filters -->
         <div class="tickets-filters">
@@ -329,4 +332,6 @@ onMounted(() => {
   .col-customer, .col-category, .col-date { display: none; }
   .tickets-filters { flex-wrap: wrap; }
 }
+
+.tickets-subtitle { margin: 4px 0 0; font-size: var(--text-md); color: var(--color-muted); }
 </style>

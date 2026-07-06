@@ -7,6 +7,7 @@ import { useApi } from '@koris/composables/useApi'
 import { formatDate } from '@koris/composables/useFormatDate'
 import DataTable from '@koris/ui/DataTable.vue'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
@@ -233,11 +234,13 @@ onMounted(() => {
 
 <template>
   <div class="page payments-view">
-    <header class="page-header">
-      <Button variant="primary" @click="showRecordDrawer = true">
+    <PageHeader title="Payments" subtitle="Review and record customer payments">
+      <template #actions>
+        <Button variant="primary" @click="showRecordDrawer = true">
         {{ t('payments.record_payment') }}
-      </Button>
-    </header>
+        </Button>
+      </template>
+    </PageHeader>
 
     <!-- Payments Table -->
     <section class="payments-table-section">

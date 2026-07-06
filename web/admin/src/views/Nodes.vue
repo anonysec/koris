@@ -8,6 +8,7 @@ import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
 import Tabs from '@koris/ui/Tabs.vue'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 import EmptyState from '@koris/ui/EmptyState.vue'
@@ -486,10 +487,12 @@ onMounted(() => {
 
 <template>
   <div class="page nodes-view">
-    <header class="page-header">
-      <Button variant="primary" icon="+" @click="showAddForm = !showAddForm">{{ t('nodes.add_node') }}</Button>
-      <Button variant="ghost" @click="router.push({ name: 'node-compare' })">{{ t('node_compare.compare_nodes') }}</Button>
-    </header>
+    <PageHeader title="Nodes" subtitle="Manage your VPN node fleet">
+      <template #actions>
+        <Button variant="primary" icon="+" @click="showAddForm = !showAddForm">{{ t('nodes.add_node') }}</Button>
+        <Button variant="ghost" @click="router.push({ name: 'node-compare' })">{{ t('node_compare.compare_nodes') }}</Button>
+      </template>
+    </PageHeader>
 
     <!-- Add Node Slide-Over Panel -->
     <NodeAddPanel

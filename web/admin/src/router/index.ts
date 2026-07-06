@@ -64,7 +64,7 @@ const router = createRouter({
         // Redirects from old paths
         { path: 'customers', redirect: '/dashboard/users' },
         { path: 'customers/:id', redirect: (to: any) => `/dashboard/users/${to.params.id}` },
-        { path: 'resellers', redirect: '/dashboard/users' },
+        { path: 'resellers', name: 'resellers', component: () => import('@/views/Customers.vue') },
         // Reseller-specific routes
         { path: 'reseller-dashboard', name: 'reseller-dashboard', component: () => import('@/views/ResellerDashboard.vue') },
         { path: 'reseller-plans', name: 'reseller-plans', component: () => import('@/views/ResellerPlans.vue') },

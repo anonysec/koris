@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings'
 import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 import type { Locale } from '@koris/composables/useI18n'
 import Tabs from '@koris/ui/Tabs.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
@@ -469,6 +470,7 @@ onMounted(async () => {
 
 <template>
   <div class="page settings-view">
+    <PageHeader :title="t('settings.title') || 'Settings'" subtitle="Configure your panel, TLS, database and integrations" />
     <Tabs v-model="activeTab" :tabs="tabs" aria-label="Settings sections">
       <!-- Panel Settings -->
       <template #panel-settings>

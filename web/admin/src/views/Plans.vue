@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from '@koris/composables/useI18n'
 import { useSortable } from '@koris/composables/useSortable'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Input from '@koris/ui/Input.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
@@ -115,9 +116,11 @@ const { containerRef: plansContainerRef, isDragging: plansDragging } = useSortab
 <template>
   <div class="page plans-view">
     <!-- Header -->
-    <header class="page-header">
-      <Button variant="primary" icon="+" @click="openCreate">{{ t('plans.create_plan') }}</Button>
-    </header>
+    <PageHeader title="Plans" subtitle="Create and manage subscription plans">
+      <template #actions>
+        <Button variant="primary" icon="+" @click="openCreate">{{ t('plans.create_plan') }}</Button>
+      </template>
+    </PageHeader>
 
     <!-- Create/Edit Form -->
     <div v-if="showForm" class="plan-form-panel">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
 import { useResellersStore } from '@/stores/resellers'
 import { usePlansStore } from '@/stores/plans'
@@ -206,7 +207,23 @@ onUnmounted(() => {
 
 const searchQuery = ref('')
 const activeStatusTab = ref<string>('all')
-const currentMainTab = ref<string>('users')
+const route = useRoute()
+const currentMainTab = ref<string>(route.name === 'resellers' ? 'resellers' : 'users')
+
+// Stat cards for the Users view (dashboard-style summary)
+const userStats = computed(() => {
+  const l = store.list || []
+  const by = (st: string) => l.filter((c: any) => c.status === st).length
+  const online = l.filter((c: any) => (c as any).online).length
+  return [
+    { label: 'Total users', value: l.length, icon: '\u{1F465}' },
+    { label: 'Active', value: by('active'), icon: '\u{2705}' },
+    { label: 'Online now', value: online, icon: '\u{1F7E2}' },
+    { label: 'Limited', value: by('limited'), icon: '\u{26A0}\u{FE0F}' },
+    { label: 'Expired', value: by('expired'), icon: '\u{23F3}' },
+    { label: 'Disabled', value: by('disabled'), icon: '\u{1F6AB}' },
+  ]
+})
 
 // ─── Advanced Filters Panel ─────────────────────────────────────────────────
 const showAdvancedFilters = ref(false)
@@ -926,17 +943,16 @@ onMounted(async () => {
       </template>
     </PageHeader>
 
-    <!-- Page-level sub-tab navigation: Users | Resellers -->
-    <nav class="main-tabs" aria-label="Customer section navigation">
-      <button
-        v-for="tab in mainTabs"
-        :key="tab.key"
-        :class="['main-tab', { 'main-tab--active': currentMainTab === tab.key }]"
-        @click="setMainTab(tab.key)"
-      >
-        {{ tab.label }}
-      </button>
-    </nav>
+    <!-- Dashboard-style stat cards (users tab only) -->
+    <section v-if="currentMainTab === 'users'" class="user-stats-grid" aria-label="User statistics">
+      <div v-for="stat in userStats" :key="stat.label" class="stat-card">
+        <span class="stat-card__icon">{{ stat.icon }}</span>
+        <div class="stat-card__body">
+          <span class="stat-card__value">{{ stat.value }}</span>
+          <span class="stat-card__label">{{ stat.label }}</span>
+        </div>
+      </div>
+    </section>
 
     <!-- ═══════════════ USERS TAB ═══════════════ -->
     <template v-if="currentMainTab === 'users'">
@@ -2246,4 +2262,13 @@ onMounted(async () => {
     animation: none;
   }
 }
+
+.user-stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--space-4); margin-bottom: var(--space-6); }
+@media (max-width: 1200px) { .user-stats-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px)  { .user-stats-grid { grid-template-columns: repeat(2, 1fr); } }
+.user-stats-grid .stat-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.user-stats-grid .stat-card__icon { font-size: 1.35rem; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-primary) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 22%, transparent); }
+.user-stats-grid .stat-card__body { display: flex; flex-direction: column; }
+.user-stats-grid .stat-card__value { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--color-text); font-variant-numeric: tabular-nums; }
+.user-stats-grid .stat-card__label { font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wider); }
 </style>

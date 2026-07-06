@@ -258,6 +258,7 @@ const navGroups = computed<NavGroup[]>(() => {
     },
   ]
   if (isFull.value) {
+    customerItems.push({ route: 'resellers', label: t('nav.resellers') || 'Resellers', icon: 'users' })
     customerItems.push({ route: 'plans', label: t('nav.plans'), icon: 'plans' })
   }
   groups.push({ id: 'customers', title: t('nav.group_customers'), items: customerItems })
@@ -338,7 +339,7 @@ const orderedGroups = computed<NavGroup[]>(() => {
 /** Determine if a nav item is active based on current route */
 function isActive(route: string): boolean {
   if (route === 'users') {
-    return ['users', 'user-detail', 'customers', 'customer-detail', 'resellers'].includes(props.currentRoute)
+    return ['users', 'user-detail', 'customers', 'customer-detail'].includes(props.currentRoute)
   }
   if (route === 'services') {
     return ['services', 'nodes', 'node-detail', 'node-compare'].includes(props.currentRoute)
