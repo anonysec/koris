@@ -8,6 +8,11 @@ COPY . .
 
 # Build all frontends
 WORKDIR /build/web
+# Vite base paths — must match runtime PANEL_ADMIN_PATH / PANEL_PORTAL_PATH.
+ARG KORIS_ADMIN_BASE=/admin/
+ARG KORIS_PORTAL_BASE=/account/
+ENV KORIS_ADMIN_BASE=${KORIS_ADMIN_BASE}
+ENV KORIS_PORTAL_BASE=${KORIS_PORTAL_BASE}
 RUN pnpm install --no-frozen-lockfile && pnpm --filter admin build && pnpm --filter portal build && pnpm --filter landing build
 
 # Build Go binary

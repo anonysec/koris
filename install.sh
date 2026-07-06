@@ -60,6 +60,11 @@ TLS_MODE="selfsigned"
 CERT_PATH="/etc/koris/cert.pem"
 KEY_PATH="/etc/koris/key.pem"
 IMAGE_TAG=""
+# URL scheme — configurable at setup, editable later via panel.env
+ADMIN_PATH="/admin/"       # served at https://<host>/admin/
+PORTAL_PATH="/account/"    # served at https://<host>/account/
+ADMIN_HOST=""              # optional: subdomain override, e.g. admin.example.com
+PORTAL_HOST=""             # optional: subdomain override, e.g. account.example.com
 FORCE_REINSTALL=""
 
 parse_args() {
@@ -74,6 +79,10 @@ parse_args() {
       --uninstall)    uninstall; exit 0 ;;
       --version=*)    IMAGE_TAG="${arg#*=}" ;;
       --reinstall)    FORCE_REINSTALL="yes" ;;
+      --admin-path=*)   ADMIN_PATH="${arg#*=}" ;;
+      --portal-path=*)  PORTAL_PATH="${arg#*=}" ;;
+      --admin-host=*)   ADMIN_HOST="${arg#*=}" ;;
+      --portal-host=*)  PORTAL_HOST="${arg#*=}" ;;
       -h|--help)      banner; usage; exit 0 ;;
       *)              err "Unknown flag: ${arg}" ;;
     esac
@@ -90,6 +99,12 @@ usage() {
   echo "  --uninstall     Remove KorisPanel"
   echo "  --version=<tag> Install a specific version tag"
   echo "  --reinstall     Force a clean reinstall"
+  echo ""
+  echo "URL routing (path-based by default, override for subdomains):"
+  echo "  --admin-path=/x/    Admin panel URL prefix (default: /admin/)"
+  echo "  --portal-path=/y/   Customer portal URL prefix (default: /account/)"
+  echo "  --admin-host=X      Serve admin at subdomain (e.g. admin.example.com)"
+  echo "  --portal-host=X     Serve portal at subdomain (e.g. account.example.com)"
 }
 
 prompt_config() {
@@ -161,6 +176,55 @@ prompt_config() {
       ;;
     *) TLS_MODE="selfsigned" ;;
   esac
+
+  # ─── URL routing ────────────────────────────────────────────────────
+  echo ""
+  echo -e "${BOLD}How should users reach the admin panel and customer portal?${NC}"
+  echo ""
+  echo -e "  ${CYAN}1)${NC} Path prefix     — https://${DOMAIN:-<host>}/admin/  and  /account/"
+  echo -e "  ${CYAN}2)${NC} Subdomains      — https://admin.${DOMAIN:-<host>}  and  https://account.${DOMAIN:-<host>}"
+  echo -e "  ${CYAN}3)${NC} Custom (advanced) — set each path or subdomain individually"
+  echo ""
+  read -rp "$(echo -e "${CYAN}Choose [1/2/3, default 1]: ${NC}")" url_choice </dev/tty
+  case "${url_choice}" in
+    2)
+      if [[ -z "${DOMAIN}" || "${DOMAIN}" == "_" ]]; then
+        warn "Subdomain routing needs a real domain. Falling back to path prefixes."
+        ADMIN_PATH="/admin/"
+        PORTAL_PATH="/account/"
+      else
+        ADMIN_HOST="admin.${DOMAIN}"
+        PORTAL_HOST="account.${DOMAIN}"
+        ADMIN_PATH="/"
+        PORTAL_PATH="/"
+        echo ""
+        warn "You must create these DNS A records pointing to this server:"
+        echo -e "    ${YELLOW}admin.${DOMAIN}${NC}    A   $(curl -s https://ifconfig.me 2>/dev/null || echo YOUR_SERVER_IP)"
+        echo -e "    ${YELLOW}account.${DOMAIN}${NC}  A   $(curl -s https://ifconfig.me 2>/dev/null || echo YOUR_SERVER_IP)"
+      fi
+      ;;
+    3)
+      read -rp "$(echo -e "${CYAN}Admin path prefix [${ADMIN_PATH}]: ${NC}")" in_ap </dev/tty
+      ADMIN_PATH="${in_ap:-${ADMIN_PATH}}"
+      read -rp "$(echo -e "${CYAN}Portal path prefix [${PORTAL_PATH}]: ${NC}")" in_pp </dev/tty
+      PORTAL_PATH="${in_pp:-${PORTAL_PATH}}"
+      read -rp "$(echo -e "${CYAN}Admin subdomain (optional, e.g. admin.example.com, blank to keep path routing): ${NC}")" in_ah </dev/tty
+      ADMIN_HOST="${in_ah}"
+      read -rp "$(echo -e "${CYAN}Portal subdomain (optional): ${NC}")" in_ph </dev/tty
+      PORTAL_HOST="${in_ph}"
+      # Normalize paths: ensure leading + trailing slash
+      [[ "${ADMIN_PATH}"  != /* ]] && ADMIN_PATH="/${ADMIN_PATH}"
+      [[ "${ADMIN_PATH}"  != */ ]] && ADMIN_PATH="${ADMIN_PATH}/"
+      [[ "${PORTAL_PATH}" != /* ]] && PORTAL_PATH="/${PORTAL_PATH}"
+      [[ "${PORTAL_PATH}" != */ ]] && PORTAL_PATH="${PORTAL_PATH}/"
+      ;;
+    *)
+      # Default — leave ADMIN_PATH / PORTAL_PATH at their defaults
+      ;;
+  esac
+
+  log "Admin  will be served at: ${ADMIN_HOST:+https://${ADMIN_HOST}}${ADMIN_PATH}"
+  log "Portal will be served at: ${PORTAL_HOST:+https://${PORTAL_HOST}}${PORTAL_PATH}"
 }
 
 # --- Check for existing installation ---
@@ -219,6 +283,18 @@ PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
 PANEL_TLS_MODE=${TLS_MODE}
 PANEL_DOMAIN=${DOMAIN:-}
+
+# ─── URL Routing ─────────────────────────────────────────────────────
+# Change ADMIN_PATH / PORTAL_PATH to remap URLs (must start & end with slash).
+# Set *_HOST to serve at a subdomain instead; PATH becomes "/" in that case.
+PANEL_ADMIN_PATH=${ADMIN_PATH}
+PANEL_PORTAL_PATH=${PORTAL_PATH}
+PANEL_ADMIN_HOST=${ADMIN_HOST}
+PANEL_PORTAL_HOST=${PORTAL_HOST}
+# Build-time hint for Vite: makes bundled asset paths match runtime URLs.
+# Only used when the Docker image is (re)built locally.
+KORIS_ADMIN_BASE=${ADMIN_PATH}
+KORIS_PORTAL_BASE=${PORTAL_PATH}
 
 # ─── Build Tags ──────────────────────────────────────────────────────
 BUILD_TAGS=${EDITION}
