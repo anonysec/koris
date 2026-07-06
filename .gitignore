@@ -32,3 +32,6 @@ Thumbs.db
 # Stray migration backup dirs
 web/_shared.bak*
 *.bak-*
+
+# Generated docs site (GitHub Pages)
+_site/

@@ -9,6 +9,7 @@
 [![Docker](https://img.shields.io/badge/ghcr.io-anonysec%2Fkoris-2496ED?logo=docker&logoColor=white)](https://github.com/anonysec/koris/pkgs/container/koris)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Vue](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)](https://vuejs.org)
+[![Docs](https://img.shields.io/badge/docs-github.io-22d3ee?logo=readthedocs&logoColor=white)](https://anonysec.github.io/koris/)
 
 Manage your **entire VPN infrastructure** — nodes, customers, subscriptions, payments, support tickets and more — from a single, self-contained binary. 🚀
 
