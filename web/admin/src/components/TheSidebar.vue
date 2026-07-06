@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue'
 import Sortable from 'sortablejs'
 import { useI18n } from '@koris/composables/useI18n'
@@ -172,11 +173,17 @@ const initials = computed(() =>
 )
 
 /** Navigation items organized by section */
+interface NavSubItem {
+  route: string
+  tab: string
+  label: string
+}
 interface NavItem {
   route: string
   label: string
   badge?: number
   icon: string
+  children?: NavSubItem[]
 }
 
 interface NavGroup {
@@ -285,8 +292,15 @@ const navGroups = computed<NavGroup[]>(() => {
       id: 'system',
       title: t('nav.group_system'),
       items: [
-        { route: 'settings', label: t('nav.settings'), icon: 'settings' },
-        { route: 'telegram-bot', label: t('nav.telegram_bot'), icon: 'telegram' },
+        { route: 'settings', label: t('nav.settings'), icon: 'settings', children: [
+          { route: 'settings/panel-settings', tab: 'panel-settings', label: 'Panel' },
+          { route: 'settings/system', tab: 'system', label: 'System' },
+          { route: 'settings/data-warnings', tab: 'data-warnings', label: 'Warnings' },
+          { route: 'settings/app-links', tab: 'app-links', label: 'App Links' },
+          { route: 'settings/telegram', tab: 'telegram', label: 'Telegram Bot' },
+          { route: 'settings/certificates', tab: 'certificates', label: 'Certificates' },
+          { route: 'settings/backup', tab: 'backup', label: 'Backup' },
+        ] },
       ],
     })
   }
@@ -350,11 +364,41 @@ function isActive(route: string): boolean {
     return ['reseller-tickets', 'reseller-ticket-detail'].includes(props.currentRoute)
   }
   if (route === 'protocols') return props.currentRoute === 'protocols'
-  if (route === 'telegram-bot') return props.currentRoute === 'telegram-bot'
   return props.currentRoute === route
 }
 
+const _router = useRouter()
+const expandedItems = ref<Record<string, boolean>>({})
+
+function isExpanded(item: NavItem): boolean {
+  // auto-expand when on a child route, or when the user toggled it open
+  if (expandedItems.value[item.route] !== undefined) return expandedItems.value[item.route]
+  return item.route === 'settings' && props.currentRoute === 'settings'
+}
+
+function isSubActive(sub: NavSubItem): boolean {
+  return props.currentRoute === 'settings' && String(_router.currentRoute.value.params.tab || 'panel-settings') === sub.tab
+}
+
+function onItemClick(item: NavItem) {
+  if (item.children && !collapsedProp()) {
+    // toggle the dropdown; also navigate to the base route on first open
+    const willOpen = !isExpanded(item)
+    expandedItems.value = { ...expandedItems.value, [item.route]: willOpen }
+    if (willOpen && props.currentRoute !== item.route) emit('navigate', item.route)
+    return
+  }
+  handleNavigate(item.route)
+}
+
+function collapsedProp(): boolean { return !!props.collapsed }
+
 function handleNavigate(route: string) {
+  if (route.includes('/')) {
+    const [name, tab] = route.split('/')
+    _router.push({ name, params: { tab } })
+    return
+  }
   emit('navigate', route)
 }
 
@@ -397,14 +441,12 @@ function handleToggleTheme() {
       <div v-for="group in orderedGroups" :key="group.id" class="nav-category-wrapper">
         <div v-if="!collapsed" class="nav-group nav-group-handle">{{ group.title }}</div>
         <div :data-category-id="group.id" class="nav-items-container">
+          <div v-for="item in group.items" :key="item.route" class="nav-cell" :data-id="item.route">
           <button
-            v-for="item in group.items"
-            :key="item.route"
             class="nav-item"
             :class="{ active: isActive(item.route) }"
-            :data-id="item.route"
             :title="collapsed ? item.label : undefined"
-            @click="handleNavigate(item.route)"
+            @click="onItemClick(item)"
           >
             <!-- Dashboard icon -->
             <svg v-if="item.icon === 'dashboard'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -480,7 +522,20 @@ function handleToggleTheme() {
 
             <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
             <span v-if="!collapsed && item.badge" class="badge">{{ item.badge }}</span>
+            <svg v-if="!collapsed && item.children" class="nav-chevron" :class="{ 'nav-chevron--open': isExpanded(item) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           </button>
+          <div v-if="!collapsed && item.children && isExpanded(item)" class="nav-subitems">
+            <button
+              v-for="sub in item.children"
+              :key="sub.route"
+              class="nav-subitem"
+              :class="{ active: isSubActive(sub) }"
+              @click="handleNavigate(sub.route)"
+            >{{ sub.label }}</button>
+          </div>
+          </div>
         </div>
       </div>
     </div>
@@ -826,4 +881,15 @@ function handleToggleTheme() {
   box-shadow: inset 3px 0 0 var(--color-primary), 0 0 20px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 .nav-item.active svg { color: var(--color-primary); }
+
+/* ── Expandable nav sub-items ── */
+.nav-cell { display: flex; flex-direction: column; }
+.nav-chevron { width: 15px; height: 15px; margin-left: auto; opacity: 0.6; transition: transform var(--duration-fast), opacity var(--duration-fast); flex-shrink: 0; }
+.nav-chevron--open { transform: rotate(180deg); opacity: 1; }
+.nav-item.active .nav-chevron { opacity: 1; }
+.nav-subitems { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px; padding-left: 30px; position: relative; }
+.nav-subitems::before { content: ""; position: absolute; left: 17px; top: 2px; bottom: 6px; width: 1px; background: var(--color-border); }
+.nav-subitem { text-align: left; padding: 6px 10px; border: none; background: none; color: var(--color-muted); font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--duration-fast), color var(--duration-fast); width: 100%; }
+.nav-subitem:hover { background: var(--color-surface-2); color: var(--color-text); }
+.nav-subitem.active { color: var(--color-primary); font-weight: var(--font-semibold); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
 </style>
