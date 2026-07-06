@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -45,6 +45,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -52,3 +53,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # Ride out GitHub Pages' transient "Deployment failed, try again
+          # later" errors instead of failing the check: poll longer and
+          # tolerate more transient errors before giving up.
+          timeout: 600000        # 10 min (ms) to wait for the deployment
+          error_count: 25        # allow more transient API errors before failing
+          reporting_interval: 5000
