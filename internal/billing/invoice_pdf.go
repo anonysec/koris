@@ -3,13 +3,14 @@
 package billing
 
 import (
+	"os/exec"
+	"github.com/anonysec/koris/internal/safeexec"
 	"bytes"
 	"context"
 	"fmt"
 	"html/template"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -199,7 +200,7 @@ func htmlToPDFWkhtmltopdf(htmlBytes []byte) ([]byte, error) {
 		return nil, fmt.Errorf("wkhtmltopdf not found: %w", err)
 	}
 
-	cmd := exec.Command(path,
+	cmd := safeexec.MustCommand(path,
 		"--quiet",
 		"--encoding", "UTF-8",
 		"--page-size", "A4",

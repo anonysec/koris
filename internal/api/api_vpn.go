@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/templates"
 	"database/sql"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -178,7 +178,7 @@ func applyOpenVPNServerConfig(v VPNSettings) error {
 		return err
 	}
 
-	cmd := exec.Command("systemctl", "restart", "openvpn-server@server")
+	cmd := safeexec.MustCommand("systemctl", "restart", "openvpn-server@server")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("restart openvpn: %w: %s", err, string(out))
 	}

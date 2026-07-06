@@ -1,6 +1,7 @@
 package certrotation
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"crypto/sha256"
@@ -183,7 +184,7 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 	case "server":
 		// Regenerate server certificate (self-signed for simplicity)
 		keyPath := strings.TrimSuffix(cert.CertPath, ".crt") + ".key"
-		cmd = exec.Command("openssl", "req", "-x509", "-nodes",
+		cmd = safeexec.MustCommand("openssl", "req", "-x509", "-nodes",
 			"-days", "825",
 			"-newkey", "ec",
 			"-pkeyopt", "ec_paramgen_curve:prime256v1",
@@ -193,7 +194,7 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 		newDays = 825
 	case "tls-crypt":
 		// Regenerate tls-crypt key (openvpn --genkey)
-		cmd = exec.Command("openvpn", "--genkey", "tls-crypt-v2-server", cert.CertPath)
+		cmd = safeexec.MustCommand("openvpn", "--genkey", "tls-crypt-v2-server", cert.CertPath)
 		newDays = 3650
 	default:
 		return "", fmt.Errorf("unknown cert type for path: %s", cert.CertPath)

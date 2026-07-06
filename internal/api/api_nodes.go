@@ -1,13 +1,13 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/auth"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -354,7 +354,7 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 					// Send CoA disconnect (best effort)
 					go func(u, sid, ip string) {
 						attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", u, sid)
-						cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", s.radiusSecret())
+						cmd := safeexec.MustCommand("radclient", "-x", ip+":3799", "disconnect", s.radiusSecret())
 						cmd.Stdin = strings.NewReader(attrs)
 						_ = cmd.Run()
 					}(username, sessionID, nasIP)

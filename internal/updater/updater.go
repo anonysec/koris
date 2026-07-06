@@ -1,6 +1,8 @@
 package updater
 
 import (
+	"os/exec"
+	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/safepath"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -349,7 +350,7 @@ func (u *Updater) signalRestart() error {
 	}
 	// Try systemctl first (most common deployment)
 	if _, err := exec.LookPath("systemctl"); err == nil {
-		cmd := exec.Command("systemctl", "restart", "koris-panel")
+		cmd := safeexec.MustCommand("systemctl", "restart", "koris-panel")
 		if err := cmd.Run(); err != nil {
 			log.Printf("[updater] systemctl restart failed: %v, trying SIGHUP", err)
 		} else {

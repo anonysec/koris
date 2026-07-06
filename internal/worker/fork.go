@@ -1,9 +1,9 @@
 package worker
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"time"
 )
@@ -25,7 +25,7 @@ func (m *Manager) forkWorker(id int) (*WorkerProcess, error) {
 		}, fmt.Errorf("failed to get executable path: %w", err)
 	}
 
-	cmd := exec.Command(exe)
+	cmd := safeexec.MustCommand(exe)
 
 	// Inherit parent environment, adding/overriding the worker ID variable.
 	env := buildWorkerEnv(id)

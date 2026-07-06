@@ -1,11 +1,11 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -425,7 +425,7 @@ func (s *Server) serverLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute journalctl
-	cmd := exec.Command("journalctl", "-u", unit, "-n", strconv.Itoa(lines), "--no-pager", "-o", "short-iso")
+	cmd := safeexec.MustCommand("journalctl", "-u", unit, "-n", strconv.Itoa(lines), "--no-pager", "-o", "short-iso")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": true, "unit": unit, "lines": lines, "output": string(output), "error": err.Error()})

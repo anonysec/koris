@@ -1,6 +1,7 @@
 ﻿package backup
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"strconv"
 	"archive/tar"
 	"bytes"
@@ -12,7 +13,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -209,7 +209,7 @@ func (s *Service) applyDumpSQL(ctx context.Context, archivePath string) error {
 		"-v", "ON_ERROR_STOP=1",
 		"-d", s.cfg.DBName,
 	}
-	cmd := exec.CommandContext(ctx, "psql", args...)
+	cmd := safeexec.MustCommandContext(ctx, "psql", args...)
 	cmd.Env = append(cmd.Environ(), "PGPASSWORD="+s.cfg.DBPass)
 	cmd.Stdin = tr
 

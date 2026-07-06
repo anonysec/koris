@@ -1,11 +1,11 @@
 package backup
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 	"strconv"
 )
 
@@ -31,7 +31,7 @@ func streamPgDump(ctx context.Context, cfg Config) (io.ReadCloser, func() error,
 		cfg.DBName,
 	}
 
-	cmd := exec.CommandContext(ctx, "pg_dump", args...)
+	cmd := safeexec.MustCommandContext(ctx, "pg_dump", args...)
 	cmd.Env = append(cmd.Environ(), "PGPASSWORD="+cfg.DBPass)
 
 	var stderr bytes.Buffer

@@ -1,11 +1,11 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -68,16 +68,16 @@ func (s *Server) haproxyApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Test config
-	testCmd := exec.Command("haproxy", "-c", "-f", configPath)
+	testCmd := safeexec.MustCommand("haproxy", "-c", "-f", configPath)
 	if out, err := testCmd.CombinedOutput(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "config_invalid: " + string(out)})
 		return
 	}
 
 	// Reload HAProxy
-	if err := exec.Command("systemctl", "reload", "haproxy").Run(); err != nil {
+	if err := safeexec.MustCommand("systemctl", "reload", "haproxy").Run(); err != nil {
 		// Try restart if reload fails
-		exec.Command("systemctl", "restart", "haproxy").Run()
+		safeexec.MustCommand("systemctl", "restart", "haproxy").Run()
 	}
 
 	log.Printf("[haproxy] config applied with %d backends", len(backends))
@@ -94,7 +94,7 @@ func (s *Server) haproxyStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	active := "inactive"
-	if out, err := exec.Command("systemctl", "is-active", "haproxy").Output(); err == nil {
+	if out, err := safeexec.MustCommand("systemctl", "is-active", "haproxy").Output(); err == nil {
 		active = strings.TrimSpace(string(out))
 	}
 

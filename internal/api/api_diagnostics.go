@@ -1,8 +1,8 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"net/http"
-	"os/exec"
 	"strings"
 )
 
@@ -13,7 +13,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isActive := func(service string) bool {
-		cmd := exec.Command("systemctl", "is-active", service)
+		cmd := safeexec.MustCommand("systemctl", "is-active", service)
 		out, err := cmd.Output()
 		if err != nil {
 			return false
@@ -22,7 +22,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	runCmd := func(name string, args ...string) string {
-		cmd := exec.Command(name, args...)
+		cmd := safeexec.MustCommand(name, args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return ""
