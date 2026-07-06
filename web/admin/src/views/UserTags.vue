@@ -6,6 +6,7 @@ import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { formatDate } from '@koris/composables/useFormatDate'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
@@ -179,15 +180,13 @@ onMounted(fetchTags)
 <template>
   <div class="page user-tags-view">
     <!-- Header -->
-    <header class="page-header">
-      <div class="page-header__left">
-        <h2 class="page-title">{{ t('tags.title') }}</h2>
-        <span class="page-subtitle">{{ t('tags.subtitle') }}</span>
-      </div>
-      <Button variant="primary" icon="+" @click="showCreateDrawer = true">
+    <PageHeader :title="t('tags.title')" subtitle="Organize customers with tags">
+      <template #actions>
+        <Button variant="primary" icon="+" @click="showCreateDrawer = true">
         {{ t('tags.create') }}
       </Button>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Loading Skeleton -->
     <div v-if="loading" class="tags-skeleton">

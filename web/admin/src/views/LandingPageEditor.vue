@@ -5,6 +5,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
 import { useConfirm } from '@koris/composables/useConfirm'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Textarea from '@koris/ui/Textarea.vue'
 import FormField from '@koris/ui/FormField.vue'
 
@@ -92,9 +93,7 @@ loadContent()
 
 <template>
   <div class="page landing-editor-view">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('landing_editor.title') }}</h2>
-    </header>
+    <PageHeader :title="t('landing_editor.title')" subtitle="Customize the public landing page" />
 
     <div class="editor-panel">
       <p class="editor-desc">{{ t('landing_editor.description') }}</p>

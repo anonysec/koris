@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@koris/ui/PageHeader.vue'
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@koris/composables/useI18n'
@@ -67,10 +68,11 @@ onMounted(loadTickets)
 
 <template>
   <div class="reseller-tickets">
-    <div class="page-header">
-      <h1 class="page-title">{{ t('reseller_tickets.title') }}</h1>
-      <button class="new-btn" @click="showNew = true">{{ t('reseller_tickets.new') }}</button>
-    </div>
+    <PageHeader :title="t('reseller_tickets.title')" subtitle="Your support tickets">
+      <template #actions>
+        <button class="new-btn" @click="showNew = true">{{ t('reseller_tickets.new') }}</button>
+      </template>
+    </PageHeader>
 
     <!-- New Ticket Form -->
     <div v-if="showNew" class="new-ticket-form">

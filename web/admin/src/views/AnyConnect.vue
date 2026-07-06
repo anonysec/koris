@@ -6,6 +6,7 @@ import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
 import { useNodesStore } from '@/stores/nodes'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import SlideOver from '@koris/ui/SlideOver.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Input from '@koris/ui/Input.vue'
@@ -189,14 +190,13 @@ onMounted(() => {
 
 <template>
   <div class="page anyconnect-view">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('anyconnect.title') }}</h2>
-      <div class="page-header__actions">
+    <PageHeader :title="t('anyconnect.title')" subtitle="Cisco AnyConnect configuration">
+      <template #actions>
         <Button variant="primary" icon="+" @click="showEnableModal = true">
           {{ t('anyconnect.enable_on_node') }}
         </Button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Hidden file inputs for cert upload -->
     <input

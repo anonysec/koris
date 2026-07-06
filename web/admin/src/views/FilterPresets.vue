@@ -6,6 +6,7 @@ import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useDebounceFn } from '@vueuse/core'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
 import FormField from '@koris/ui/FormField.vue'
@@ -374,12 +375,7 @@ onMounted(() => {
 <template>
   <div class="page filter-presets-view">
     <!-- Header -->
-    <header class="page-header">
-      <div class="page-header__left">
-        <h2 class="page-title">{{ t('filters.title') }}</h2>
-        <span class="page-subtitle">{{ t('filters.subtitle') }}</span>
-      </div>
-    </header>
+    <PageHeader :title="t('filters.title')" subtitle="Saved customer list filters" />
 
     <!-- Filter Panel -->
     <section class="filter-panel">

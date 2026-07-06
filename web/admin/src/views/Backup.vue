@@ -4,6 +4,7 @@ import { useBackups, type BackupRecord, type ManifestData } from '@/composables/
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 import EmptyState from '@koris/ui/EmptyState.vue'
@@ -254,11 +255,13 @@ onUnmounted(() => {
 
 <template>
   <div class="page backup-view">
-    <header class="page-header">
-      <Button variant="primary" :loading="creating" @click="handleCreate">
+    <PageHeader title="Backups" subtitle="Database backups and restore">
+      <template #actions>
+        <Button variant="primary" :loading="creating" @click="handleCreate">
         Create Backup Now
       </Button>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Settings -->
     <BackupSettings />

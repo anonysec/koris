@@ -5,6 +5,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
 import FormField from '@koris/ui/FormField.vue'
@@ -214,12 +215,13 @@ onMounted(fetchResponses)
 <template>
   <div class="page canned-view">
     <!-- Header -->
-    <header class="page-header">
-      <h2 class="page-title">{{ t('canned.title') }}</h2>
-      <Button variant="primary" size="sm" @click="openCreate">
+    <PageHeader :title="t('canned.title')" subtitle="Reusable support replies">
+      <template #actions>
+        <Button variant="primary" size="sm" @click="openCreate">
         + {{ t('canned.create') }}
       </Button>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Category Tabs -->
     <Tabs

@@ -4,6 +4,7 @@ import { useTemplatesStore, type UserTemplate, type CreateTemplatePayload, type 
 import { usePlansStore } from '@/stores/plans'
 import { useI18n } from '@koris/composables/useI18n'
 import DataTable from '@koris/ui/DataTable.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Button from '@koris/ui/Button.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Input from '@koris/ui/Input.vue'
@@ -149,9 +150,11 @@ onMounted(() => {
 <template>
   <div class="page templates-view">
     <!-- Header -->
-    <header class="page-header">
-      <Button variant="primary" icon="+" @click="openCreate">{{ t('templates.create_template') }}</Button>
-    </header>
+    <PageHeader :title="t('templates.title') || 'Templates'" subtitle="Message and config templates">
+      <template #actions>
+        <Button variant="primary" icon="+" @click="openCreate">{{ t('templates.create_template') }}</Button>
+      </template>
+    </PageHeader>
 
     <!-- Create/Edit Form -->
     <div v-if="showForm" class="template-form-panel">

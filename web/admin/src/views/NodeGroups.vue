@@ -7,6 +7,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useNodesStore } from '@/stores/nodes'
 import { storeToRefs } from 'pinia'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Textarea from '@koris/ui/Textarea.vue'
 import FormField from '@koris/ui/FormField.vue'
@@ -199,12 +200,13 @@ onMounted(async () => {
 <template>
   <div class="page node-groups-view">
     <!-- Header -->
-    <header class="page-header">
-      <h3 class="section-title">{{ t('node_groups.title') }}</h3>
-      <Button variant="primary" @click="openCreateModal">
+    <PageHeader :title="t('node_groups.title') || 'Node Groups'" subtitle="Group nodes by region or role">
+      <template #actions>
+        <Button variant="primary" @click="openCreateModal">
         {{ t('node_groups.create_group') }}
       </Button>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Node Assignment Section -->
     <section class="assign-section">

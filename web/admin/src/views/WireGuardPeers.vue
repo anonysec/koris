@@ -6,6 +6,7 @@ import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import DataTable from '@koris/ui/DataTable.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Button from '@koris/ui/Button.vue'
 import Select from '@koris/ui/Select.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
@@ -126,11 +127,13 @@ onMounted(() => {
 
 <template>
   <div class="page wireguard-peers-view">
-    <header class="page-header">
-      <Button variant="primary" icon="+" @click="showCreateDialog = true">
+    <PageHeader :title="t('wireguard.title') || 'WireGuard Peers'" subtitle="Manage WireGuard peer configs">
+      <template #actions>
+        <Button variant="primary" icon="+" @click="showCreateDialog = true">
         {{ t('wireguard.create_peer') }}
       </Button>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Filters -->
     <div class="filter-row">

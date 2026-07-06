@@ -5,6 +5,7 @@ import { useWebSocket } from '@koris/composables/useWebSocket'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Select from '@koris/ui/Select.vue'
@@ -199,7 +200,7 @@ onUnmounted(() => {
 
 <template>
   <div class="page provision-view">
-    <h3 class="section-title">{{ t('provision.title') }}</h3>
+    <PageHeader :title="t('provision.title')" subtitle="Provision a new VPN node over SSH" />
 
     <!-- SSH Credential Form -->
     <section v-if="!provisionStarted" class="provision-form-section">

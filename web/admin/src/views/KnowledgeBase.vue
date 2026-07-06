@@ -6,6 +6,7 @@ import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { formatDate } from '@koris/composables/useFormatDate'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
 import FormField from '@koris/ui/FormField.vue'
@@ -271,12 +272,13 @@ onMounted(fetchArticles)
 <template>
   <div class="page kb-view">
     <!-- Header -->
-    <header class="page-header">
-      <h2 class="page-title">{{ t('kb.title') }}</h2>
-      <Button variant="primary" size="sm" @click="openCreate">
+    <PageHeader :title="t('kb.title')" subtitle="Help articles for your customers">
+      <template #actions>
+        <Button variant="primary" size="sm" @click="openCreate">
         + {{ t('kb.create') }}
       </Button>
-    </header>
+      </template>
+    </PageHeader>
 
     <!-- Filters -->
     <section class="filter-section">

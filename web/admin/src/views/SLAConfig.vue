@@ -4,6 +4,7 @@ import { useApi } from '@koris/composables/useApi'
 import { useI18n } from '@koris/composables/useI18n'
 import { useToast } from '@koris/composables/useToast'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import FormField from '@koris/ui/FormField.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
@@ -166,7 +167,7 @@ onMounted(() => {
 
 <template>
   <div class="page sla-view">
-    <h2 class="page-title">{{ t('sla.title') }}</h2>
+    <PageHeader :title="t('sla.title')" subtitle="Service-level targets and timers" />
 
     <div class="sla-grid">
       <!-- SLA Configuration Panel -->

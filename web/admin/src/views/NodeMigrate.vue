@@ -7,6 +7,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useNodesStore } from '@/stores/nodes'
 import { storeToRefs } from 'pinia'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Select from '@koris/ui/Select.vue'
 import FormField from '@koris/ui/FormField.vue'
 
@@ -136,7 +137,7 @@ onMounted(() => {
 
 <template>
   <div class="page migrate-view">
-    <h3 class="section-title">{{ t('migrate.title') }}</h3>
+    <PageHeader :title="t('migrate.title')" subtitle="Move users between nodes" />
 
     <!-- Source/Destination Selection -->
     <section class="migrate-form-section">
