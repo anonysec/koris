@@ -4,7 +4,7 @@
  * A theme package (this one, or a fan-made variant) must export a default
  * manifest matching this shape. The host app reads the manifest to know:
  *   - which CSS files to load, in what order
- *   - which components map to which slots (KButton, KInput, etc.)
+ *   - which components map to which slots (Button, Input, etc.)
  *   - what the theme is called and who made it
  *
  * To create a custom theme:
@@ -19,30 +19,30 @@ import type { Component } from 'vue'
 // ─── Component slot registry ─────────────────────────────────────────
 // Every visual component the host app can request. Theme authors override
 // any subset; missing slots fall back to @koris/theme (this package).
-import KButton         from './components/KButton.vue'
-import KInput          from './components/KInput.vue'
-import KTextarea       from './components/KTextarea.vue'
-import KSelect         from './components/KSelect.vue'
-import KFormField      from './components/KFormField.vue'
-import KDataTable      from './components/KDataTable.vue'
-import KPagination     from './components/KPagination.vue'
-import KModal          from './components/KModal.vue'
-import KDrawer        from './components/KDrawer.vue'
-import KSlideOver      from './components/KSlideOver.vue'
-import KConfirmDialog  from './components/KConfirmDialog.vue'
-import KToast          from './components/KToast.vue'
-import KAlert          from './components/KAlert.vue'
-import KTabs           from './components/KTabs.vue'
-import KBreadcrumb     from './components/KBreadcrumb.vue'
-import KStatusPill     from './components/KStatusPill.vue'
-import KUsageBar       from './components/KUsageBar.vue'
-import KExpiryChips    from './components/KExpiryChips.vue'
+import Button         from './components/Button.vue'
+import Input          from './components/Input.vue'
+import Textarea       from './components/Textarea.vue'
+import Select         from './components/Select.vue'
+import FormField      from './components/FormField.vue'
+import DataTable      from './components/DataTable.vue'
+import Pagination     from './components/Pagination.vue'
+import Modal          from './components/Modal.vue'
+import Drawer        from './components/Drawer.vue'
+import SlideOver      from './components/SlideOver.vue'
+import ConfirmDialog  from './components/ConfirmDialog.vue'
+import Toast          from './components/Toast.vue'
+import Alert          from './components/Alert.vue'
+import Tabs           from './components/Tabs.vue'
+import Breadcrumb     from './components/Breadcrumb.vue'
+import StatusPill     from './components/StatusPill.vue'
+import UsageBar       from './components/UsageBar.vue'
+import ExpiryChips    from './components/ExpiryChips.vue'
 import KExpandableRow  from './components/KExpandableRow.vue'
-import KThreeDotMenu   from './components/KThreeDotMenu.vue'
-import KEmptyState     from './components/KEmptyState.vue'
-import KSkeleton       from './components/KSkeleton.vue'
-import KAvatar         from './components/KAvatar.vue'
-import KChart          from './components/KChart.vue'
+import ThreeDotMenu   from './components/ThreeDotMenu.vue'
+import EmptyState     from './components/EmptyState.vue'
+import Skeleton       from './components/Skeleton.vue'
+import Avatar         from './components/Avatar.vue'
+import Chart          from './components/Chart.vue'
 import HealthDot       from './components/HealthDot.vue'
 import PageTransition  from './components/PageTransition.vue'
 import SkeletonLoader  from './components/SkeletonLoader.vue'
@@ -82,14 +82,14 @@ export const manifest: ThemeManifest = {
     '@koris/theme/styles/polish.css',
   ],
   components: {
-    KButton, KInput, KTextarea, KSelect, KFormField,
-    KDataTable, KPagination,
-    KModal, KDrawer, KSlideOver, KConfirmDialog,
-    KToast, KAlert, KTabs, KBreadcrumb,
-    KStatusPill, KUsageBar, KExpiryChips,
-    KExpandableRow, KThreeDotMenu,
-    KEmptyState, KSkeleton, KAvatar,
-    KChart, HealthDot,
+    Button, Input, Textarea, Select, FormField,
+    DataTable, Pagination,
+    Modal, Drawer, SlideOver, ConfirmDialog,
+    Toast, Alert, Tabs, Breadcrumb,
+    StatusPill, UsageBar, ExpiryChips,
+    KExpandableRow, ThreeDotMenu,
+    EmptyState, Skeleton, Avatar,
+    Chart, HealthDot,
     PageTransition, SkeletonLoader, SortableList,
     ThemeEditor, ThemeToggle,
   },

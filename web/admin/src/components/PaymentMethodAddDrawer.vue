@@ -3,11 +3,11 @@ import { computed } from 'vue'
 import { useEntityForm } from '@/composables/useEntityForm'
 import { usePaymentsStore } from '@/stores/payments'
 import { useI18n } from '@koris/composables/useI18n'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
 
 defineProps<{
   open: boolean
@@ -92,70 +92,70 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <KSlideOver :open="open" :title="t('payments.add_payment_method')" @close="handleClose">
+  <SlideOver :open="open" :title="t('payments.add_payment_method')" @close="handleClose">
     <form class="entity-form" autocomplete="off" @submit.prevent="handleSubmit">
-      <KFormField name="pm-name" :label="t('payments.method_name')" required :error="validationError && !form.name ? validationError : ''">
+      <FormField name="pm-name" :label="t('payments.method_name')" required :error="validationError && !form.name ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.name" :placeholder="t('payments.method_name_placeholder')" />
+          <Input :id="fieldId" v-model="form.name" :placeholder="t('payments.method_name_placeholder')" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="pm-type" :label="t('payments.method_type')" required :error="validationError && !form.type ? validationError : ''">
+      <FormField name="pm-type" :label="t('payments.method_type')" required :error="validationError && !form.type ? validationError : ''">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             v-model="form.type"
             :options="methodTypeOptions"
             :placeholder="t('payments.select_type')"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Crypto-specific fields -->
       <template v-if="isCrypto">
-        <KFormField name="pm-wallet" :label="t('payments.crypto_wallet')" required>
+        <FormField name="pm-wallet" :label="t('payments.crypto_wallet')" required>
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.wallet_address" :placeholder="t('payments.crypto_wallet_placeholder')" />
+            <Input :id="fieldId" v-model="form.wallet_address" :placeholder="t('payments.crypto_wallet_placeholder')" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="pm-network" :label="t('payments.crypto_network')" required>
+        <FormField name="pm-network" :label="t('payments.crypto_network')" required>
           <template #default="{ fieldId }">
-            <KSelect
+            <Select
               :id="fieldId"
               v-model="form.network"
               :options="cryptoNetworkOptions"
               :placeholder="t('payments.crypto_select_network')"
             />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="pm-currency" :label="t('payments.crypto_currency')" required>
+        <FormField name="pm-currency" :label="t('payments.crypto_currency')" required>
           <template #default="{ fieldId }">
-            <KSelect
+            <Select
               :id="fieldId"
               v-model="form.currency"
               :options="cryptoCurrencyOptions"
               :placeholder="t('payments.crypto_select_currency')"
             />
           </template>
-        </KFormField>
+        </FormField>
       </template>
 
       <!-- General instructions (non-crypto or notes for crypto) -->
-      <KFormField name="pm-instructions" :label="isCrypto ? t('payments.crypto_note') : t('payments.method_instructions')">
+      <FormField name="pm-instructions" :label="isCrypto ? t('payments.crypto_note') : t('payments.method_instructions')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.instructions" :placeholder="t('payments.method_instructions_placeholder')" />
+          <Input :id="fieldId" v-model="form.instructions" :placeholder="t('payments.method_instructions_placeholder')" />
         </template>
-      </KFormField>
+      </FormField>
 
       <div class="entity-form__actions">
-        <KButton type="submit" variant="primary" :loading="submitting" full-width>
+        <Button type="submit" variant="primary" :loading="submitting" full-width>
           {{ t('payments.create_method') }}
-        </KButton>
+        </Button>
       </div>
     </form>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>

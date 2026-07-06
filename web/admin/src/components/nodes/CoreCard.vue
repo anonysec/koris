@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { CoreInfo } from './types'
-import KButton from '@koris/ui/KButton.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import Button from '@koris/ui/Button.vue'
+import Input from '@koris/ui/Input.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 const props = defineProps<{
   core: CoreInfo
@@ -39,7 +39,7 @@ const protocolNames: Record<string, string> = {
 const icon = computed(() => protocolIcons[props.core.type] || '📦')
 const displayName = computed(() => protocolNames[props.core.type] || props.core.type)
 
-/** Map core state to KStatusPill-compatible status string */
+/** Map core state to StatusPill-compatible status string */
 const pillStatus = computed(() => {
   if (props.core.state === 'crashed') return 'failed'
   return props.core.state
@@ -71,7 +71,7 @@ function handleRestart() {
     <div class="core-card__header">
       <span class="core-card__icon" aria-hidden="true">{{ icon }}</span>
       <span class="core-card__name">{{ displayName }}</span>
-      <KStatusPill :status="pillStatus" size="sm" />
+      <StatusPill :status="pillStatus" size="sm" />
     </div>
 
     <!-- Running state -->
@@ -84,26 +84,26 @@ function handleRestart() {
           Sessions: <strong>{{ core.activeSessions }}</strong>
         </span>
       </div>
-      <KButton
+      <Button
         variant="danger"
         size="sm"
         aria-label="Disable core"
         @click="emit('disable')"
       >
         Disable
-      </KButton>
+      </Button>
     </template>
 
     <!-- Stopped state -->
     <template v-else-if="core.state === 'stopped'">
       <div class="core-card__enable-form">
-        <KInput
+        <Input
           v-model="enablePort"
           type="number"
           placeholder="Port"
           aria-label="Port number"
         />
-        <KButton
+        <Button
           variant="primary"
           size="sm"
           :disabled="!portValid"
@@ -111,7 +111,7 @@ function handleRestart() {
           @click="handleEnable"
         >
           Enable
-        </KButton>
+        </Button>
       </div>
     </template>
 
@@ -124,22 +124,22 @@ function handleRestart() {
         Core encountered an error
       </p>
       <div class="core-card__actions">
-        <KButton
+        <Button
           variant="primary"
           size="sm"
           aria-label="Restart core"
           @click="handleRestart"
         >
           Restart
-        </KButton>
-        <KButton
+        </Button>
+        <Button
           variant="danger"
           size="sm"
           aria-label="Disable core"
           @click="emit('disable')"
         >
           Disable
-        </KButton>
+        </Button>
       </div>
     </template>
   </div>

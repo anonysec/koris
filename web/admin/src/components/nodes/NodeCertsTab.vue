@@ -2,12 +2,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useNodesStore, type CertInfo } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KTextarea from '@koris/ui/KTextarea.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import KAlert from '@koris/ui/KAlert.vue'
-import KSkeleton from '@koris/ui/KSkeleton.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Textarea from '@koris/ui/Textarea.vue'
+import Select from '@koris/ui/Select.vue'
+import Alert from '@koris/ui/Alert.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
 
 const props = defineProps<{
   nodeId: number
@@ -94,7 +94,7 @@ onMounted(loadCerts)
   <div class="node-certs-tab">
     <h4 class="node-certs-tab__title">Certificates</h4>
 
-    <KSkeleton v-if="loading" />
+    <Skeleton v-if="loading" />
 
     <!-- Cert Info Table -->
     <template v-else>
@@ -132,71 +132,71 @@ onMounted(loadCerts)
         </table>
       </div>
 
-      <KAlert v-if="certs.some(c => c.daysUntilExpiry < 7)" variant="error">
+      <Alert v-if="certs.some(c => c.daysUntilExpiry < 7)" variant="error">
         One or more certificates expire within 7 days. Upload replacements immediately.
-      </KAlert>
+      </Alert>
 
-      <KAlert v-else-if="certs.some(c => c.daysUntilExpiry < 30)" variant="warning">
+      <Alert v-else-if="certs.some(c => c.daysUntilExpiry < 30)" variant="warning">
         One or more certificates expire within 30 days. Consider renewing soon.
-      </KAlert>
+      </Alert>
     </template>
 
     <!-- Upload Form -->
     <div class="node-certs-tab__upload">
       <h5 class="node-certs-tab__upload-title">Upload Certificates</h5>
 
-      <KFormField name="cert-core-type" label="Core Type">
+      <FormField name="cert-core-type" label="Core Type">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             v-model="uploadCoreType"
             :options="coreTypeOptions"
             placeholder="Select core"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="cert-ca" label="CA Certificate (PEM)">
+      <FormField name="cert-ca" label="CA Certificate (PEM)">
         <template #default="{ fieldId }">
-          <KTextarea
+          <Textarea
             :id="fieldId"
             v-model="caPem"
             :rows="4"
             placeholder="-----BEGIN CERTIFICATE-----"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="cert-cert" label="Certificate (PEM)">
+      <FormField name="cert-cert" label="Certificate (PEM)">
         <template #default="{ fieldId }">
-          <KTextarea
+          <Textarea
             :id="fieldId"
             v-model="certPem"
             :rows="4"
             placeholder="-----BEGIN CERTIFICATE-----"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="cert-key" label="Private Key (PEM)">
+      <FormField name="cert-key" label="Private Key (PEM)">
         <template #default="{ fieldId }">
-          <KTextarea
+          <Textarea
             :id="fieldId"
             v-model="keyPem"
             :rows="4"
             placeholder="-----BEGIN PRIVATE KEY-----"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KButton
+      <Button
         variant="primary"
         :loading="submitting"
         :disabled="!uploadValid"
         @click="handleUpload"
       >
         Upload Certificates
-      </KButton>
+      </Button>
     </div>
   </div>
 </template>

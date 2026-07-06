@@ -2,19 +2,19 @@
 /**
  * UserEditModal — Modal dialog for editing user (customer) details.
  *
- * Uses KModal centered with blurred overlay.
+ * Uses Modal centered with blurred overlay.
  * Fields:
  *   - Username (read-only) + Status dropdown (side by side)
  *   - Data Limit (numeric + unit selector)
  *   - Periodic Usage Reset toggle
- *   - Expiry Date + KExpiryChips + calendar picker
+ *   - Expiry Date + ExpiryChips + calendar picker
  *   - HWID Limit (numeric)
  *   - Note (text)
  * Bottom bar: ThreeDotMenu (left), Cancel + Modify (right)
  *
  * Submits via PATCH /api/customers/:id
  * Shows inline error on failure, preserves form values for retry.
- * Fade-in 200ms, fade-out 150ms (handled by KModal).
+ * Fade-in 200ms, fade-out 150ms (handled by Modal).
  *
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7
  */
@@ -22,14 +22,14 @@ import { ref, watch, computed } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useI18n } from '@koris/composables/useI18n'
 import { usePlansStore } from '@/stores/plans'
-import KModal from '@koris/ui/KModal.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KExpiryChips from '@koris/ui/KExpiryChips.vue'
-import KThreeDotMenu from '@koris/ui/KThreeDotMenu.vue'
-import type { MenuItem } from '@koris/ui/KThreeDotMenu.vue'
+import Modal from '@koris/ui/Modal.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
+import Button from '@koris/ui/Button.vue'
+import ExpiryChips from '@koris/ui/ExpiryChips.vue'
+import ThreeDotMenu from '@koris/ui/ThreeDotMenu.vue'
+import type { MenuItem } from '@koris/ui/ThreeDotMenu.vue'
 import type { CustomerDetail } from '@koris/types'
 
 export interface UserEditModalProps {
@@ -282,7 +282,7 @@ function handleMenuSelect(key: string): void {
 </script>
 
 <template>
-  <KModal
+  <Modal
     :open="open"
     title="Edit User"
     width="560px"
@@ -304,20 +304,20 @@ function handleMenuSelect(key: string): void {
 
       <!-- Row 1: Username (read-only) + Status (side by side) -->
       <div class="user-edit-modal__row">
-        <KFormField name="username" label="Username" class="user-edit-modal__field">
+        <FormField name="username" label="Username" class="user-edit-modal__field">
           <template #default="{ fieldId, describedBy }">
-            <KInput
+            <Input
               :id="fieldId"
               :model-value="username"
               :aria-describedby="describedBy"
               disabled
             />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="status" label="Status" class="user-edit-modal__field">
+        <FormField name="status" label="Status" class="user-edit-modal__field">
           <template #default="{ fieldId, describedBy }">
-            <KSelect
+            <Select
               :id="fieldId"
               :model-value="status"
               :options="statusOptions"
@@ -325,13 +325,13 @@ function handleMenuSelect(key: string): void {
               @update:model-value="status = String($event)"
             />
           </template>
-        </KFormField>
+        </FormField>
       </div>
 
       <!-- Plan -->
-      <KFormField name="plan" label="Plan">
+      <FormField name="plan" label="Plan">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             :model-value="planId"
             :options="editPlanOptions"
@@ -339,20 +339,20 @@ function handleMenuSelect(key: string): void {
             @update:model-value="planId = String($event)"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Data Limit (numeric + unit) -->
-      <KFormField name="data-limit" label="Data Limit">
+      <FormField name="data-limit" label="Data Limit">
         <template #default="{ fieldId }">
           <div class="user-edit-modal__data-limit">
-            <KInput
+            <Input
               :id="fieldId"
               :model-value="dataLimitValue"
               type="number"
               placeholder="Unlimited"
               @update:model-value="dataLimitValue = String($event)"
             />
-            <KSelect
+            <Select
               :model-value="dataLimitUnit"
               :options="unitOptions"
               class="user-edit-modal__unit-select"
@@ -360,7 +360,7 @@ function handleMenuSelect(key: string): void {
             />
           </div>
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Periodic Usage Reset toggle -->
       <div class="user-edit-modal__toggle-field">
@@ -377,7 +377,7 @@ function handleMenuSelect(key: string): void {
       </div>
 
       <!-- Expiry Date -->
-      <KFormField name="expiry" label="Expiry Date">
+      <FormField name="expiry" label="Expiry Date">
         <template #default="{ fieldId }">
           <div class="user-edit-modal__expiry">
             <!-- Input mode toggle -->
@@ -413,7 +413,7 @@ function handleMenuSelect(key: string): void {
 
             <!-- Shortcut chips -->
             <div v-else class="user-edit-modal__expiry-chips">
-              <KExpiryChips
+              <ExpiryChips
                 :model-value="expiryDate"
                 @update:model-value="onExpiryChipUpdate"
               />
@@ -433,12 +433,12 @@ function handleMenuSelect(key: string): void {
             </p>
           </div>
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- HWID Limit -->
-      <KFormField name="hwid-limit" label="HWID Limit">
+      <FormField name="hwid-limit" label="HWID Limit">
         <template #default="{ fieldId, describedBy }">
-          <KInput
+          <Input
             :id="fieldId"
             :model-value="hwidLimit"
             type="number"
@@ -447,10 +447,10 @@ function handleMenuSelect(key: string): void {
             @update:model-value="hwidLimit = String($event)"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Note -->
-      <KFormField name="note" label="Note">
+      <FormField name="note" label="Note">
         <template #default="{ fieldId, describedBy }">
           <textarea
             :id="fieldId"
@@ -461,35 +461,35 @@ function handleMenuSelect(key: string): void {
             rows="3"
           />
         </template>
-      </KFormField>
+      </FormField>
     </form>
 
     <!-- Footer: ThreeDotMenu (left), Cancel + Modify (right) -->
     <template #footer>
       <div class="user-edit-modal__footer">
         <div class="user-edit-modal__footer-left">
-          <KThreeDotMenu
+          <ThreeDotMenu
             :items="menuItems"
             placement="bottom-start"
             @select="handleMenuSelect"
           />
         </div>
         <div class="user-edit-modal__footer-right">
-          <KButton variant="ghost" @click="handleCancel">
+          <Button variant="ghost" @click="handleCancel">
             Cancel
-          </KButton>
-          <KButton
+          </Button>
+          <Button
             variant="primary"
             :loading="submitting"
             :disabled="fetchLoading"
             @click="handleSubmit"
           >
             Modify
-          </KButton>
+          </Button>
         </div>
       </div>
     </template>
-  </KModal>
+  </Modal>
 </template>
 
 <style scoped>

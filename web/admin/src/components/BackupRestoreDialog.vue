@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import KButton from '@koris/ui/KButton.vue'
+import Button from '@koris/ui/Button.vue'
 
 const props = defineProps<{
   open: boolean
@@ -100,17 +100,17 @@ function handleOverlayClick(event: MouseEvent) {
           </div>
 
           <div class="restore-dialog__actions">
-            <KButton variant="ghost" :disabled="loading" @click="handleCancel">
+            <Button variant="ghost" :disabled="loading" @click="handleCancel">
               Cancel
-            </KButton>
-            <KButton
+            </Button>
+            <Button
               variant="primary"
               :disabled="!selectedFile || loading"
               :loading="loading"
               @click="handleConfirm"
             >
               Restore
-            </KButton>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
-// TODO: Admin views (CustomersView, ResellersView, DashboardView, CustomerDetailView,
-// PaymentsView) still use .slice(0, 10) for date display. They could benefit from
+// TODO: Admin views (Customers, ResellersView, Dashboard, CustomerDetail,
+// Payments) still use .slice(0, 10) for date display. They could benefit from
 // migrating to formatDate/formatDateTime for null-safety and locale consistency.
 
 /**

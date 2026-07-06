@@ -4,11 +4,11 @@ import { useEntityForm } from '@/composables/useEntityForm'
 import { useCustomersStore } from '@/stores/customers'
 import { usePlansStore } from '@/stores/plans'
 import { useI18n } from '@koris/composables/useI18n'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
 
 defineProps<{
   open: boolean
@@ -68,57 +68,57 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <KSlideOver :open="open" :title="t('customers.new_user')" @close="handleClose">
+  <SlideOver :open="open" :title="t('customers.new_user')" @close="handleClose">
     <form class="entity-form" @submit.prevent="handleSubmit">
-      <KFormField name="user-username" :label="t('user.username')" required :error="validationError && !form.username ? validationError : ''">
+      <FormField name="user-username" :label="t('user.username')" required :error="validationError && !form.username ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.username" autocomplete="off" :placeholder="t('user.username')" />
+          <Input :id="fieldId" v-model="form.username" autocomplete="off" :placeholder="t('user.username')" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="user-password" :label="t('user.password')" required :error="validationError && !form.password ? validationError : ''">
+      <FormField name="user-password" :label="t('user.password')" required :error="validationError && !form.password ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.password" type="password" autocomplete="new-password" :placeholder="t('user.password')" />
+          <Input :id="fieldId" v-model="form.password" type="password" autocomplete="new-password" :placeholder="t('user.password')" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="user-display-name" :label="t('user.display_name')">
+      <FormField name="user-display-name" :label="t('user.display_name')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.display_name" :placeholder="t('user.display_name')" />
+          <Input :id="fieldId" v-model="form.display_name" :placeholder="t('user.display_name')" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="user-plan" :label="t('user.plan')">
+      <FormField name="user-plan" :label="t('user.plan')">
         <template #default="{ fieldId }">
-          <KSelect :id="fieldId" v-model="form.plan_id" :options="planOptions" :placeholder="t('plans.select_plan')" />
+          <Select :id="fieldId" v-model="form.plan_id" :options="planOptions" :placeholder="t('plans.select_plan')" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="user-data" :label="t('user.data_limit')">
+      <FormField name="user-data" :label="t('user.data_limit')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.data_gb" type="number" placeholder="GB" />
+          <Input :id="fieldId" v-model="form.data_gb" type="number" placeholder="GB" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="user-speed" :label="t('user.speed_limit')">
+      <FormField name="user-speed" :label="t('user.speed_limit')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="Mbps" />
+          <Input :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="Mbps" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="user-duration" :label="t('user.duration')">
+      <FormField name="user-duration" :label="t('user.duration')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.days" type="number" placeholder="Days" />
+          <Input :id="fieldId" v-model="form.days" type="number" placeholder="Days" />
         </template>
-      </KFormField>
+      </FormField>
 
       <div class="entity-form__actions">
-        <KButton type="submit" variant="primary" :loading="submitting" full-width>
+        <Button type="submit" variant="primary" :loading="submitting" full-width>
           {{ t('customers.create_user') }}
-        </KButton>
+        </Button>
       </div>
     </form>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>

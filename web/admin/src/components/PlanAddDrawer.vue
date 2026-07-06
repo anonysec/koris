@@ -3,10 +3,10 @@ import { computed } from 'vue'
 import { useEntityForm } from '@/composables/useEntityForm'
 import { usePlansStore } from '@/stores/plans'
 import { useI18n } from '@koris/composables/useI18n'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
 
 defineProps<{
   open: boolean
@@ -70,13 +70,13 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <KSlideOver :open="open" :title="t('plans.create_plan')" @close="handleClose">
+  <SlideOver :open="open" :title="t('plans.create_plan')" @close="handleClose">
     <form class="entity-form" autocomplete="off" @submit.prevent="handleSubmit">
-      <KFormField name="plan-name" :label="t('plans.name')" required :error="validationError && !form.name ? validationError : ''">
+      <FormField name="plan-name" :label="t('plans.name')" required :error="validationError && !form.name ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.name" :placeholder="t('plans.name_placeholder')" />
+          <Input :id="fieldId" v-model="form.name" :placeholder="t('plans.name_placeholder')" />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Billing Type Selector -->
       <div class="billing-type-selector">
@@ -93,46 +93,46 @@ async function handleSubmit() {
       </div>
 
       <!-- Shared fields -->
-      <KFormField name="plan-speed" :label="t('plans.speed')">
+      <FormField name="plan-speed" :label="t('plans.speed')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="100" />
+          <Input :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="100" />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Quota-specific fields -->
       <template v-if="!isPayg">
-        <KFormField name="plan-data" :label="t('plans.data_limit')">
+        <FormField name="plan-data" :label="t('plans.data_limit')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.data_gb" type="number" placeholder="GB" />
+            <Input :id="fieldId" v-model="form.data_gb" type="number" placeholder="GB" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="plan-duration" :label="t('plans.duration')">
+        <FormField name="plan-duration" :label="t('plans.duration')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.duration_days" type="number" placeholder="Days" />
+            <Input :id="fieldId" v-model="form.duration_days" type="number" placeholder="Days" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="plan-price" :label="t('plans.price')">
+        <FormField name="plan-price" :label="t('plans.price')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.price" type="number" placeholder="$" />
+            <Input :id="fieldId" v-model="form.price" type="number" placeholder="$" />
           </template>
-        </KFormField>
+        </FormField>
       </template>
 
       <!-- PAYG-specific fields -->
       <template v-if="isPayg">
-        <KFormField name="plan-price-gb" :label="t('plans.price_per_gb')">
+        <FormField name="plan-price-gb" :label="t('plans.price_per_gb')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.price_per_gb" type="number" placeholder="$/GB" />
+            <Input :id="fieldId" v-model="form.price_per_gb" type="number" placeholder="$/GB" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="plan-price-day" :label="t('plans.price_per_day')">
+        <FormField name="plan-price-day" :label="t('plans.price_per_day')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.price_per_day" type="number" placeholder="$/day" />
+            <Input :id="fieldId" v-model="form.price_per_day" type="number" placeholder="$/day" />
           </template>
-        </KFormField>
+        </FormField>
       </template>
 
       <!-- Disconnect on zero toggle -->
@@ -142,12 +142,12 @@ async function handleSubmit() {
       </label>
 
       <div class="entity-form__actions">
-        <KButton type="submit" variant="primary" :loading="submitting" full-width>
+        <Button type="submit" variant="primary" :loading="submitting" full-width>
           {{ t('plans.create_plan') }}
-        </KButton>
+        </Button>
       </div>
     </form>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>

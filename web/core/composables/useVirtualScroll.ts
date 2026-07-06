@@ -35,7 +35,7 @@ export interface UseVirtualScrollReturn {
 }
 
 /**
- * Composable providing virtual scroll calculation logic for KDataTable.
+ * Composable providing virtual scroll calculation logic for DataTable.
  *
  * Only renders visible rows plus a configurable buffer above and below the viewport,
  * enabling smooth scrolling for datasets with 1000+ rows while maintaining

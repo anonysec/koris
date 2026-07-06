@@ -1,7 +1,7 @@
 <template>
   <div class="toast-provider" aria-live="polite" aria-relevant="additions removals">
     <TransitionGroup name="toast-list">
-      <KToast
+      <Toast
         v-for="toast in toasts"
         :key="toast.id"
         :message="toast.message"
@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import KToast from '@koris/ui/KToast.vue'
+import Toast from '@koris/ui/Toast.vue'
 import { useToast } from '@koris/composables/useToast'
 
 const { toasts, removeToast } = useToast()

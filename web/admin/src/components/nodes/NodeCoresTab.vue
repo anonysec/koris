@@ -4,7 +4,7 @@ import { useNodesStore, type CoreStatus } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
 import type { CoreInfo } from './types'
 import CoresTab from './CoresTab.vue'
-import KSkeleton from '@koris/ui/KSkeleton.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
 
 const props = defineProps<{
   nodeId: number
@@ -77,7 +77,7 @@ onMounted(loadCores)
   <div class="node-cores-tab">
     <h4 class="node-cores-tab__title">Cores</h4>
 
-    <KSkeleton v-if="loading" />
+    <Skeleton v-if="loading" />
 
     <CoresTab
       v-else

@@ -3,10 +3,10 @@ import { ref, computed } from 'vue'
 import { useDomainsStore } from '@/stores/domains'
 import { useI18n } from '@koris/composables/useI18n'
 import { useToast } from '@koris/composables/useToast'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
 
 defineProps<{
   open: boolean
@@ -122,9 +122,9 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <KSlideOver :open="open" title="Add Domain" @close="handleClose">
+  <SlideOver :open="open" title="Add Domain" @close="handleClose">
     <form class="entity-form" autocomplete="off" @submit.prevent="handleSubmit">
-      <KFormField
+      <FormField
         name="domain-name"
         label="Domain Name"
         required
@@ -132,15 +132,15 @@ async function handleSubmit() {
         hint="RFC 1123 hostname (e.g. vpn.example.com)"
       >
         <template #default="{ fieldId }">
-          <KInput
+          <Input
             :id="fieldId"
             v-model="domainName"
             placeholder="vpn.example.com"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField
+      <FormField
         name="domain-ip"
         label="IP Address"
         required
@@ -148,25 +148,25 @@ async function handleSubmit() {
         hint="IPv4 or IPv6 address"
       >
         <template #default="{ fieldId }">
-          <KInput
+          <Input
             :id="fieldId"
             v-model="ipAddress"
             placeholder="192.168.1.1"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <div v-if="validationError" class="validation-error">
         {{ validationError }}
       </div>
 
       <div class="entity-form__actions">
-        <KButton type="submit" variant="primary" :loading="submitting" full-width>
+        <Button type="submit" variant="primary" :loading="submitting" full-width>
           Create Domain
-        </KButton>
+        </Button>
       </div>
     </form>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>

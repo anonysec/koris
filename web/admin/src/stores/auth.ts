@@ -141,7 +141,7 @@ export const useAuthStore = defineStore('auth', () => {
       setupRequired.value = false
       return true
     } catch {
-      // Set a translation key so LoginView can localize the error
+      // Set a translation key so Login can localize the error
       if (!error.value) {
         error.value = 'login.invalid_credentials'
       } else if (error.value === 'Unauthorized') {

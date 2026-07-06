@@ -2,10 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useBackups } from '@/composables/useBackups'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
 
 const toast = useToast()
 const { settings, fetchSettings, updateSettings } = useBackups()
@@ -100,31 +100,31 @@ onMounted(async () => {
   <section class="backup-settings">
     <h3 class="section-title">Schedule & Retention</h3>
     <form class="settings-form" @submit.prevent="handleSave">
-      <KFormField name="schedule-type" label="Schedule">
+      <FormField name="schedule-type" label="Schedule">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             v-model="scheduleType"
             :options="scheduleTypeOptions"
             :disabled="loadingSettings"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField v-if="scheduleType === 'weekly'" name="schedule-day" label="Day of Week">
+      <FormField v-if="scheduleType === 'weekly'" name="schedule-day" label="Day of Week">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             v-model="scheduleDay"
             :options="dayOptions"
             :disabled="loadingSettings"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField v-if="scheduleType !== 'disabled'" name="schedule-hour" label="Hour (UTC)">
+      <FormField v-if="scheduleType !== 'disabled'" name="schedule-hour" label="Hour (UTC)">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             :model-value="String(scheduleHour)"
             :options="hourOptions"
@@ -132,11 +132,11 @@ onMounted(async () => {
             @update:model-value="scheduleHour = parseInt($event, 10)"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="retention-count" label="Retention Count" hint="Number of backups to keep (1–30)">
+      <FormField name="retention-count" label="Retention Count" hint="Number of backups to keep (1–30)">
         <template #default="{ fieldId }">
-          <KInput
+          <Input
             :id="fieldId"
             :model-value="String(retentionCount)"
             type="number"
@@ -146,11 +146,11 @@ onMounted(async () => {
             @update:model-value="retentionCount = Math.max(1, Math.min(30, parseInt($event, 10) || 7))"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KButton type="submit" variant="primary" :loading="saving" :disabled="loadingSettings">
+      <Button type="submit" variant="primary" :loading="saving" :disabled="loadingSettings">
         Save Settings
-      </KButton>
+      </Button>
     </form>
   </section>
 </template>

@@ -85,7 +85,7 @@ export const useBillingStore = defineStore('portal-billing', () => {
 
   /**
    * Load all billing data: payments, methods, plans.
-   * Called on BillingView mount.
+   * Called on Billing mount.
    */
   async function loadBillingData(): Promise<void> {
     loading.value = true

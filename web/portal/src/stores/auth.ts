@@ -118,7 +118,7 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
       }
       return true
     } catch (err: any) {
-      // Expose the error message so LoginView can display it
+      // Expose the error message so Login can display it
       if (err && err.message) {
         error.value = err.message === 'Unauthorized' ? 'Invalid username or password' : err.message
       } else {

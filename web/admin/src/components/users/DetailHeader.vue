@@ -2,11 +2,11 @@
   <div class="detail-header">
     <div class="detail-header__top">
       <h2 class="detail-header__name">{{ displayName }}</h2>
-      <KStatusPill :status="status" size="sm" />
+      <StatusPill :status="status" size="sm" />
     </div>
 
     <div class="detail-header__usage">
-      <KUsageBar :used="usedBytes" :limit="limitBytes" size="sm" />
+      <UsageBar :used="usedBytes" :limit="limitBytes" size="sm" />
     </div>
 
     <div class="detail-header__wallet">
@@ -20,12 +20,12 @@
         >
           Billing
         </button>
-        <KButton v-if="billingEnabled" variant="ghost" size="sm" @click="$emit('top-up')">
+        <Button v-if="billingEnabled" variant="ghost" size="sm" @click="$emit('top-up')">
           Top Up
-        </KButton>
-        <KButton v-if="billingEnabled" variant="ghost" size="sm" @click="$emit('deduct')">
+        </Button>
+        <Button v-if="billingEnabled" variant="ghost" size="sm" @click="$emit('deduct')">
           Deduct
-        </KButton>
+        </Button>
       </div>
     </div>
   </div>
@@ -33,9 +33,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
-import KUsageBar from '@koris/ui/KUsageBar.vue'
-import KButton from '@koris/ui/KButton.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
+import UsageBar from '@koris/ui/UsageBar.vue'
+import Button from '@koris/ui/Button.vue'
 import { formatCurrency } from '@/utils/formatCurrency'
 
 export interface DetailHeaderProps {

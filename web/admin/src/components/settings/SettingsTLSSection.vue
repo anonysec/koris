@@ -3,9 +3,9 @@ import { ref, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KTextarea from '@koris/ui/KTextarea.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Textarea from '@koris/ui/Textarea.vue'
 
 const { t } = useI18n()
 const store = useSettingsStore()
@@ -96,29 +96,29 @@ async function handleUpload() {
       <div v-if="tls.mode === 'manual'" class="upload-form">
         <h4 class="upload-form__title">{{ t('settings.tls_upload_title') }}</h4>
         <form @submit.prevent="handleUpload">
-          <KFormField name="cert-pem" :label="t('settings.tls_cert_pem')">
+          <FormField name="cert-pem" :label="t('settings.tls_cert_pem')">
             <template #default="{ fieldId }">
-              <KTextarea
+              <Textarea
                 :id="fieldId"
                 v-model="certPem"
                 :placeholder="'-----BEGIN CERTIFICATE-----\n...'"
                 :rows="4"
               />
             </template>
-          </KFormField>
-          <KFormField name="key-pem" :label="t('settings.tls_key_pem')">
+          </FormField>
+          <FormField name="key-pem" :label="t('settings.tls_key_pem')">
             <template #default="{ fieldId }">
-              <KTextarea
+              <Textarea
                 :id="fieldId"
                 v-model="keyPem"
                 :placeholder="'-----BEGIN PRIVATE KEY-----\n...'"
                 :rows="4"
               />
             </template>
-          </KFormField>
-          <KButton type="submit" variant="primary" size="sm" :loading="uploading">
+          </FormField>
+          <Button type="submit" variant="primary" size="sm" :loading="uploading">
             {{ t('settings.tls_upload') }}
-          </KButton>
+          </Button>
         </form>
       </div>
     </div>

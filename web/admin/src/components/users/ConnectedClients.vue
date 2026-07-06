@@ -12,7 +12,7 @@
 import { ref, watch } from 'vue'
 import { useConnectedClients } from '@/composables/useConnectedClients'
 import type { ConnectedClient } from '@koris/types/entities'
-import KButton from '@koris/ui/KButton.vue'
+import Button from '@koris/ui/Button.vue'
 
 const props = withDefaults(defineProps<{
   userId: number | null
@@ -43,7 +43,7 @@ function getUserAgentLabel(client: ConnectedClient): string {
   <section class="connected-clients" aria-label="Connected Clients">
     <div class="connected-clients__header">
       <h3 v-if="showTitle" class="connected-clients__title">Connected Clients</h3>
-      <KButton
+      <Button
         variant="ghost"
         size="sm"
         :disabled="loading"
@@ -51,7 +51,7 @@ function getUserAgentLabel(client: ConnectedClient): string {
         @click="refresh"
       >
         <span class="connected-clients__refresh-icon" :class="{ 'connected-clients__refresh-icon--spinning': loading }">↻</span>
-      </KButton>
+      </Button>
     </div>
 
     <!-- Loading state -->

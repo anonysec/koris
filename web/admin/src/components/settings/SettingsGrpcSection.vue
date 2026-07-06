@@ -3,9 +3,9 @@ import { ref, computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
 
 const { t } = useI18n()
 const store = useSettingsStore()
@@ -56,10 +56,10 @@ async function handleSave() {
 
     <form class="grpc-form" autocomplete="off" @submit.prevent="handleSave">
       <div class="form-grid">
-        <KFormField name="connect-timeout" :label="t('settings.grpc_connect_timeout')">
+        <FormField name="connect-timeout" :label="t('settings.grpc_connect_timeout')">
           <template #default="{ fieldId }">
             <div class="input-with-unit">
-              <KInput
+              <Input
                 :id="fieldId"
                 v-model.number="connectTimeout"
                 type="number"
@@ -68,11 +68,11 @@ async function handleSave() {
               <span class="input-unit">s</span>
             </div>
           </template>
-        </KFormField>
-        <KFormField name="keepalive-interval" :label="t('settings.grpc_keepalive')">
+        </FormField>
+        <FormField name="keepalive-interval" :label="t('settings.grpc_keepalive')">
           <template #default="{ fieldId }">
             <div class="input-with-unit">
-              <KInput
+              <Input
                 :id="fieldId"
                 v-model.number="keepaliveInterval"
                 type="number"
@@ -81,11 +81,11 @@ async function handleSave() {
               <span class="input-unit">s</span>
             </div>
           </template>
-        </KFormField>
-        <KFormField name="metrics-interval" :label="t('settings.grpc_metrics_interval')">
+        </FormField>
+        <FormField name="metrics-interval" :label="t('settings.grpc_metrics_interval')">
           <template #default="{ fieldId }">
             <div class="input-with-unit">
-              <KInput
+              <Input
                 :id="fieldId"
                 v-model.number="metricsInterval"
                 type="number"
@@ -94,7 +94,7 @@ async function handleSave() {
               <span class="input-unit">s</span>
             </div>
           </template>
-        </KFormField>
+        </FormField>
       </div>
 
       <!-- Restart Notice -->
@@ -103,9 +103,9 @@ async function handleSave() {
         <span>{{ t('settings.grpc_restart_required') }}</span>
       </div>
 
-      <KButton type="submit" variant="primary" size="sm" :loading="saving">
+      <Button type="submit" variant="primary" size="sm" :loading="saving">
         {{ t('settings.save') }}
-      </KButton>
+      </Button>
     </form>
   </section>
 </template>

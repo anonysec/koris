@@ -2,7 +2,7 @@
 /**
  * UserDetailPanel — Main detail panel component for the Users tab.
  *
- * Slides in from the right using KSlideOver (KDrawer wrapper).
+ * Slides in from the right using SlideOver (Drawer wrapper).
  * Renders a single scrollable view with sections:
  *   DetailHeader → ProfileFields → AdvancedSettings → ConnectedClients → TransactionList → Action bar
  *
@@ -17,9 +17,9 @@
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KThreeDotMenu from '@koris/ui/KThreeDotMenu.vue'
-import KModal from '@koris/ui/KModal.vue'
+import Button from '@koris/ui/Button.vue'
+import ThreeDotMenu from '@koris/ui/ThreeDotMenu.vue'
+import Modal from '@koris/ui/Modal.vue'
 import DetailHeader from './DetailHeader.vue'
 import ProfileFields from './ProfileFields.vue'
 import AdvancedSettings from './AdvancedSettings.vue'
@@ -27,7 +27,7 @@ import ConnectedClients from './ConnectedClients.vue'
 import TransactionList from './TransactionList.vue'
 import type { CustomerDetail } from '@koris/types'
 import type { ProfileFormData } from './ProfileFields.vue'
-import type { MenuItem } from '@koris/ui/KThreeDotMenu.vue'
+import type { MenuItem } from '@koris/ui/ThreeDotMenu.vue'
 
 export interface UserDetailPanelProps {
   userId: number | null
@@ -377,9 +377,9 @@ onUnmounted(() => {
         <!-- Error state -->
         <div v-if="error" class="user-detail-panel__error">
           <p class="user-detail-panel__error-message">{{ error }}</p>
-          <KButton variant="primary" size="sm" @click="retry">
+          <Button variant="primary" size="sm" @click="retry">
             Retry
-          </KButton>
+          </Button>
         </div>
 
         <!-- Loading state -->
@@ -436,18 +436,18 @@ onUnmounted(() => {
 
           <!-- Action Bar -->
           <div class="user-detail-panel__action-bar">
-            <KThreeDotMenu
+            <ThreeDotMenu
               :items="menuItems"
               placement="top-start"
               @select="handleMenuSelect"
             />
             <div class="user-detail-panel__action-bar-right">
-              <KButton variant="ghost" @click="handleClose">
+              <Button variant="ghost" @click="handleClose">
                 Cancel
-              </KButton>
-              <KButton variant="primary" @click="handleModify">
+              </Button>
+              <Button variant="primary" @click="handleModify">
                 Modify
-              </KButton>
+              </Button>
             </div>
           </div>
         </div>
@@ -456,17 +456,17 @@ onUnmounted(() => {
   </Teleport>
 
   <!-- Connected Clients Modal -->
-  <KModal
+  <Modal
     :open="showClientsModal"
     title="Connected Clients"
     width="600px"
     @close="showClientsModal = false"
   >
     <ConnectedClients :user-id="userId" :show-title="false" />
-  </KModal>
+  </Modal>
 
   <!-- Transactions Modal -->
-  <KModal
+  <Modal
     :open="showTransactionsModal"
     title="Transactions"
     width="600px"
@@ -476,7 +476,7 @@ onUnmounted(() => {
       :transactions="customer?.wallet_transactions ?? []"
       :show-title="false"
     />
-  </KModal>
+  </Modal>
 </template>
 
 <style scoped>

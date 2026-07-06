@@ -4,9 +4,9 @@ import { useDomainsStore, type ProtocolBinding } from '@/stores/domains'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useApi } from '@koris/composables/useApi'
-import KButton from '@koris/ui/KButton.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KEmptyState from '@koris/ui/KEmptyState.vue'
+import Button from '@koris/ui/Button.vue'
+import Input from '@koris/ui/Input.vue'
+import EmptyState from '@koris/ui/EmptyState.vue'
 
 /**
  * NodeDomainsTab — manage domains assigned to this node.
@@ -190,14 +190,14 @@ function isValidDomain(name: string): boolean {
 
     <!-- Add Domain Form -->
     <div class="add-domain-form">
-      <KInput
+      <Input
         v-model="newDomain"
         placeholder="Enter domain name (e.g. vpn.example.com)"
         @keyup.enter="addDomain"
       />
-      <KButton variant="primary" :loading="adding" @click="addDomain">
+      <Button variant="primary" :loading="adding" @click="addDomain">
         Add
-      </KButton>
+      </Button>
     </div>
 
     <!-- Loading -->
@@ -222,36 +222,36 @@ function isValidDomain(name: string): boolean {
         </div>
 
         <div class="domain-item__actions">
-          <KButton
+          <Button
             v-if="index > 0"
             variant="ghost"
             size="sm"
             @click="moveUp(index)"
           >
             ↑
-          </KButton>
-          <KButton
+          </Button>
+          <Button
             v-if="index < sortedDomains.length - 1"
             variant="ghost"
             size="sm"
             @click="moveDown(index)"
           >
             ↓
-          </KButton>
-          <KButton
+          </Button>
+          <Button
             variant="ghost"
             size="sm"
             class="remove-btn"
             @click="removeDomain(binding)"
           >
             ✕
-          </KButton>
+          </Button>
         </div>
       </div>
     </div>
 
     <!-- Empty State -->
-    <KEmptyState
+    <EmptyState
       v-else-if="!loading"
       icon="🌐"
       title="No domains assigned"

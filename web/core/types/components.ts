@@ -5,7 +5,7 @@
 
 import type { VNode } from 'vue'
 
-// --- KButton ---
+// --- Button ---
 
 export interface KButtonProps {
   type?: 'button' | 'submit' | 'reset'
@@ -18,7 +18,7 @@ export interface KButtonProps {
   fullWidth?: boolean
 }
 
-// --- KDataTable ---
+// --- DataTable ---
 
 export interface KDataTableColumn<T = any> {
   key: string
@@ -49,7 +49,7 @@ export interface KDataTableProps<T = any> {
   serverSide?: boolean
 }
 
-// --- KDrawer ---
+// --- Drawer ---
 
 export interface KDrawerProps {
   open: boolean
@@ -60,7 +60,7 @@ export interface KDrawerProps {
   overlay?: boolean
 }
 
-// --- KConfirmDialog ---
+// --- ConfirmDialog ---
 
 export interface ConfirmOptions {
   title: string
@@ -71,7 +71,7 @@ export interface ConfirmOptions {
   icon?: string
 }
 
-// --- KChart ---
+// --- Chart ---
 
 export interface ChartDataPoint {
   label: string
@@ -98,7 +98,7 @@ export interface KChartProps {
   height?: number
 }
 
-// --- KFormField ---
+// --- FormField ---
 
 export interface ValidationRule {
   type: 'required' | 'minLength' | 'maxLength' | 'pattern' | 'custom'

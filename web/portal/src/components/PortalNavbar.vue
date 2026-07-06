@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useTheme } from '@koris/composables/useTheme'
 import { useEdition } from '@/composables/useEdition'
-import KButton from '@koris/ui/KButton.vue'
+import Button from '@koris/ui/Button.vue'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
@@ -33,13 +33,13 @@ async function handleLogout() {
     </nav>
 
     <div class="portal-navbar__actions">
-      <KButton variant="ghost" size="sm" @click="toggleTheme" :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'">
+      <Button variant="ghost" size="sm" @click="toggleTheme" :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'">
         {{ isDark ? '☀️' : '🌙' }}
-      </KButton>
+      </Button>
       <span class="portal-navbar__user">{{ auth.displayName }}</span>
-      <KButton variant="ghost" size="sm" @click="handleLogout">
+      <Button variant="ghost" size="sm" @click="handleLogout">
         Logout
-      </KButton>
+      </Button>
     </div>
   </header>
 </template>

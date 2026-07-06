@@ -2,11 +2,11 @@
 import { ref, computed, watch } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import type { KSelectOption } from '@koris/ui/KSelect.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
+import type { KSelectOption } from '@koris/ui/Select.vue'
 
 const props = defineProps<{
   coreType: string
@@ -201,123 +201,123 @@ watch(() => props.coreType, () => {
     </h3>
 
     <!-- Common: Listen Port -->
-    <KFormField name="listen-port" label="Listen Port" :error="errors.listenPort">
+    <FormField name="listen-port" label="Listen Port" :error="errors.listenPort">
       <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="listenPort" type="number" placeholder="Port" />
+        <Input :id="fieldId" v-model="listenPort" type="number" placeholder="Port" />
       </template>
-    </KFormField>
+    </FormField>
 
     <!-- OpenVPN fields -->
     <template v-if="coreType === 'openvpn'">
-      <KFormField name="auth-mode" label="Authentication Mode">
+      <FormField name="auth-mode" label="Authentication Mode">
         <template #default="{ fieldId }">
-          <KSelect :id="fieldId" v-model="ovpnAuthMode" :options="authModeOptions" />
+          <Select :id="fieldId" v-model="ovpnAuthMode" :options="authModeOptions" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="cipher" label="Cipher">
+      <FormField name="cipher" label="Cipher">
         <template #default="{ fieldId }">
-          <KSelect :id="fieldId" v-model="ovpnCipher" :options="cipherOptions" />
+          <Select :id="fieldId" v-model="ovpnCipher" :options="cipherOptions" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="protocol" label="Protocol">
+      <FormField name="protocol" label="Protocol">
         <template #default="{ fieldId }">
-          <KSelect :id="fieldId" v-model="ovpnProtocol" :options="protocolOptions" />
+          <Select :id="fieldId" v-model="ovpnProtocol" :options="protocolOptions" />
         </template>
-      </KFormField>
+      </FormField>
     </template>
 
     <!-- WireGuard fields -->
     <template v-if="coreType === 'wireguard'">
-      <KFormField name="subnet" label="Tunnel Subnet" hint="CIDR notation, e.g. 10.8.0.0/24">
+      <FormField name="subnet" label="Tunnel Subnet" hint="CIDR notation, e.g. 10.8.0.0/24">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="wgSubnet" placeholder="10.8.0.0/24" />
+          <Input :id="fieldId" v-model="wgSubnet" placeholder="10.8.0.0/24" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="dns" label="DNS Servers" hint="Comma-separated">
+      <FormField name="dns" label="DNS Servers" hint="Comma-separated">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="wgDns" placeholder="8.8.8.8,1.1.1.1" />
+          <Input :id="fieldId" v-model="wgDns" placeholder="8.8.8.8,1.1.1.1" />
         </template>
-      </KFormField>
+      </FormField>
     </template>
 
     <!-- L2TP fields -->
     <template v-if="coreType === 'l2tp'">
-      <KFormField name="auth-type" label="Authentication Type">
+      <FormField name="auth-type" label="Authentication Type">
         <template #default="{ fieldId }">
-          <KSelect :id="fieldId" v-model="l2tpAuthType" :options="l2tpAuthOptions" />
+          <Select :id="fieldId" v-model="l2tpAuthType" :options="l2tpAuthOptions" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField
+      <FormField
         v-if="l2tpAuthType === 'psk'"
         name="psk"
         label="Pre-Shared Key"
         :error="errors.psk"
       >
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="l2tpPsk" type="password" placeholder="Enter PSK" />
+          <Input :id="fieldId" v-model="l2tpPsk" type="password" placeholder="Enter PSK" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="ip-pool" label="IP Pool" hint="CIDR notation">
+      <FormField name="ip-pool" label="IP Pool" hint="CIDR notation">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="l2tpIpPool" placeholder="10.9.0.0/24" />
+          <Input :id="fieldId" v-model="l2tpIpPool" placeholder="10.9.0.0/24" />
         </template>
-      </KFormField>
+      </FormField>
     </template>
 
     <!-- IKEv2 fields -->
     <template v-if="coreType === 'ikev2'">
-      <KFormField name="domain" label="Domain" :error="errors.domain" hint="Required for SSL certificate">
+      <FormField name="domain" label="Domain" :error="errors.domain" hint="Required for SSL certificate">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="ikev2Domain" placeholder="vpn.example.com" />
+          <Input :id="fieldId" v-model="ikev2Domain" placeholder="vpn.example.com" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="cert-source" label="Certificate Source">
+      <FormField name="cert-source" label="Certificate Source">
         <template #default="{ fieldId }">
-          <KSelect :id="fieldId" v-model="ikev2CertSource" :options="certSourceOptions" />
+          <Select :id="fieldId" v-model="ikev2CertSource" :options="certSourceOptions" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="ikev2-ip-pool" label="IP Pool" hint="CIDR notation">
+      <FormField name="ikev2-ip-pool" label="IP Pool" hint="CIDR notation">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="ikev2IpPool" placeholder="10.10.0.0/24" />
+          <Input :id="fieldId" v-model="ikev2IpPool" placeholder="10.10.0.0/24" />
         </template>
-      </KFormField>
+      </FormField>
     </template>
 
     <!-- SSH fields -->
     <template v-if="coreType === 'ssh'">
-      <KFormField name="ssh-port" label="SSH Port" :error="errors.sshPort">
+      <FormField name="ssh-port" label="SSH Port" :error="errors.sshPort">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="sshPort" type="number" placeholder="2222" />
+          <Input :id="fieldId" v-model="sshPort" type="number" placeholder="2222" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="max-connections" label="Max Connections" :error="errors.maxConnections">
+      <FormField name="max-connections" label="Max Connections" :error="errors.maxConnections">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="sshMaxConnections" type="number" placeholder="100" />
+          <Input :id="fieldId" v-model="sshMaxConnections" type="number" placeholder="100" />
         </template>
-      </KFormField>
+      </FormField>
     </template>
 
     <!-- Actions -->
     <div class="core-config-form__actions">
-      <KButton
+      <Button
         type="submit"
         variant="primary"
         :loading="saving"
         :disabled="!isValid"
       >
         Apply Configuration
-      </KButton>
-      <KButton variant="ghost" @click="emit('cancel')">
+      </Button>
+      <Button variant="ghost" @click="emit('cancel')">
         Cancel
-      </KButton>
+      </Button>
     </div>
   </form>
 </template>

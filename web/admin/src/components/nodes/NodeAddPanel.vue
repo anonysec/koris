@@ -3,12 +3,12 @@ import { ref, computed } from 'vue'
 import { useNodesStore, type NodeFormData } from '@/stores/nodes'
 import { useEntityForm } from '@/composables/useEntityForm'
 import { useI18n } from '@koris/composables/useI18n'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KTextarea from '@koris/ui/KTextarea.vue'
-import KAlert from '@koris/ui/KAlert.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Textarea from '@koris/ui/Textarea.vue'
+import Alert from '@koris/ui/Alert.vue'
 
 const props = defineProps<{
   open: boolean
@@ -217,92 +217,92 @@ function handleClose() {
 </script>
 
 <template>
-  <KSlideOver :open="open" :title="t('nodes.add_node')" @close="handleClose">
+  <SlideOver :open="open" :title="t('nodes.add_node')" @close="handleClose">
     <form class="slide-form" @submit.prevent="handleSubmit">
       <p class="slide-form__hint">
         {{ t('nodes.add_hint') }}
       </p>
 
-      <KAlert v-if="apiError" variant="error" closable @close="apiError = ''">
+      <Alert v-if="apiError" variant="error" closable @close="apiError = ''">
         {{ apiError }}
-      </KAlert>
+      </Alert>
 
-      <KAlert v-if="validationError" variant="warning" closable @close="validationError = ''">
+      <Alert v-if="validationError" variant="warning" closable @close="validationError = ''">
         {{ validationError }}
-      </KAlert>
+      </Alert>
 
       <!-- Paste All-in-One Section -->
       <div class="paste-section">
-        <KButton
+        <Button
           type="button"
           variant="ghost"
           size="sm"
           @click="showPasteMode = !showPasteMode"
         >
           {{ showPasteMode ? 'Manual Entry' : '📋 Paste Install Output' }}
-        </KButton>
+        </Button>
 
         <div v-if="showPasteMode" class="paste-area">
           <p class="paste-hint">
             Paste the output from knode installation. The fields will be auto-filled.
           </p>
-          <KTextarea
+          <Textarea
             v-model="pasteCode"
             :rows="10"
             placeholder="Address:  185.1.2.3&#10;Port:     2083&#10;&#10;API Key:&#10;kn_abc123...&#10;&#10;Certificate:&#10;-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
           />
-          <KAlert v-if="pasteError" variant="error" closable @close="pasteError = ''">
+          <Alert v-if="pasteError" variant="error" closable @close="pasteError = ''">
             {{ pasteError }}
-          </KAlert>
-          <KButton type="button" variant="primary" size="sm" @click="applyPasteCode">
+          </Alert>
+          <Button type="button" variant="primary" size="sm" @click="applyPasteCode">
             Apply
-          </KButton>
+          </Button>
         </div>
       </div>
 
-      <KFormField name="node-name" :label="t('nodes.node_name')" hint="Optional — defaults to address">
+      <FormField name="node-name" :label="t('nodes.node_name')" hint="Optional — defaults to address">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.name" placeholder="e.g. de-1, us-west" />
+          <Input :id="fieldId" v-model="form.name" placeholder="e.g. de-1, us-west" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-address" :label="t('nodes.address')" required>
+      <FormField name="node-address" :label="t('nodes.address')" required>
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.address" placeholder="IP or hostname (e.g. 185.1.2.3)" />
+          <Input :id="fieldId" v-model="form.address" placeholder="IP or hostname (e.g. 185.1.2.3)" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-port" :label="t('label.port')" required>
+      <FormField name="node-port" :label="t('label.port')" required>
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.port" type="number" placeholder="2083" />
+          <Input :id="fieldId" v-model="form.port" type="number" placeholder="2083" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-api-key" :label="t('nodes.api_key')" required hint="Shown when knode is installed">
+      <FormField name="node-api-key" :label="t('nodes.api_key')" required hint="Shown when knode is installed">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.api_key" type="password" autocomplete="off" placeholder="Paste from knode install output" />
+          <Input :id="fieldId" v-model="form.api_key" type="password" autocomplete="off" placeholder="Paste from knode install output" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-ca-cert" :label="t('nodes.certificate')" required hint="CA certificate from knode install output (PEM format)">
+      <FormField name="node-ca-cert" :label="t('nodes.certificate')" required hint="CA certificate from knode install output (PEM format)">
         <template #default="{ fieldId }">
-          <KTextarea
+          <Textarea
             :id="fieldId"
             v-model="form.ca_cert"
             :rows="5"
             placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <div class="slide-form__footer">
-        <KButton type="button" variant="ghost" @click="handleClose">{{ t('btn.cancel') }}</KButton>
-        <KButton type="submit" variant="primary" :loading="submitting">
+        <Button type="button" variant="ghost" @click="handleClose">{{ t('btn.cancel') }}</Button>
+        <Button type="submit" variant="primary" :loading="submitting">
           {{ t('nodes.test_and_save') }}
-        </KButton>
+        </Button>
       </div>
     </form>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>
