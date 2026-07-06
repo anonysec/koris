@@ -11,6 +11,8 @@ import './style.css'
 import '@koris/theme/styles/components.css'
 import './styles/micro-interactions.css'
 import '@koris/theme/styles/polish.css'
+// UI/UX overhaul layer — must load last so it wins the cascade across all tabs.
+import '@koris/theme/styles/overhaul.css'
 
 // Import i18n to register admin translation messages with the shared i18n system
 import './i18n'
