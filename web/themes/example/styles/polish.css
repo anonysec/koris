@@ -1,0 +1,66 @@
+/**
+ * Example theme polish — quieter than the default.
+ * No aurora backdrop, no animated gradient. Just paper.
+ */
+
+/* Kill the default theme's aurora + grid */
+body::before { display: none !important; }
+body::after  { display: none !important; }
+
+/* Cleaner canvas — just a subtle paper texture */
+body {
+  background:
+    radial-gradient(1200px 800px at 100% 0%, rgba(13,148,136,0.04), transparent 60%),
+    radial-gradient(800px 600px at 0% 100%, rgba(245,158,11,0.04), transparent 60%),
+    var(--color-bg) !important;
+  background-attachment: fixed !important;
+}
+
+/* Sidebar: solid white card, subtle shadow */
+.sidebar {
+  background: var(--color-surface) !important;
+  backdrop-filter: none !important;
+  box-shadow: 1px 0 0 var(--color-border);
+}
+
+/* Topbar: solid, no glass */
+.topbar {
+  background: var(--color-surface) !important;
+  backdrop-filter: none !important;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Cards: crisp borders, no color-tinted hover glow */
+.k-card:hover, .card:hover {
+  box-shadow: var(--shadow-md) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Stat cards: solid text (no gradient clipping) */
+.k-stat-value {
+  background: none !important;
+  -webkit-text-fill-color: var(--color-text) !important;
+  color: var(--color-text) !important;
+}
+.k-stat::before {
+  background: var(--color-primary) !important;
+  opacity: 1 !important;
+}
+.k-stat::after { display: none !important; }
+
+/* Buttons: no sheen animation */
+.btn-primary::after, button.btn-primary::after { display: none !important; }
+.btn-primary {
+  background: var(--color-primary) !important;
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--color-primary) 90%, black) !important;
+  filter: none !important;
+}
+
+/* Inputs: crisp single border */
+input:focus, select:focus, textarea:focus {
+  background: var(--color-surface) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
+}

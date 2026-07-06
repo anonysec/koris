@@ -1,0 +1,32 @@
+/**
+ * Example theme tokens — light aesthetic.
+ * Overrides @koris/core/styles/tokens.css by loading after it.
+ */
+
+:root {
+  /* Warm off-white canvas instead of near-black */
+  --color-bg:         #f7f6f2;
+  --color-surface:    #ffffff;
+  --color-surface-2:  #f0eee7;
+  --color-border:     #d8d4c8;
+  --color-text:       #1c1b17;
+  --color-muted:      #6b6659;
+
+  /* Restrained accents — teal + amber */
+  --color-primary:    #0d9488;
+  --color-accent:     #f59e0b;
+  --color-brand-2:    #14b8a6;
+
+  --color-success:    #16a34a;
+  --color-warning:    #d97706;
+  --color-danger:     #dc2626;
+
+  --gradient-brand:   linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+
+  /* Softer shadows on light background */
+  --shadow-sm: 0 1px 3px rgba(28, 27, 23, 0.05), 0 1px 2px rgba(28, 27, 23, 0.03);
+  --shadow-md: 0 4px 12px rgba(28, 27, 23, 0.08), 0 2px 4px rgba(28, 27, 23, 0.04);
+  --shadow-lg: 0 12px 32px rgba(28, 27, 23, 0.12), 0 4px 8px rgba(28, 27, 23, 0.06);
+  --shadow-xl: 0 24px 56px rgba(28, 27, 23, 0.15);
+  --shadow-brand: 0 4px 14px rgba(13, 148, 136, 0.25);
+}
