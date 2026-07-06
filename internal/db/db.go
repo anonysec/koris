@@ -1,6 +1,7 @@
 package db
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"database/sql"
 	"fmt"
 	"log"
@@ -112,7 +113,7 @@ func Migrate(db *sql.DB, dir string) error {
 		if exists > 0 {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(dir, name))
+		b, err := safepath.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			return err
 		}

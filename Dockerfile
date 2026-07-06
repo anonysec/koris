@@ -28,4 +28,5 @@ WORKDIR /app
 COPY --from=builder /koris /app/koris
 COPY --from=builder /build/migrations /app/migrations
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=15s     CMD curl -skf https://localhost:443/api/health || curl -sf http://localhost:8080/api/health || exit 1
+USER koris
 ENTRYPOINT ["/app/koris"]

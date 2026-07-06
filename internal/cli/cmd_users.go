@@ -69,7 +69,7 @@ func runUsersListWithURL(c *CLI, baseURL string, args []string) error {
 	flags := parseFlags(args)
 	path := buildUsersPath(flags)
 
-	client := &http.Client{}
+	client := c.Client() // safehttp.LocalhostClient
 	req, err := http.NewRequest(http.MethodGet, baseURL+path, nil)
 	if err != nil {
 		return fmt.Errorf("cannot connect to panel: %w", err)

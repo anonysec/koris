@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"crypto/tls"
@@ -14,7 +15,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -925,7 +925,7 @@ func main() {
 				} else {
 					args = append(args, "--register-unsafely-without-email")
 				}
-				out, err := exec.Command("certbot", args...).CombinedOutput()
+				out, err := safeexec.MustCommand("certbot", args...).CombinedOutput()
 				if err != nil {
 					sslResult = "certbot_failed: " + string(out)
 					logger.Error("domain", "certbot failed", map[string]any{"domain": in.Domain, "output": string(out)})
@@ -936,8 +936,8 @@ func main() {
 					keySrc := "/etc/letsencrypt/live/" + in.Domain + "/privkey.pem"
 					if fileExists(certSrc) && fileExists(keySrc) {
 						os.MkdirAll("/etc/panel", 0755)
-						exec.Command("cp", certSrc, cfg.TLSCert).Run()
-						exec.Command("cp", keySrc, cfg.TLSKey).Run()
+						safeexec.MustCommand("cp", certSrc, cfg.TLSCert).Run()
+						safeexec.MustCommand("cp", keySrc, cfg.TLSKey).Run()
 					}
 				}
 			}

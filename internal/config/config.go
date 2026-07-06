@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"fmt"
 	"log"
 	"os"
@@ -224,7 +225,7 @@ func getenv(k, d string) string {
 func readVersionFile() string {
 	// Try common locations
 	for _, path := range []string{"VERSION", "/opt/koris/VERSION", "/app/VERSION"} {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := safepath.ReadFile(path); err == nil {
 			v := strings.TrimSpace(string(data))
 			if v != "" {
 				return v

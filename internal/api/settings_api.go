@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -55,7 +56,7 @@ func (s *Server) handleSettingsOverview(w http.ResponseWriter, r *http.Request) 
 
 	// Try to read the certificate to extract expiry and issuer
 	certPath := s.Config.TLSCert
-	if certData, err := os.ReadFile(certPath); err == nil {
+	if certData, err := safepath.ReadFile(certPath); err == nil {
 		block, _ := pem.Decode(certData)
 		if block != nil {
 			if cert, err := x509.ParseCertificate(block.Bytes); err == nil {

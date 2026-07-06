@@ -2,97 +2,40 @@ package cli
 
 import (
 	"bytes"
-	"context"
-	"fmt"
-	"net"
+	"io"
 	"net/http"
-	"time"
 )
 
-// makeRequest performs an HTTP request to the running panel, first trying the
-// Unix socket and falling back to HTTP at 127.0.0.1:8080.
+// makeRequest performs an HTTP request to the running panel via the
+// safehttp.LocalhostClient (loopback-only, SSRF-protected).
 func (c *CLI) makeRequest(method, path string) (*http.Response, error) {
-	// Try Unix socket first.
-	resp, err := c.requestViaSocket(method, path, nil)
-	if err == nil {
-		return resp, nil
-	}
-
-	// Fallback to HTTP.
-	return c.requestViaHTTP(method, path, nil)
-}
-
-// makeRequestWithBody performs an HTTP request with a JSON body to the running panel,
-// first trying the Unix socket and falling back to HTTP at 127.0.0.1:8080.
-func (c *CLI) makeRequestWithBody(method, path string, body []byte) (*http.Response, error) {
-	// Try Unix socket first.
-	resp, err := c.requestViaSocket(method, path, body)
-	if err == nil {
-		return resp, nil
-	}
-
-	// Fallback to HTTP.
-	return c.requestViaHTTP(method, path, body)
-}
-
-// requestViaSocket attempts the request over the configured Unix socket.
-func (c *CLI) requestViaSocket(method, path string, body []byte) (*http.Response, error) {
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return net.DialTimeout("unix", c.socketPath, 5*time.Second)
-		},
-	}
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   10 * time.Second,
-	}
-
-	url := "http://panel" + path
-	var req *http.Request
-	var err error
-	if body != nil {
-		req, err = http.NewRequest(method, url, bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("unix socket request failed: %w", err)
-	}
-	return resp, nil
-}
-
-// requestViaHTTP attempts the request over TCP to 127.0.0.1:8080.
-func (c *CLI) requestViaHTTP(method, path string, body []byte) (*http.Response, error) {
-	client := c.Client() // uses safehttp.LocalhostClient (loopback-only)
-
 	url := "http://127.0.0.1:8080" + path
-	var req *http.Request
-	var err error
-	if body != nil {
-		req, err = http.NewRequest(method, url, bytes.NewReader(body))
+	client := c.Client()
+	switch method {
+	case http.MethodGet:
+		return client.Get(url)
+	case http.MethodPost:
+		return client.Post(url, "application/json", nil)
+	default:
+		req, err := http.NewRequest(method, url, nil)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-		if err != nil {
-			return nil, err
-		}
+		return client.Do(req)
 	}
+}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+// makeRequestWithBody performs an HTTP request with a JSON body.
+func (c *CLI) makeRequestWithBody(method, path string, body []byte) (*http.Response, error) {
+	url := "http://127.0.0.1:8080" + path
+	client := c.Client()
+	return client.Post(url, "application/json", bytes.NewReader(body))
+}
+
+// drainAndClose reads and discards the response body to allow connection reuse.
+func drainAndClose(resp *http.Response) {
+	if resp != nil && resp.Body != nil {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 	}
-	return resp, nil
 }

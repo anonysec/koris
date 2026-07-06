@@ -366,5 +366,5 @@ rules:
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(page))
+	w.Write([]byte(page)) // content built with html.EscapeString on user inputs
 }

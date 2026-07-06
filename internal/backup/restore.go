@@ -1,6 +1,7 @@
 ﻿package backup
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"github.com/anonysec/koris/internal/safeexec"
 	"strconv"
 	"archive/tar"
@@ -116,7 +117,7 @@ func (s *Service) createPreRestoreBackup(ctx context.Context) error {
 
 // validateArchiveStructure opens the tar.gz and checks for required files.
 func validateArchiveStructure(archivePath string) (*Manifest, error) {
-	f, err := os.Open(archivePath)
+	f, err := safepath.Open(archivePath)
 	if err != nil {
 		return nil, fmt.Errorf("open archive: %w", err)
 	}
@@ -169,7 +170,7 @@ func validateArchiveStructure(archivePath string) (*Manifest, error) {
 
 // applyDumpSQL extracts dump.sql from the archive and pipes it to the psql command.
 func (s *Service) applyDumpSQL(ctx context.Context, archivePath string) error {
-	f, err := os.Open(archivePath)
+	f, err := safepath.Open(archivePath)
 	if err != nil {
 		return err
 	}
@@ -225,7 +226,7 @@ func (s *Service) applyDumpSQL(ctx context.Context, archivePath string) error {
 
 // dispatchConfigRestores extracts node config files from the archive and dispatches restore tasks.
 func (s *Service) dispatchConfigRestores(ctx context.Context, archivePath string) error {
-	f, err := os.Open(archivePath)
+	f, err := safepath.Open(archivePath)
 	if err != nil {
 		return err
 	}
