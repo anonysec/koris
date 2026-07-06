@@ -1,45 +1,55 @@
-# Low Memory Tuning Guide
+# 🧠 Low-Memory Tuning Guide
+
+Profiles for running Koris on small VPS instances (≈1 GB RAM).
 
 ## Panel (Go binary)
-The panel automatically optimizes for low-memory when no explicit GOMAXPROCS/GOGC/GOMEMLIMIT are set:
-- GOMAXPROCS=1 (single thread)
-- GOGC=50 (more frequent GC, lower peak memory)
-- GOMEMLIMIT=100MB (soft memory cap)
+
+The panel auto-optimizes for low memory when no explicit `GOMAXPROCS`/`GOGC`/`GOMEMLIMIT` are set:
+
+- `GOMAXPROCS=1` (single thread)
+- `GOGC=50` (more frequent GC, lower peak memory)
+- `GOMEMLIMIT=100MB` (soft memory cap)
 
 Override with env vars if needed:
+
 - `GOMAXPROCS=2` for multi-core
 - `GOGC=100` for default GC behavior
-- `GOMEMLIMIT=200000000` for 200MB limit
+- `GOMEMLIMIT=200000000` for a 200 MB limit
 
-## MariaDB (recommended for 1GB RAM)
-Add to `/etc/mysql/mariadb.conf.d/99-lowmem.cnf`:
+Database pool sizing (see [Configuration](configuration.md)):
+
+- `PANEL_DB_MAX_OPEN=10`
+- `PANEL_DB_MAX_IDLE=2`
+- `PANEL_DB_MAX_LIFETIME=5m`
+
+## PostgreSQL / TimescaleDB (recommended for 1 GB RAM)
+
+Add to `postgresql.conf` (or a drop-in in `conf.d/`):
+
 ```ini
-[mysqld]
-innodb_buffer_pool_size = 128M
-innodb_log_buffer_size = 4M
-key_buffer_size = 16M
+shared_buffers = 128MB
+effective_cache_size = 384MB
+work_mem = 4MB
+maintenance_work_mem = 32MB
 max_connections = 30
-thread_cache_size = 4
-table_open_cache = 128
-query_cache_size = 0
-query_cache_type = 0
-tmp_table_size = 16M
-max_heap_table_size = 16M
+wal_buffers = 4MB
+# TimescaleDB
+timescaledb.max_background_workers = 2
+max_worker_processes = 4
 ```
 
-## Nginx (recommended)
-```nginx
-worker_processes 1;
-worker_connections 512;
-```
+For the bundled Docker stack, pass these via the TimescaleDB container command or a mounted config file.
 
-## Node Agent
-Already lightweight (~5MB RSS). No tuning needed.
+## Node Agent (knode)
 
-## Expected Memory Usage (1GB server)
-- MariaDB: ~200MB
-- Nginx: ~20MB
-- Panel binary: ~30-50MB
-- FreeRADIUS: ~30MB
-- OS + buffers: ~200MB
-- Available: ~500MB headroom
+Already lightweight (~5 MB RSS). No tuning needed.
+
+## Expected Memory Usage (1 GB server)
+
+| Component | Approx. RSS |
+|-----------|-------------|
+| PostgreSQL/TimescaleDB | ~250 MB |
+| Panel binary | ~30–50 MB |
+| FreeRADIUS | ~30 MB |
+| OS + buffers | ~200 MB |
+| **Headroom** | **~450 MB** |

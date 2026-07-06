@@ -9,6 +9,7 @@ Welcome to the Koris docs. Start here:
 | ⚙️ [Configuration](configuration.md) | Env vars, TLS, routing |
 | 🛰️ [Node Management](nodes.md) | Adding & operating knode agents |
 | 🎨 [UI / UX](ui-ux.md) | Design system, themes, overhaul layer |
+| 🧩 [Frontend Components](frontend.md) | Shared components & composables |
 | 🛠️ [Admin Guide](ADMIN.md) | Day-to-day admin tasks |
 | 📡 [API Reference](API.md) | HTTP API |
 | 🐳 [Docker](DOCKER.md) | Compose stack details |
