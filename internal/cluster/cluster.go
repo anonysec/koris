@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// LockName is the MariaDB advisory lock name used for leader election.
+// LockName is the advisory lock name used for leader election.
 const LockName = "korispanel_leader"
 
 // Role represents the cluster role of a node.
@@ -31,7 +31,7 @@ type ClusterNode struct {
 	Metadata      sql.NullString
 }
 
-// ClusterManager manages distributed leader election via MariaDB advisory
+// ClusterManager manages distributed leader election via PostgreSQL advisory
 // locks and node registration for health monitoring.
 type ClusterManager struct {
 	db     *sql.DB

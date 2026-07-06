@@ -1,6 +1,7 @@
 ﻿package backup
 
 import (
+	"strconv"
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
@@ -67,7 +68,7 @@ func (s *Service) RestoreFromUpload(ctx context.Context, file io.Reader, filenam
 		log.Printf("[backup] pre-restore backup failed (continuing): %v", preErr)
 	}
 
-	// 7. Apply dump.sql via mysql command
+	// 7. Apply dump.sql via psql command
 	if err := s.applyDumpSQL(ctx, tmpPath); err != nil {
 		return fmt.Errorf("apply dump.sql: %w", err)
 	}
@@ -92,7 +93,7 @@ func (s *Service) createPreRestoreBackup(ctx context.Context) error {
 	filename := fmt.Sprintf("pre-restore-%s.tar.gz", now.Format("20060102-150405"))
 	archivePath := filepath.Join(s.cfg.StorageDir, filename)
 
-	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
+	dumpReader, dumpWait, err := streamPgDump(ctx, s.cfg)
 	if err != nil {
 		return err
 	}
@@ -166,7 +167,7 @@ func validateArchiveStructure(archivePath string) (*Manifest, error) {
 	return &manifest, nil
 }
 
-// applyDumpSQL extracts dump.sql from the archive and pipes it to the mysql command.
+// applyDumpSQL extracts dump.sql from the archive and pipes it to the psql command.
 func (s *Service) applyDumpSQL(ctx context.Context, archivePath string) error {
 	f, err := os.Open(archivePath)
 	if err != nil {
@@ -196,22 +197,27 @@ func (s *Service) applyDumpSQL(ctx context.Context, archivePath string) error {
 		}
 	}
 
-	// Stream dump.sql into mysql command
-	args := []string{
-		"--force",
-		"-h", s.cfg.DBHost,
-		"-u", s.cfg.DBUser,
-		s.cfg.DBName,
+	// Stream dump.sql into the psql command
+	port := s.cfg.DBPort
+	if port == 0 {
+		port = 5432
 	}
-	cmd := exec.CommandContext(ctx, "mysql", args...)
-	cmd.Env = append(cmd.Environ(), "MYSQL_PWD="+s.cfg.DBPass)
+	args := []string{
+		"-h", s.cfg.DBHost,
+		"-p", strconv.Itoa(port),
+		"-U", s.cfg.DBUser,
+		"-v", "ON_ERROR_STOP=1",
+		"-d", s.cfg.DBName,
+	}
+	cmd := exec.CommandContext(ctx, "psql", args...)
+	cmd.Env = append(cmd.Environ(), "PGPASSWORD="+s.cfg.DBPass)
 	cmd.Stdin = tr
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("mysql restore failed: %w, stderr: %s", err, stderr.String())
+		return fmt.Errorf("psql restore failed: %w, stderr: %s", err, stderr.String())
 	}
 
 	return nil

@@ -20,7 +20,7 @@ type Config struct {
 	TLSEmail       string
 	TLSMode        string // acme | manual | selfsigned | disabled
 	DBDSN          string
-	DBBackend      string // timescaledb | postgres | mariadb | sqlite
+	DBBackend      string // timescaledb | postgres
 	PGDSN          string
 	SetupKey       string
 	SessionSecret  string
@@ -93,7 +93,7 @@ func Load() Config {
 			log.Fatalf("FATAL: PANEL_DB_DSN or PANEL_PG_DSN is required in production. Set PANEL_DEV_MODE=true for development.")
 		}
 		log.Println("[SECURITY WARNING] PANEL_DB_DSN/PANEL_PG_DSN is not set. Using insecure default credentials.")
-		dbDSN = "radius:RadiusDb2026@tcp(127.0.0.1:3306)/radius?parseTime=true&multiStatements=true&charset=utf8mb4,utf8"
+		dbDSN = "postgres://radius:RadiusDb2026@127.0.0.1:5432/radius?sslmode=disable"
 	}
 
 	if setupKey == "" {
@@ -124,7 +124,7 @@ func Load() Config {
 
 	// SecureCookies: configurable via PANEL_SECURE_COOKIES env var.
 	// Defaults to false because the panel is designed to run behind a reverse proxy
-	// (Nginx handles HTTPS, proxies to Go over HTTP). Setting Secure: true on cookies
+	// (a reverse proxy handles HTTPS, proxying to Go over HTTP). Setting Secure: true on cookies
 	// when Go receives plain HTTP can cause browsers to reject the cookie on refresh.
 	// Operators who expose Go directly over HTTPS should set PANEL_SECURE_COOKIES=true.
 	secureCookies := false

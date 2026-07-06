@@ -1,5 +1,5 @@
 // Package dbstore defines the database abstraction layer interface.
-// All implementations (PostgreSQL/TimescaleDB, MariaDB, SQLite) must satisfy the Store contract.
+// All implementations (PostgreSQL/TimescaleDB, SQLite) must satisfy the Store contract.
 package dbstore
 
 import (
@@ -9,7 +9,7 @@ import (
 )
 
 // Store is the database abstraction interface.
-// All implementations (PostgreSQL, MariaDB, SQLite) must satisfy this contract.
+// All implementations (PostgreSQL, SQLite) must satisfy this contract.
 type Store interface {
 	// Connection
 	DB() *sql.DB
@@ -20,7 +20,7 @@ type Store interface {
 	// Transactions
 	Begin(ctx context.Context) (Tx, error)
 
-	// Advisory locks (no-op on MariaDB/SQLite)
+	// Advisory locks (no-op on SQLite)
 	AcquireLock(ctx context.Context, lockID int64) (bool, error)
 	ReleaseLock(ctx context.Context, lockID int64) error
 

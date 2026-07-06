@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // migration025SQL is the fix migration that adds cert_path and status columns.
@@ -435,7 +435,7 @@ func TestPreservation_RegenerateUpdateAfterMigration_Mock(t *testing.T) {
 	}
 }
 
-// --- Integration tests below require a real MariaDB/MySQL via TEST_DSN ---
+// --- Integration tests below require a real PostgreSQL via TEST_DSN ---
 
 // createTestDB creates a temporary test database with the UNFIXED vpn_certificates schema.
 func createTestDB(t *testing.T, db *sql.DB) string {
@@ -487,7 +487,7 @@ func dropTestDB(t *testing.T, db *sql.DB, dbName string) {
 }
 
 // TestPreservation_DataIntegrityAfterMigration_Integration tests data preservation
-// against a real MariaDB instance. Requires TEST_DSN env var.
+// against a real PostgreSQL instance. Requires TEST_DSN env var.
 //
 // **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
 func TestPreservation_DataIntegrityAfterMigration_Integration(t *testing.T) {
@@ -496,14 +496,14 @@ func TestPreservation_DataIntegrityAfterMigration_Integration(t *testing.T) {
 		t.Skip("TEST_DSN not set, skipping database preservation test")
 	}
 
-	db, err := sql.Open("mysql", dsn+"?parseTime=true&multiStatements=true")
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Skipf("failed to open database: %v", err)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		t.Skipf("MariaDB not reachable at TEST_DSN, skipping: %v", err)
+		t.Skipf("PostgreSQL not reachable at TEST_DSN, skipping: %v", err)
 	}
 
 	f := func(seed int64) bool {
@@ -623,7 +623,7 @@ func TestPreservation_DataIntegrityAfterMigration_Integration(t *testing.T) {
 }
 
 // TestPreservation_RegenerateUpdateAfterMigration_Integration tests the Regenerate
-// UPDATE query against a real MariaDB instance. Requires TEST_DSN env var.
+// UPDATE query against a real PostgreSQL instance. Requires TEST_DSN env var.
 //
 // **Validates: Requirements 3.1, 3.2**
 func TestPreservation_RegenerateUpdateAfterMigration_Integration(t *testing.T) {
@@ -632,14 +632,14 @@ func TestPreservation_RegenerateUpdateAfterMigration_Integration(t *testing.T) {
 		t.Skip("TEST_DSN not set, skipping database preservation test")
 	}
 
-	db, err := sql.Open("mysql", dsn+"?parseTime=true&multiStatements=true")
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Skipf("failed to open database: %v", err)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		t.Skipf("MariaDB not reachable at TEST_DSN, skipping: %v", err)
+		t.Skipf("PostgreSQL not reachable at TEST_DSN, skipping: %v", err)
 	}
 
 	f := func(seed int64) bool {

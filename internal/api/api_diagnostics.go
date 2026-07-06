@@ -33,14 +33,9 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	var checks []map[string]any
 
 	checks = append(checks, map[string]any{
-		"name":   "Nginx service",
-		"ok":     isActive("nginx"),
-		"detail": "systemctl is-active nginx",
-	})
-	checks = append(checks, map[string]any{
-		"name":   "MariaDB service",
-		"ok":     isActive("mariadb"),
-		"detail": "systemctl is-active mariadb",
+		"name":   "PostgreSQL service",
+		"ok":     isActive("postgresql"),
+		"detail": "systemctl is-active postgresql",
 	})
 	checks = append(checks, map[string]any{
 		"name":   "Auth service",

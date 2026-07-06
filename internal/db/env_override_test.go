@@ -137,7 +137,7 @@ func TestApplyEnvOverrides(t *testing.T) {
 			t.Setenv("PANEL_DB_MAX_LIFETIME", tt.envLifetime)
 
 			// Use a real sql.DB (driver doesn't matter for pool config)
-			db, err := sql.Open("mysql", "invalid:invalid@tcp(127.0.0.1:1)/test")
+			db, err := sql.Open("pgx", "postgres://invalid:invalid@127.0.0.1:1/test")
 			if err != nil {
 				t.Fatalf("sql.Open failed: %v", err)
 			}

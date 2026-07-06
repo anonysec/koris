@@ -1,5 +1,5 @@
 -- KorisPanel consolidated PostgreSQL schema
--- Converted from MySQL migrations 000-071
+-- PostgreSQL / TimescaleDB schema
 
 ---------------------------------------------------------------------
 -- FreeRADIUS tables
@@ -175,7 +175,6 @@ CREATE INDEX IF NOT EXISTS idx_admin_session_expires ON admin_sessions(expires_a
 CREATE TABLE IF NOT EXISTS customers (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(64) NOT NULL UNIQUE,
-    xray_uuid VARCHAR(36),
     display_name VARCHAR(128) NULL,
     email VARCHAR(255) DEFAULT '',
     created_by VARCHAR(64) NULL,
@@ -882,56 +881,6 @@ CREATE TABLE IF NOT EXISTS wg_peers (
 CREATE INDEX IF NOT EXISTS idx_wg_peers_customer ON wg_peers(customer_id, status);
 CREATE INDEX IF NOT EXISTS idx_wg_peers_node ON wg_peers(node_id);
 CREATE INDEX IF NOT EXISTS idx_wg_peers_status ON wg_peers(status);
-
----------------------------------------------------------------------
--- Xray / VLESS System
----------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS xray_configs (
-    id BIGSERIAL PRIMARY KEY,
-    node_id BIGINT NOT NULL UNIQUE REFERENCES nodes(id) ON DELETE CASCADE,
-    enabled BOOLEAN DEFAULT FALSE,
-    config_json JSONB NOT NULL,
-    reality_config_json JSONB,
-    last_synced_at TIMESTAMPTZ NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS xray_inbounds (
-    id BIGSERIAL PRIMARY KEY,
-    customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    node_id BIGINT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-    uuid VARCHAR(36) NOT NULL UNIQUE,
-    protocol VARCHAR(20) NOT NULL,
-    transport VARCHAR(20) NOT NULL,
-    security VARCHAR(20) NOT NULL DEFAULT 'none',
-    port INT NOT NULL,
-    server_name VARCHAR(255) DEFAULT NULL,
-    public_key VARCHAR(255) DEFAULT NULL,
-    short_id VARCHAR(32) DEFAULT NULL,
-    private_key VARCHAR(255) DEFAULT NULL,
-    path VARCHAR(255) DEFAULT NULL,
-    service_name VARCHAR(100) DEFAULT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'active',
-    rx_bytes BIGINT NOT NULL DEFAULT 0,
-    tx_bytes BIGINT NOT NULL DEFAULT 0,
-    core_name VARCHAR(50) NOT NULL DEFAULT 'xray-core',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_xray_inbounds_customer ON xray_inbounds(customer_id);
-CREATE INDEX IF NOT EXISTS idx_xray_inbounds_node ON xray_inbounds(node_id);
-
-CREATE TABLE IF NOT EXISTS xray_templates (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    config_json JSONB NOT NULL,
-    category VARCHAR(50) DEFAULT 'general',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
 
 ---------------------------------------------------------------------
 -- Core Plugins & Anti-DPI

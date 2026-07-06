@@ -385,12 +385,10 @@ func (s *Server) aiHealingLog(w http.ResponseWriter, r *http.Request) {
 // allowedUnits is the whitelist of systemd units that can be queried via serverLogs.
 var allowedUnits = map[string]bool{
 	"panel":      true,
-	"nginx":      true,
 	"openvpn":    true,
 	"xl2tpd":     true,
 	"strongswan": true,
-	"mariadb":    true,
-	"mysql":      true,
+	"postgresql": true,
 	"knode":      true,
 }
 
@@ -422,7 +420,7 @@ func (s *Server) serverLogs(w http.ResponseWriter, r *http.Request) {
 		unit = "panel"
 	}
 	if !allowedUnits[unit] {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("unit '%s' not allowed; allowed: koris, nginx, openvpn, xl2tpd, strongswan, mariadb, mysql, knode", unit)})
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("unit '%s' not allowed; allowed: koris, openvpn, xl2tpd, strongswan, postgresql, knode", unit)})
 		return
 	}
 

@@ -1,4 +1,4 @@
-﻿package db
+package db
 
 import (
 	"database/sql"
@@ -11,16 +11,15 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
+// Open opens a PostgreSQL/TimescaleDB connection. Koris is PostgreSQL-only.
 func Open(dsn string) (*sql.DB, error) {
-	// Detect PostgreSQL/TimescaleDB DSN (starts with postgres:// or postgresql://)
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		return openPostgres(dsn)
+	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+		return nil, fmt.Errorf("unsupported database DSN %q: koris requires PostgreSQL/TimescaleDB (postgres:// or postgresql://)", dsn)
 	}
-	return openMySQL(dsn)
+	return openPostgres(dsn)
 }
 
 func openPostgres(dsn string) (*sql.DB, error) {
@@ -28,41 +27,13 @@ func openPostgres(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres open: %w", err)
 	}
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(2 * time.Minute)
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("postgres ping: %w", err)
-	}
-	return db, nil
-}
-
-func openMySQL(dsn string) (*sql.DB, error) {
-	// Append connection timeout params if not already specified in the DSN.
-	// This prevents "Aborted connection ... Got an error reading communication packets"
-	// by ensuring client-side timeouts are shorter than MariaDB's wait_timeout.
-	if !strings.Contains(dsn, "timeout=") {
-		sep := "&"
-		if !strings.Contains(dsn, "?") {
-			sep = "?"
-		}
-		dsn += sep + "timeout=10s&readTimeout=30s&writeTimeout=30s"
-	}
-
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return nil, err
-	}
-
 	// Auto-tune pool based on system RAM, then apply env var overrides.
 	// Priority: env vars > AutoTunePool > defaults.
 	cfg := AutoTunePool(db)
 	ApplyEnvOverrides(db, &cfg)
-
 	if err := db.Ping(); err != nil {
-		return nil, err
+		db.Close()
+		return nil, fmt.Errorf("postgres ping: %w", err)
 	}
 	return db, nil
 }
@@ -106,26 +77,14 @@ func ApplyEnvOverrides(db *sql.DB, cfg *PoolConfig) {
 	}
 }
 
+// Migrate applies all pending .sql migrations from dir (default "migrations")
+// against the PostgreSQL database, tracking applied versions in schema_migrations.
 func Migrate(db *sql.DB, dir string) error {
 	if dir == "" {
 		dir = "migrations"
 	}
 
-	pg := isPostgres(db)
-
-	// If MySQL, redirect to mysql/ subdirectory
-	if !pg {
-		mysqlDir := filepath.Join(dir, "mysql")
-		if _, err := os.Stat(mysqlDir); err == nil {
-			dir = mysqlDir
-		}
-	}
-
-	// Create schema_migrations table with appropriate syntax
-	createSQL := `CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`
-	if pg {
-		createSQL = `CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())`
-	}
+	createSQL := `CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())`
 	if _, err := db.Exec(createSQL); err != nil {
 		return err
 	}
@@ -142,13 +101,8 @@ func Migrate(db *sql.DB, dir string) error {
 	}
 	sort.Strings(names)
 
-	// Use appropriate placeholder syntax
 	checkSQL := `SELECT COUNT(*) FROM schema_migrations WHERE version=$1`
 	insertSQL := `INSERT INTO schema_migrations(version) VALUES($1)`
-	if pg {
-		checkSQL = `SELECT COUNT(*) FROM schema_migrations WHERE version=$1`
-		insertSQL = `INSERT INTO schema_migrations(version) VALUES($1)`
-	}
 
 	for _, name := range names {
 		var exists int
@@ -170,11 +124,4 @@ func Migrate(db *sql.DB, dir string) error {
 		}
 	}
 	return nil
-}
-
-// isPostgres detects whether the database connection is PostgreSQL.
-func isPostgres(db *sql.DB) bool {
-	var version string
-	err := db.QueryRow("SELECT version()").Scan(&version)
-	return err == nil && strings.Contains(strings.ToLower(version), "postgresql")
 }

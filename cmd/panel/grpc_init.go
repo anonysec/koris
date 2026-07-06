@@ -8,7 +8,7 @@ import (
 	"github.com/anonysec/koris/internal/alerts"
 	"github.com/anonysec/koris/internal/config"
 	"github.com/anonysec/koris/internal/dbstore"
-	"github.com/anonysec/koris/internal/dbstore/mariadb"
+	"github.com/anonysec/koris/internal/dbstore/postgres"
 	"github.com/anonysec/koris/internal/grpcclient"
 	"github.com/anonysec/koris/internal/noderegistry"
 	"github.com/anonysec/koris/internal/tui"
@@ -45,10 +45,14 @@ type grpcSubsystem struct {
 func initGRPCSubsystem(ctx context.Context, database *sql.DB, cfg config.Config, log *tui.Logger) (*grpcSubsystem, error) {
 	log.Info("grpc-client", "initializing gRPC subsystem")
 
-	// 1. Wrap existing *sql.DB as a dbstore.Store for gRPC subsystem components.
-	// The existing database connection is MariaDB-based; we wrap it to satisfy
-	// the dbstore.Store interface needed by MetricsConsumer, TrafficCollector, etc.
-	store := mariadb.NewFromDB(database)
+	// 1. Create a PostgreSQL/TimescaleDB-backed dbstore.Store for the gRPC
+	// subsystem components (MetricsConsumer, TrafficCollector, etc.). This uses
+	// a pgxpool-backed store so advisory locks and hypertable inserts work
+	// correctly on TimescaleDB.
+	store, err := postgres.New(ctx, cfg.DBDSN)
+	if err != nil {
+		return nil, err
+	}
 
 	// 2. Initialize node registry with credential encryption.
 	encKey := cfg.SessionSecret + "-node-encryption"

@@ -92,7 +92,7 @@ type ListFilter struct {
 	Offset     int
 }
 
-// TicketService provides support ticket operations backed by MariaDB.
+// TicketService provides support ticket operations backed by PostgreSQL.
 type TicketService struct {
 	db     *sql.DB
 	notify func(msg string)

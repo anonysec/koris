@@ -10,7 +10,7 @@ import (
 
 func TestFailoverProviderByID_ActionRouting(t *testing.T) {
 	// Test the routing logic of failoverProviderByID without a database.
-	// Since we can't easily set up MySQL in unit tests, we test:
+	// Since we can not easily set up a database in unit tests, we test:
 	// 1. Method enforcement for action paths
 	// 2. Unknown action returns 404
 	// 3. Invalid ID returns 404

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,6 +33,7 @@ type Config struct {
 	DBPass         string
 	DBName         string
 	DBHost         string
+	DBPort         int
 }
 
 // BackupRecord represents a row in the backups table.
@@ -97,12 +99,18 @@ func LoadConfigFromDB(db *sql.DB) Config {
 	}
 
 	dsn := os.Getenv("PANEL_DB_DSN")
-	cfg.DBUser, cfg.DBPass, cfg.DBName, cfg.DBHost = mysqlCredsFromDSN(dsn)
+	if dsn == "" {
+		dsn = os.Getenv("PANEL_PG_DSN")
+	}
+	cfg.DBUser, cfg.DBPass, cfg.DBName, cfg.DBHost, cfg.DBPort = pgCredsFromDSN(dsn)
 	if cfg.DBName == "" {
-		cfg.DBName = "radius_next"
+		cfg.DBName = "radius"
 	}
 	if cfg.DBHost == "" {
 		cfg.DBHost = "localhost"
+	}
+	if cfg.DBPort == 0 {
+		cfg.DBPort = 5432
 	}
 
 	return cfg
@@ -123,51 +131,22 @@ func (s *Service) UpdateConfig(schedule string, retentionCount int) error {
 	return nil
 }
 
-// mysqlCredsFromDSN extracts user, password, database name, and host from a MySQL DSN string.
-// DSN format: user:pass@tcp(host:port)/dbname?params
-func mysqlCredsFromDSN(dsn string) (user, pass, dbName, host string) {
-	at := strings.Index(dsn, "@")
-	if at == -1 {
-		return "", "", "", ""
+// pgCredsFromDSN extracts user, password, database name, host, and port from a
+// PostgreSQL DSN string (postgres://user:pass@host:port/dbname?params).
+func pgCredsFromDSN(dsn string) (user, pass, dbName, host string, port int) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", "", "", "", 0
 	}
-
-	// Parse credentials (user:pass)
-	creds := dsn[:at]
-	colon := strings.Index(creds, ":")
-	if colon != -1 {
-		user = creds[:colon]
-		pass = creds[colon+1:]
-	} else {
-		user = creds
+	if u.User != nil {
+		user = u.User.Username()
+		pass, _ = u.User.Password()
 	}
-
-	// Parse host and database from remainder after @
-	remainder := dsn[at+1:]
-
-	// Extract host from tcp(host:port) or host:port
-	if strings.HasPrefix(remainder, "tcp(") {
-		end := strings.Index(remainder, ")")
-		if end != -1 {
-			hostPort := remainder[4:end]
-			if colonIdx := strings.Index(hostPort, ":"); colonIdx != -1 {
-				host = hostPort[:colonIdx]
-			} else {
-				host = hostPort
-			}
-			remainder = remainder[end+1:]
-		}
+	host = u.Hostname()
+	if p := u.Port(); p != "" {
+		port, _ = strconv.Atoi(p)
 	}
-
-	// Extract database name from /dbname?params
-	if strings.HasPrefix(remainder, "/") {
-		remainder = remainder[1:]
-	}
-	if i := strings.Index(remainder, "?"); i != -1 {
-		dbName = remainder[:i]
-	} else {
-		dbName = remainder
-	}
-
+	dbName = strings.TrimPrefix(u.Path, "/")
 	return
 }
 
@@ -198,8 +177,8 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 	}
 	backupID, _ := result.LastInsertId()
 
-	// 4. Execute mysqldump (streaming)
-	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
+	// 4. Execute pg_dump (streaming)
+	dumpReader, dumpWait, err := streamPgDump(ctx, s.cfg)
 	if err != nil {
 		s.failBackup(ctx, backupID, err.Error())
 		if backupType == "scheduled" && s.notifier != nil {
@@ -224,7 +203,7 @@ func (s *Service) CreateBackup(ctx context.Context, backupType string) (int64, e
 		return backupID, err
 	}
 
-	// 8. Wait for mysqldump to finish (check exit code)
+	// 8. Wait for pg_dump to finish (check exit code)
 	if err := dumpWait(); err != nil {
 		s.failBackup(ctx, backupID, err.Error())
 		os.Remove(archivePath)
@@ -478,8 +457,8 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 	// Update type
 	_, _ = s.db.ExecContext(ctx, `UPDATE backups SET type=$1 WHERE id=$2`, backupType, backupID)
 
-	// Execute mysqldump
-	dumpReader, dumpWait, err := streamMySQLDump(ctx, s.cfg)
+	// Execute pg_dump
+	dumpReader, dumpWait, err := streamPgDump(ctx, s.cfg)
 	if err != nil {
 		s.failBackup(ctx, backupID, err.Error())
 		if backupType == "scheduled" && s.notifier != nil {
@@ -504,7 +483,7 @@ func (s *Service) RunBackup(ctx context.Context, backupID int64, backupType stri
 		return
 	}
 
-	// Wait for mysqldump
+	// Wait for pg_dump
 	if err := dumpWait(); err != nil {
 		s.failBackup(ctx, backupID, err.Error())
 		os.Remove(archivePath)
