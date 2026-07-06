@@ -1,23 +1,28 @@
 name: koris
 
+# All secrets are in .env (chmod 600, never committed to git).
+# See .env.example for the template.
+
 services:
   db:
     image: timescale/timescaledb:latest-pg16
     container_name: koris-db
     environment:
-      POSTGRES_DB: koris
-      POSTGRES_USER: koris
-      POSTGRES_PASSWORD: REDACTED
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U koris"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    mem_limit: 2048m
+    cpus: "2.0"
 
   panel:
     image: panel:fixed
@@ -25,22 +30,29 @@ services:
     ports:
       - "443:443"
     environment:
-      PANEL_DEV_MODE: "false"
-      PANEL_SESSION_SECRET: "REDACTED"
-      PANEL_SETUP_KEY: "REDACTED"
-      PANEL_PG_DSN: "postgres://koris:REDACTED@db:5432/koris?sslmode=disable"
-      PANEL_DOMAIN: "imkoris.info"
-      # Configurable URLs (path or subdomain). Change and restart to reroute.
-      PANEL_ADMIN_PATH:  "/admin/"
-      PANEL_PORTAL_PATH: "/account/"
-      # PANEL_ADMIN_HOST:  "admin.imkoris.info"    # uncomment for subdomain routing
-      # PANEL_PORTAL_HOST: "account.imkoris.info"
+      PANEL_DEV_MODE: "${PANEL_DEV_MODE:-false}"
+      PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET}"
+      PANEL_SETUP_KEY: "${PANEL_SETUP_KEY}"
+      PANEL_PG_DSN: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
+      PANEL_DOMAIN: "${PANEL_DOMAIN}"
+      PANEL_ADMIN_PATH: "${PANEL_ADMIN_PATH:-/admin/}"
+      PANEL_PORTAL_PATH: "${PANEL_PORTAL_PATH:-/account/}"
+      # PANEL_ADMIN_HOST: "${PANEL_ADMIN_HOST:-}"
+      # PANEL_PORTAL_HOST: "${PANEL_PORTAL_HOST:-}"
     volumes:
       - /etc/koris:/etc/koris
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    mem_limit: 1024m
+    cpus: "1.0"
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "--spider", "https://localhost:443/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   knode:
     image: knode:fixed
@@ -61,17 +73,20 @@ services:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@koris.example.com
-      PGADMIN_DEFAULT_PASSWORD: REDACTED
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_ENFORCE_PWD_PASSWORD: "True"
+    # SECURITY: bind to localhost only — access via SSH tunnel or VPN
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
     depends_on:
       - db
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
 
 volumes:
   db-data:

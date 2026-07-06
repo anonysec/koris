@@ -35,3 +35,4 @@ web/_shared.bak*
 
 # Generated docs site (GitHub Pages)
 _site/
+deploy/.env
