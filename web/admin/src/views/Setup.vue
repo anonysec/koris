@@ -60,7 +60,7 @@ async function handleSetup() {
       <div class="setup-hero__content">
         <div class="setup-hero__logo">
           <span class="setup-hero__logo-icon">&#9670;</span>
-          <span class="setup-hero__logo-text">KorisPanel</span>
+          <span class="setup-hero__logo-text">Koris</span>
         </div>
         <h1 class="setup-hero__title">{{ t('setup.hero_title') }}</h1>
         <p class="setup-hero__desc">

@@ -45,7 +45,7 @@ async function handleLogin() {
       <div class="login-hero__content">
         <div class="login-hero__logo">
           <span class="login-hero__logo-icon">&#9670;</span>
-          <span class="login-hero__logo-text">KorisPanel</span>
+          <span class="login-hero__logo-text">Koris</span>
         </div>
         <h1 class="login-hero__title">{{ t('login.hero_title') }}</h1>
         <p class="login-hero__desc">

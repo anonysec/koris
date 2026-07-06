@@ -8,6 +8,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
 import { formatDate } from '@koris/composables/useFormatDate'
 import Chart from '@koris/ui/Chart.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
@@ -190,6 +191,7 @@ function formatDuration(seconds: number): string {
 
 <template>
   <div class="page dashboard">
+    <PageHeader :title="t('dashboard.title') || 'Overview'" :subtitle="t('dashboard.subtitle') || 'Your VPN platform at a glance'" />
     <OnboardingChecklist />
     <RevenueTrendCard />
     <!-- Stats Grid -->
@@ -420,7 +422,7 @@ function formatDuration(seconds: number): string {
 .stat-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .stat-card--clickable { cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
 .stat-card--clickable:hover { transform: translateY(-2px); border-color: rgba(37, 99, 235, 0.3); }
-.stat-card__icon { font-size: 1.5rem; }
+.stat-card__icon { font-size: 1.35rem; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--color-primary) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 22%, transparent); }
 .stat-card__body { display: flex; flex-direction: column; }
 .stat-card__value { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--color-text); }
 .stat-card__label { font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wider); }

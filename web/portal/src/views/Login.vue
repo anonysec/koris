@@ -47,7 +47,7 @@ async function handleLogin() {
       <div class="login-hero__brand">
         <span class="login-hero__logo">K</span>
         <div>
-          <div class="login-hero__title">KorisPanel</div>
+          <div class="login-hero__title">Koris</div>
           <div class="login-hero__subtitle">Client Portal</div>
         </div>
       </div>

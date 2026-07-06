@@ -20,7 +20,7 @@ async function handleLogout() {
     <div class="portal-navbar__brand">
       <span class="portal-navbar__logo">K</span>
       <div class="portal-navbar__brand-text">
-        <span class="portal-navbar__title">KorisPanel</span>
+        <span class="portal-navbar__title">Koris</span>
         <span class="portal-navbar__subtitle">Client Portal</span>
       </div>
     </div>

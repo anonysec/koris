@@ -5,6 +5,8 @@ export type { Locale }
 
 const messages: Record<Locale, Record<string, string>> = {
   en: {
+    'dashboard.title': 'Overview',
+    'dashboard.subtitle': 'Your VPN platform at a glance',
     // Navigation
     'nav.dashboard': 'Dashboard',
     'nav.transactions': 'Transactions',
@@ -1525,7 +1527,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.password_required': 'رمز عبور الزامی است',
     'login.invalid_credentials': 'نام کاربری یا رمز عبور نامعتبر است',
     // Setup
-    'setup.hero_title': 'به KorisPanel خوش آمدید',
+    'setup.hero_title': 'به Koris خوش آمدید',
     'setup.hero_desc': 'حساب مدیر خود را ایجاد کنید تا مدیریت زیرساخت VPN را شروع کنید.',
     'setup.initial_setup': 'راه‌اندازی اولیه',
     'setup.create_owner': 'حساب مالک را برای شروع ایجاد کنید.',
@@ -2333,7 +2335,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.password_required': '密码为必填项',
     'login.invalid_credentials': '用户名或密码无效',
     // Setup
-    'setup.hero_title': '欢迎使用 KorisPanel',
+    'setup.hero_title': '欢迎使用 Koris',
     'setup.hero_desc': '创建管理员账户以开始管理VPN基础设施。',
     'setup.initial_setup': '初始设置',
     'setup.create_owner': '创建管理员账户以开始使用。',
@@ -3076,7 +3078,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.password_required': 'Пароль обязателен',
     'login.invalid_credentials': 'Неверное имя пользователя или пароль',
     // Setup
-    'setup.hero_title': 'Добро пожаловать в KorisPanel',
+    'setup.hero_title': 'Добро пожаловать в Koris',
     'setup.hero_desc': 'Создайте учетную запись администратора для управления VPN-инфраструктурой.',
     'setup.initial_setup': 'Начальная настройка',
     'setup.create_owner': 'Создайте учетную запись владельца для начала работы.',

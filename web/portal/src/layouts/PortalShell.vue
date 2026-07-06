@@ -65,7 +65,7 @@ const langLabels: Record<Locale, string> = {
     <header class="portal-header">
       <div class="portal-header__brand">
         <span class="portal-header__logo">K</span>
-        <span class="portal-header__title">KorisPanel</span>
+        <span class="portal-header__title">Koris</span>
       </div>
 
       <nav class="portal-nav" aria-label="Portal navigation">

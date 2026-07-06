@@ -377,7 +377,7 @@ function handleToggleTheme() {
     <div class="brand">
       <div class="logo">K</div>
       <div v-if="!collapsed" class="brand-text">
-        <h1>KorisPanel</h1>
+        <h1>Koris</h1>
         <span>v{{ version }}</span>
       </div>
       <button
