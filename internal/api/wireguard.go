@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anonysec/koris/internal/wireguard"
+	"github.com/anonysec/koris/internal/protocols/wireguard"
 
 	qrcode "github.com/skip2/go-qrcode"
 )
