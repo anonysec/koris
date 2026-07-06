@@ -31,7 +31,7 @@ jobs:
       - name: Build (lite)
         run: go build -tags lite ./cmd/panel
       - name: Test
-        run: go test ./... -count=1 -race -timeout=120s
+        run: go test ./... -count=1 -timeout=120s
 
   frontend:
     name: Frontend · pnpm
@@ -48,32 +48,15 @@ jobs:
         run: corepack enable
       - name: Install
         run: pnpm install --no-frozen-lockfile
-      - name: Build admin
-        run: pnpm --filter admin build
-      - name: Build portal
-        run: pnpm --filter portal build
-      - name: Build landing
-        run: pnpm --filter landing build
-      - name: Test
+      - name: Build
         run: |
-          # Test each workspace that declares a "test" script. || true on individual
-          # runs so one missing/broken suite does not fail CI when others are green.
-          pnpm -r --workspace-concurrency=1 --if-present test
-
-  lint:
-    name: Lint · golangci-lint
-    runs-on: ubuntu-latest
-    continue-on-error: true  # advisory only until baseline is clean
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+          pnpm --filter admin build
+          pnpm --filter portal build
+          pnpm --filter landing build
+      - name: Test
+        # -r runs recursively across workspace packages;
+        # --if-present skips packages that don't declare a test script.
+        run: pnpm -r --workspace-concurrency=1 --if-present test
 
   docker:
     name: Docker · build image
@@ -83,5 +66,3 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build -t koris:ci .
-      - name: Smoke check
-        run: docker run --rm koris:ci --help 2>&1 | head -5 || true

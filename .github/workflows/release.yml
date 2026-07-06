@@ -4,9 +4,9 @@ name: Release
 #   git tag v0.93.0
 #   git push origin v0.93.0
 #
-# This workflow builds Go binaries (full + lite, amd64 + arm64) with embedded
-# frontends, publishes them as GitHub Release artifacts with checksums, and
-# pushes multi-arch Docker images to ghcr.io/anonysec/koris.
+# Builds Go binaries with embedded frontends, publishes ONE tarball per
+# (edition × arch) plus a single SHA256SUMS to the GitHub Release,
+# and pushes a multi-arch Docker image to ghcr.io/anonysec/koris.
 
 on:
   push:
@@ -58,15 +58,14 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # ─── Cross-compile Go binaries for each (os, arch, edition) combo ────────
+  # ─── Cross-compile Go binaries for each (arch, edition) combo ────────────
   binaries:
-    name: Build ${{ matrix.edition }} · ${{ matrix.goos }}/${{ matrix.goarch }}
+    name: Build ${{ matrix.edition }} · linux/${{ matrix.goarch }}
     needs: frontend
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        goos: [linux]
         goarch: [amd64, arm64]
         edition: [full, lite]
     steps:
@@ -76,57 +75,52 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      # Restore the shared frontend build into the tree so //go:embed picks it up
       - name: Download frontend assets
         uses: actions/download-artifact@v4
         with:
           name: frontend-www
           path: web
 
-      - name: Build
+      - name: Build tarball
         env:
-          GOOS: ${{ matrix.goos }}
+          GOOS: linux
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
+          EDITION: ${{ matrix.edition }}
         run: |
           set -euxo pipefail
-          out="koris-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          # Full = default (no build tag). Lite = -tags lite.
-          if [ "${{ matrix.edition }}" = "lite" ]; then
-            tagflag="-tags lite"
-          else
-            tagflag=""
-          fi
+          # Build tag: 'full' has no tag, 'lite' uses -tags lite
+          if [ "$EDITION" = "lite" ]; then TAGFLAG="-tags lite"; else TAGFLAG=""; fi
+
+          # Stage the release contents in a versioned directory so the tarball
+          # extracts cleanly (users can `tar xzf koris-*.tar.gz && cd koris-*`).
+          STAGE="koris-${VERSION#v}-${EDITION}-linux-${GOARCH}"
+          mkdir -p "$STAGE"
+
+          # Build the panel binary as `koris` (edition is a property of the
+          # tarball name, not the binary name — the user just runs ./koris).
           go build -trimpath \
             -ldflags="-s -w -X main.Version=${VERSION#v}" \
-            $tagflag \
-            -o "$out" \
+            $TAGFLAG \
+            -o "$STAGE/koris" \
             ./cmd/panel
-          # Also build the migrate-db helper (useful for release too)
-          go build -trimpath -ldflags="-s -w" \
-            -o "koris-migrate-${{ matrix.goos }}-${{ matrix.goarch }}" \
-            ./cmd/migrate-db
 
-      - name: Package
-        run: |
-          set -euxo pipefail
-          out="koris-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          mig="koris-migrate-${{ matrix.goos }}-${{ matrix.goarch }}"
-          # Tarball each binary bundled with migrations/
-          tar czf "${out}.tar.gz" \
-            "$out" "$mig" migrations/ install.sh deploy/
-          sha256sum "${out}.tar.gz" > "${out}.tar.gz.sha256"
-          sha256sum "$out"          > "${out}.sha256"
+          # Bundle the migration files and installer.
+          cp -r migrations "$STAGE/migrations"
+          cp install.sh    "$STAGE/install.sh"
+          [ -d deploy ]    && cp -r deploy "$STAGE/deploy" || true
+          [ -f VERSION ]   && cp VERSION   "$STAGE/VERSION" || true
+          [ -f README.md ] && cp README.md "$STAGE/README.md" || true
 
-      - name: Upload artifacts
+          # Create the tarball with a stable top-level dir name.
+          tar czf "${STAGE}.tar.gz" "$STAGE"
+          ls -la "${STAGE}.tar.gz"
+
+      - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
-          name: bin-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            koris-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}
-            koris-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-            koris-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-            koris-${{ matrix.edition }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+          name: tarball-${{ matrix.edition }}-${{ matrix.goarch }}
+          path: koris-*.tar.gz
           retention-days: 1
 
   # ─── Build multi-arch Docker images and push to GHCR ─────────────────────
@@ -136,26 +130,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Download frontend assets
         uses: actions/download-artifact@v4
         with:
           name: frontend-www
           path: web
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -166,10 +155,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
-
-      # The main Dockerfile does its own pnpm build step. For releases we
-      # want to skip that and just embed the already-built www/ trees. We
-      # write a lean release Dockerfile inline to keep the source tree clean.
       - name: Write release Dockerfile
         run: |
           cat > Dockerfile.release <<'EOF'
@@ -195,7 +180,6 @@ jobs:
                 curl -sf http://localhost:8080/api/health || exit 1
           ENTRYPOINT ["/app/koris"]
           EOF
-
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -210,7 +194,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─── Publish the GitHub Release with all binary artifacts attached ───────
+  # ─── Publish the GitHub Release with tarballs + one checksums file ───────
   publish:
     name: Publish GitHub Release
     needs: [binaries, docker]
@@ -218,56 +202,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all binary artifacts
+      - name: Download tarball artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: bin-*
+          pattern: tarball-*
           path: release-assets
           merge-multiple: true
 
-      - name: Generate combined checksums file
+      - name: Generate SHA256SUMS
         working-directory: release-assets
         run: |
           set -euxo pipefail
           ls -la
-          sha256sum koris-* > SHA256SUMS
+          sha256sum koris-*.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
       - name: Extract release notes from CHANGELOG
-        id: notes
         run: |
           set -e
-          VERSION=${VERSION#v}
-          # Look for a "## [x.y.z]" or "## x.y.z" heading in CHANGELOG.md and
-          # extract until the next such heading.
+          VER=${VERSION#v}
           if [ -f CHANGELOG.md ]; then
-            awk -v ver="$VERSION" '
+            awk -v ver="$VER" '
               $0 ~ "^## \\[?"ver"\\]?" {flag=1; next}
               flag && /^## / {exit}
               flag {print}
             ' CHANGELOG.md > release-notes.md
           fi
           if [ ! -s release-notes.md ]; then
-            echo "Release ${VERSION}" > release-notes.md
-            echo "" >> release-notes.md
-            echo "See CHANGELOG.md for details." >> release-notes.md
+            printf "Release %s\n\nSee CHANGELOG.md for details.\n" "$VERSION" > release-notes.md
           fi
           cat release-notes.md
 
-      - name: Create/update GitHub Release + upload assets (via API)
+      - name: Create/replace GitHub Release + upload assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ env.VERSION }}
         run: |
           set -euo pipefail
-          # gh CLI is preinstalled on the ubuntu-latest runner.
           prerelease_flag=""
           case "$TAG" in *-*) prerelease_flag="--prerelease" ;; esac
-
-          # If a release for this tag already exists, delete it (idempotent re-runs).
+          # Idempotent: delete any existing release for this tag first.
           gh release delete "$TAG" --yes --repo "${{ github.repository }}" 2>/dev/null || true
-
-          # Create the release + upload every asset in one shot.
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "$TAG" \
@@ -275,7 +250,4 @@ jobs:
             --latest \
             $prerelease_flag \
             release-assets/koris-*.tar.gz \
-            release-assets/koris-*.tar.gz.sha256 \
-            release-assets/koris-full-linux-* \
-            release-assets/koris-lite-linux-* \
             release-assets/SHA256SUMS

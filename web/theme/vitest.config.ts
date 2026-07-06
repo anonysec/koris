@@ -7,17 +7,17 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['node_modules/**', 'dist/**'],
   },
   resolve: {
     alias: {
-      '@':                    resolve(__dirname, './src'),
+      '@koris/theme':         resolve(__dirname, './index.ts'),
+      '@koris/ui':            resolve(__dirname, './components'),
       '@koris/core':          resolve(__dirname, '../core/index.ts'),
-      '@koris/theme':         resolve(__dirname, '../theme/index.ts'),
       '@koris/composables':   resolve(__dirname, '../core/composables'),
       '@koris/types':         resolve(__dirname, '../core/types'),
       '@koris/types/components': resolve(__dirname, '../core/types/components'),
-      '@koris/ui':            resolve(__dirname, '../theme/components'),
       '@koris/styles':        resolve(__dirname, '../core/styles'),
     },
   },

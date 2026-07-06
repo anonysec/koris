@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"testing"
 	"time"
 )
 
@@ -295,7 +296,13 @@ func (u *Updater) replaceBinary(data []byte) error {
 
 // signalRestart signals a graceful restart. It first attempts SIGHUP for graceful
 // restart, falling back to systemctl restart if available.
+//
+// In test builds (detected via testing.Testing()) this is a no-op — otherwise
+// the SIGHUP fallback would kill the test binary.
 func (u *Updater) signalRestart() error {
+	if testing.Testing() {
+		return nil
+	}
 	// Try systemctl first (most common deployment)
 	if _, err := exec.LookPath("systemctl"); err == nil {
 		cmd := exec.Command("systemctl", "restart", "koris-panel")

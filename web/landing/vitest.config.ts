@@ -6,11 +6,13 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@koris/ui': resolve(__dirname, '../shared/components'),
-      '@koris/composables': resolve(__dirname, '../shared/composables'),
-      '@koris/types': resolve(__dirname, '../shared/types'),
-      '@koris/styles': resolve(__dirname, '../shared/styles'),
+      '@':                  resolve(__dirname, 'src'),
+      '@koris/core':        resolve(__dirname, '../core/index.ts'),
+      '@koris/theme':       resolve(__dirname, '../theme/index.ts'),
+      '@koris/composables': resolve(__dirname, '../core/composables'),
+      '@koris/types':       resolve(__dirname, '../core/types'),
+      '@koris/ui':          resolve(__dirname, '../theme/components'),
+      '@koris/styles':      resolve(__dirname, '../core/styles'),
     },
   },
   test: {

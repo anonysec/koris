@@ -190,7 +190,7 @@ func TestReady_Text(t *testing.T) {
 	if !strings.Contains(line, "[ready]") {
 		t.Errorf("expected [ready] in text output, got: %s", line)
 	}
-	if !strings.Contains(line, "github.com/anonysec/koris") {
+	if !strings.Contains(line, "KorisPanel") {
 		t.Errorf("expected 'KorisPanel' in text output, got: %s", line)
 	}
 	if !strings.Contains(line, "0.96.0") {
