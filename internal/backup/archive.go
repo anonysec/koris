@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/anonysec/koris/internal/safepath"
 )
 
 // NodeConfigs holds collected config data for a single node.
@@ -21,7 +23,7 @@ type NodeConfigs struct {
 // - configs/{node_name}/{path} for each node
 // - manifest.json
 func WriteArchive(outputPath string, dumpReader io.Reader, nodeConfigs []NodeConfigs, manifest Manifest) error {
-	f, err := os.Create(outputPath)
+	f, err := safepath.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create archive file: %w", err)
 	}

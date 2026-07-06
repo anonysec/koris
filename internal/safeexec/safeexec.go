@@ -20,8 +20,10 @@ var allowedCommands = map[string]bool{
 	// Network
 	"iptables": true, "ip6tables": true, "ip": true, "tc": true, "wg": true,
 	"wg-quick": true, "ss": true,
-	"nft": true,
+	"ipsec": true,
+	"xl2tpd": true,
 	"haproxy": true,
+	"nft": true,
 	// VPN
 	"openvpn": true, "easyrsa": true, "swanctl": true,
 	// TLS/Certs
@@ -49,7 +51,7 @@ func Command(name string, args ...string) (*exec.Cmd, error) {
 	if err := Validate(name); err != nil {
 		return nil, err
 	}
-	return exec.Command(name, args...), nil
+	return exec.Command(name, args...), nil // #nosec G204 -- command name validated by Validate() above
 }
 
 // CommandContext creates an exec.Cmd with context after validating the command name.
@@ -57,7 +59,7 @@ func CommandContext(ctx context.Context, name string, args ...string) (*exec.Cmd
 	if err := Validate(name); err != nil {
 		return nil, err
 	}
-	return exec.CommandContext(ctx, name, args...), nil
+	return exec.CommandContext(ctx, name, args...), nil // #nosec G204 -- command name validated by Validate() above
 }
 
 // MustCommand is like Command but panics on validation failure.

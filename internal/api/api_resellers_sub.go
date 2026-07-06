@@ -66,6 +66,7 @@ rules:
 `, username, host, port, r.Host, token, username, host, username, username)
 
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(yaml))
 		return

@@ -44,3 +44,12 @@ func ReadFileInDir(baseDir, relPath string) ([]byte, error) {
 	}
 	return os.ReadFile(absPath) // #nosec G304 -- path confined to baseDir
 }
+
+// Create creates a file after validating the path does not contain traversal sequences.
+func Create(path string) (*os.File, error) {
+	clean := filepath.Clean(path)
+	if strings.Contains(clean, "..") {
+		return nil, fmt.Errorf("path traversal detected: %s", path)
+	}
+	return os.Create(clean) // #nosec G304 -- path validated above
+}
