@@ -304,7 +304,7 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 
 /* Header */
 .k-table__head--sticky { position: sticky; top: 0; z-index: var(--z-sticky); }
-.k-table__th { padding: var(--space-3) var(--space-4); text-align: left; font-weight: var(--font-semibold); font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wider); background: var(--color-surface); border-bottom: 1px solid var(--color-border); white-space: nowrap; user-select: none; }
+.k-table__th { position: sticky; top: 0; z-index: 2; padding: var(--space-3) var(--space-4); text-align: left; font-weight: var(--font-semibold); font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wide); background: color-mix(in srgb, var(--color-surface) 92%, var(--color-bg)); backdrop-filter: blur(8px); border-bottom: 1px solid var(--color-border); white-space: nowrap; user-select: none; }
 .k-table__th--center { text-align: center; }
 .k-table__th--right { text-align: right; }
 .k-table__th--check { width: 40px; padding: 0 var(--space-2); text-align: center; line-height: 0; }
@@ -317,11 +317,12 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 
 /* Body */
 .k-table__row { transition: background var(--duration-fast); }
-.k-table__row:hover { background: var(--color-surface-2); }
+.k-table__row:hover { background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-2)); }
 .k-table__row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .k-table__row--selected { background: rgba(37, 99, 235, 0.08); }
 .k-table__row--selected:hover { background: rgba(37, 99, 235, 0.12); }
-.k-table__td { padding: var(--space-3) var(--space-4); color: var(--color-text); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+.k-table__td { padding: var(--space-3) var(--space-4); color: var(--color-text); border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent); vertical-align: middle; }
+.k-table__row:last-child .k-table__td { border-bottom: none; }
 .k-table__td--center { text-align: center; }
 .k-table__td--right { text-align: right; }
 .k-table__td--check { width: 40px; padding: 0 var(--space-2); vertical-align: middle; text-align: center; line-height: 0; }

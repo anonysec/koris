@@ -53,10 +53,16 @@ const emit = defineEmits<{
 }
 
 .k-empty-state__icon {
-  font-size: 48px;
+  font-size: 40px;
   line-height: 1;
-  margin-bottom: var(--space-2);
-  opacity: 0.7;
+  margin-bottom: var(--space-3);
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 
 .k-empty-state__title {

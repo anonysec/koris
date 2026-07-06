@@ -5,6 +5,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useToast } from '@koris/composables/useToast'
 import { formatDate } from '@koris/composables/useFormatDate'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
 import FormField from '@koris/ui/FormField.vue'
@@ -183,6 +184,7 @@ onMounted(() => {
 
 <template>
   <div class="page payouts-view">
+    <PageHeader :title="t('payouts.title') || 'Reseller Payouts'" subtitle="Reseller balances and payout requests" />
     <!-- Reseller Balances -->
     <section class="panel">
       <div class="panel-header">
