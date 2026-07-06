@@ -12,7 +12,7 @@ services:
     image: ${KORIS_IMAGE:-koris:local}
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
       args:
         BUILD_TAGS: ${BUILD_TAGS:-}
         # Vite base path — bundled asset URLs match runtime routing.
