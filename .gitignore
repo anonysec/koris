@@ -28,3 +28,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Stray migration backup dirs
+web/_shared.bak*
+*.bak-*
