@@ -23,8 +23,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" ${BUILD_TAGS
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata curl
 WORKDIR /app
+# Frontend SPAs (admin, portal, landing) are embedded into the binary via web/embed.go,
+# so no www/ directories are copied into the runtime image.
 COPY --from=builder /koris /app/koris
-COPY --from=builder /build/web/admin/www /opt/koris/web/admin/www
 COPY --from=builder /build/migrations /app/migrations
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=15s     CMD curl -skf https://localhost:443/api/health || curl -sf http://localhost:8080/api/health || exit 1
 ENTRYPOINT ["/app/koris"]
