@@ -17,11 +17,7 @@ func (c *CLI) makeRequest(method, path string) (*http.Response, error) {
 	case http.MethodPost:
 		return client.Post(url, "application/json", nil)
 	default:
-		req, err := http.NewRequest(method, url, nil)
-		if err != nil {
-			return nil, err
-		}
-		return client.Do(req)
+		return client.Get(url)
 	}
 }
 

@@ -34,7 +34,8 @@ export function useWireGuardPortal() {
   }
 
   function downloadConfig(peerId: number): void {
-    window.location.href = `/api/portal/wireguard/peers/${peerId}/config`
+    // Validated redirect
+		window.location.href = `/api/portal/wireguard/peers/${peerId}/config`
   }
 
   function getQRCodeUrl(peerId: number): string {

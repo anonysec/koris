@@ -240,7 +240,7 @@ function renderMarkdown(body: string): string {
             </div>
           </header>
 
-          <div class="kb__article-detail-body" v-html="renderMarkdown(selectedArticle.body)" />
+          <div class="kb__article-detail-body" v-text="selectedArticle.body" />
         </article>
       </div>
     </template>
