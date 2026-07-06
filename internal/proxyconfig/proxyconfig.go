@@ -9,7 +9,6 @@ import (
 type ProxyType string
 
 const (
-	ProxyNginx   ProxyType = "nginx"
 	ProxyCaddy   ProxyType = "caddy"
 	ProxyTraefik ProxyType = "traefik"
 	ProxyHAProxy ProxyType = "haproxy"
@@ -27,8 +26,6 @@ type ProxyParams struct {
 // GenerateConfig dispatches to the correct generator based on proxyType.
 func GenerateConfig(proxyType ProxyType, params ProxyParams) (string, error) {
 	switch proxyType {
-	case ProxyNginx:
-		return GenerateNginx(params), nil
 	case ProxyCaddy:
 		return GenerateCaddy(params), nil
 	case ProxyTraefik:
@@ -38,72 +35,6 @@ func GenerateConfig(proxyType ProxyType, params ProxyParams) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported proxy type: %q", proxyType)
 	}
-}
-
-// GenerateNginx generates an nginx server block configuration.
-func GenerateNginx(params ProxyParams) string {
-	var b strings.Builder
-
-	b.WriteString("# KorisPanel Nginx Configuration\n")
-	b.WriteString(fmt.Sprintf("# Generated for: %s\n\n", params.Domain))
-
-	if params.SSLEnabled {
-		// HTTP → HTTPS redirect block
-		b.WriteString("server {\n")
-		b.WriteString("    listen 80;\n")
-		b.WriteString(fmt.Sprintf("    server_name %s;\n", params.Domain))
-		b.WriteString("    return 301 https://$server_name$request_uri;\n")
-		b.WriteString("}\n\n")
-
-		// HTTPS server block
-		b.WriteString("server {\n")
-		b.WriteString("    listen 443 ssl http2;\n")
-		b.WriteString(fmt.Sprintf("    server_name %s;\n\n", params.Domain))
-		b.WriteString(fmt.Sprintf("    ssl_certificate %s;\n", params.SSLCertPath))
-		b.WriteString(fmt.Sprintf("    ssl_certificate_key %s;\n\n", params.SSLKeyPath))
-		b.WriteString("    # SSL hardening\n")
-		b.WriteString("    ssl_protocols TLSv1.2 TLSv1.3;\n")
-		b.WriteString("    ssl_ciphers HIGH:!aNULL:!MD5;\n")
-		b.WriteString("    ssl_prefer_server_ciphers on;\n\n")
-	} else {
-		b.WriteString("server {\n")
-		b.WriteString("    listen 80;\n")
-		b.WriteString(fmt.Sprintf("    server_name %s;\n\n", params.Domain))
-	}
-
-	// Health check passthrough
-	b.WriteString("    # Health check endpoint\n")
-	b.WriteString("    location /api/health {\n")
-	b.WriteString(fmt.Sprintf("        proxy_pass http://%s;\n", params.BackendAddr))
-	b.WriteString("        proxy_set_header Host $host;\n")
-	b.WriteString("    }\n\n")
-
-	// WebSocket location for /api/ws/
-	b.WriteString("    # WebSocket support\n")
-	b.WriteString("    location /api/ws/ {\n")
-	b.WriteString(fmt.Sprintf("        proxy_pass http://%s;\n", params.BackendAddr))
-	b.WriteString("        proxy_http_version 1.1;\n")
-	b.WriteString("        proxy_set_header Upgrade $http_upgrade;\n")
-	b.WriteString("        proxy_set_header Connection \"upgrade\";\n")
-	b.WriteString("        proxy_set_header Host $host;\n")
-	b.WriteString("        proxy_set_header X-Real-IP $remote_addr;\n")
-	b.WriteString("        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n")
-	b.WriteString("        proxy_set_header X-Forwarded-Proto $scheme;\n")
-	b.WriteString("        proxy_read_timeout 86400s;\n")
-	b.WriteString("    }\n\n")
-
-	// Default proxy pass
-	b.WriteString("    # Reverse proxy to panel backend\n")
-	b.WriteString("    location / {\n")
-	b.WriteString(fmt.Sprintf("        proxy_pass http://%s;\n", params.BackendAddr))
-	b.WriteString("        proxy_set_header Host $host;\n")
-	b.WriteString("        proxy_set_header X-Real-IP $remote_addr;\n")
-	b.WriteString("        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n")
-	b.WriteString("        proxy_set_header X-Forwarded-Proto $scheme;\n")
-	b.WriteString("    }\n")
-	b.WriteString("}\n")
-
-	return b.String()
 }
 
 // GenerateCaddy generates a complete Caddyfile configuration.

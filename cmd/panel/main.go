@@ -58,21 +58,6 @@ func dbNameFromDSN(dsn string) string {
 	return ""
 }
 
-func mysqlCredsFromDSN(dsn string) (user, pass, db string) {
-	at := strings.Index(dsn, "@")
-	if at == -1 {
-		return "", "", ""
-	}
-	creds := dsn[:at]
-	colon := strings.Index(creds, ":")
-	if colon != -1 {
-		user = creds[:colon]
-		pass = creds[colon+1:]
-	}
-	db = dbNameFromDSN(dsn)
-	return
-}
-
 func startWorker(db *sql.DB) {
 	notifier := notify.New()
 	ticker := time.NewTicker(time.Minute)
@@ -374,115 +359,6 @@ func parseCertInfo(certPath string) (expiry string, issuer string) {
 		issuer = cert.Issuer.Organization[0]
 	}
 	return
-}
-
-func generateNginxConfig(domain, panelAddr string, withSSL bool) string {
-	if withSSL {
-		return fmt.Sprintf(`# KorisPanel nginx config (auto-generated)
-# Domain: %s | SSL: Let's Encrypt (managed by certbot)
-
-server {
-    listen 80;
-    server_name %s;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name %s;
-    client_max_body_size 20m;
-
-    ssl_certificate /etc/letsencrypt/live/%s/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/%s/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-
-    location = / { return 302 /dashboard/; }
-    location = /dashboard { return 302 /dashboard/; }
-    location /dashboard/ {
-        proxy_pass http://%s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location /api/ {
-        proxy_pass http://%s;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location = /portal { return 302 /portal/; }
-    location /portal/ {
-        proxy_pass http://%s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location /portal/sub {
-        proxy_pass http://%s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-`, domain, domain, domain, domain, domain, panelAddr, panelAddr, panelAddr, panelAddr)
-	}
-
-	// HTTP only (no SSL)
-	return fmt.Sprintf(`# KorisPanel nginx config (auto-generated)
-# Domain: %s | SSL: disabled
-
-server {
-    listen 80 default_server;
-    server_name %s;
-    client_max_body_size 20m;
-
-    location = / { return 302 /dashboard/; }
-    location = /dashboard { return 302 /dashboard/; }
-    location /dashboard/ {
-        proxy_pass http://%s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location /api/ {
-        proxy_pass http://%s;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location = /portal { return 302 /portal/; }
-    location /portal/ {
-        proxy_pass http://%s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    location /portal/sub {
-        proxy_pass http://%s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-`, domain, domain, panelAddr, panelAddr, panelAddr, panelAddr)
 }
 
 func isCLICommand(arg string) bool {
@@ -971,7 +847,7 @@ func main() {
 		})
 	}))
 
-	// ─── Nginx & Domain Management ─────────────────────────────────────────
+	// ─── Domain & TLS Management ─────────────────────────────────────────
 	mux.HandleFunc("/api/admin/domain", srv.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -1015,34 +891,12 @@ func main() {
 			}
 			_, _ = database.Exec(`INSERT INTO panel_settings(setting_key,setting_value) VALUES($1,$2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`, in.Domain, in.Domain)
 
-			panelAddr := cfg.Addr
-			if panelAddr == "" {
-				panelAddr = "127.0.0.1:8088"
-			}
-			nginxConf := generateNginxConfig(in.Domain, panelAddr, in.SSL)
-			nginxPath := "/etc/nginx/sites-available/koris-panel.conf"
-			enabledPath := "/etc/nginx/sites-enabled/panel-next.conf"
-			if err := os.WriteFile(nginxPath, []byte(nginxConf), 0644); err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "write_nginx: " + err.Error()})
-				return
-			}
-			os.Remove(enabledPath)
-			os.Symlink(nginxPath, enabledPath)
-
-			testCmd := exec.Command("nginx", "-t")
-			if out, err := testCmd.CombinedOutput(); err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "nginx_test_failed: " + string(out)})
-				return
-			}
-			_ = exec.Command("systemctl", "reload", "nginx").Run()
-
+			// Koris terminates TLS directly (no nginx). For a public domain we
+			// obtain a certificate with certbot in standalone mode and copy it
+			// into the panel's configured cert/key paths.
 			sslResult := ""
 			if in.SSL {
-				args := []string{"--nginx", "-d", in.Domain, "--non-interactive", "--agree-tos", "--redirect"}
+				args := []string{"certonly", "--standalone", "-d", in.Domain, "--non-interactive", "--agree-tos"}
 				if in.Email != "" {
 					args = append(args, "--email", in.Email)
 				} else {
@@ -1070,7 +924,6 @@ func main() {
 				"ok":         true,
 				"domain":     in.Domain,
 				"ssl_result": sslResult,
-				"nginx":      "configured",
 			})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1139,7 +992,7 @@ func main() {
 
 	// Start server: use TLS if explicitly enabled via PANEL_TLS_ENABLED=true,
 	// OR if cert and key files exist AND the panel is NOT behind a reverse proxy.
-	// Detection: if PANEL_ADDR is bound to loopback (127.0.0.1), assume nginx handles TLS.
+	// Detection: if PANEL_ADDR is bound to loopback (127.0.0.1), assume a reverse proxy handles TLS.
 	// To force direct TLS even on loopback, set PANEL_TLS_DIRECT=true.
 	if cfg.TLSEnabled {
 		// New built-in TLS mode: autocert or custom cert/key
@@ -1198,7 +1051,7 @@ func main() {
 			}
 		} else {
 			if fileExists(tlsCert) && fileExists(tlsKey) && behindProxy {
-				logger.Info("tls", "TLS available but behind reverse proxy — nginx handles TLS", map[string]any{"addr": cfg.Addr})
+				logger.Info("tls", "TLS available but behind reverse proxy", map[string]any{"addr": cfg.Addr})
 				logger.Info("tls", "set PANEL_TLS_DIRECT=true to serve TLS directly from Go")
 			} else if !fileExists(tlsCert) || !fileExists(tlsKey) {
 				logger.Info("tls", "TLS disabled: cert/key not found", map[string]any{"cert": tlsCert, "key": tlsKey})

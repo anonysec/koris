@@ -338,7 +338,6 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/customers/import", s.requireFullAdmin(s.adminCustomersImport))
 	mux.HandleFunc("/api/customer/configs/cisco-ipsec", s.requireCustomer(s.customerCiscoIPSecConfig))
 	mux.HandleFunc("/api/admin/proxy-configs", s.requireAdmin(s.handleProxyConfigs))
-	mux.HandleFunc("/api/admin/nginx/status", s.handleNginxStatusDeprecated)
 	mux.HandleFunc("/api/admin/reorder", s.requireFullAdmin(s.adminReorder))
 	mux.HandleFunc("/api/node-groups/", s.requireFullAdmin(s.handleNodeGroupByID))
 	mux.HandleFunc("/api/node-groups", s.requireFullAdmin(s.handleNodeGroups))

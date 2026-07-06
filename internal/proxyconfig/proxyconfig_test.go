@@ -19,57 +19,6 @@ var noSSLParams = ProxyParams{
 	SSLEnabled:  false,
 }
 
-func TestGenerateNginx_SSL(t *testing.T) {
-	result := GenerateNginx(sslParams)
-
-	checks := []struct {
-		name    string
-		pattern string
-	}{
-		{"header comment", "# KorisPanel Nginx Configuration"},
-		{"domain comment", "# Generated for: panel.example.com"},
-		{"http redirect", "return 301 https://$server_name$request_uri"},
-		{"listen 443", "listen 443 ssl http2"},
-		{"server_name", "server_name panel.example.com"},
-		{"ssl_certificate", "ssl_certificate /etc/letsencrypt/live/panel.example.com/fullchain.pem"},
-		{"ssl_certificate_key", "ssl_certificate_key /etc/letsencrypt/live/panel.example.com/privkey.pem"},
-		{"proxy_pass", "proxy_pass http://127.0.0.1:8080"},
-		{"x-real-ip", "proxy_set_header X-Real-IP $remote_addr"},
-		{"x-forwarded-for", "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for"},
-		{"x-forwarded-proto", "proxy_set_header X-Forwarded-Proto $scheme"},
-		{"websocket upgrade", "proxy_set_header Upgrade $http_upgrade"},
-		{"websocket connection", `proxy_set_header Connection "upgrade"`},
-		{"websocket location", "location /api/ws/"},
-		{"health check", "location /api/health"},
-		{"host header", "proxy_set_header Host $host"},
-	}
-
-	for _, c := range checks {
-		t.Run(c.name, func(t *testing.T) {
-			if !strings.Contains(result, c.pattern) {
-				t.Errorf("nginx config missing %q:\n%s", c.pattern, result)
-			}
-		})
-	}
-}
-
-func TestGenerateNginx_NoSSL(t *testing.T) {
-	result := GenerateNginx(noSSLParams)
-
-	if strings.Contains(result, "listen 443") {
-		t.Error("non-SSL config should not contain listen 443")
-	}
-	if strings.Contains(result, "ssl_certificate") {
-		t.Error("non-SSL config should not contain ssl_certificate")
-	}
-	if !strings.Contains(result, "listen 80") {
-		t.Error("non-SSL config should listen on port 80")
-	}
-	if !strings.Contains(result, "proxy_pass http://127.0.0.1:8080") {
-		t.Error("non-SSL config should still proxy to backend")
-	}
-}
-
 func TestGenerateCaddy_SSL(t *testing.T) {
 	result := GenerateCaddy(sslParams)
 
@@ -199,7 +148,7 @@ func TestGenerateHAProxy_NoSSL(t *testing.T) {
 }
 
 func TestGenerateConfig_ValidTypes(t *testing.T) {
-	types := []ProxyType{ProxyNginx, ProxyCaddy, ProxyTraefik, ProxyHAProxy}
+	types := []ProxyType{ProxyCaddy, ProxyTraefik, ProxyHAProxy}
 
 	for _, pt := range types {
 		t.Run(string(pt), func(t *testing.T) {
@@ -239,7 +188,6 @@ func TestAllGenerators_MinimalParams_NonEmpty(t *testing.T) {
 		name string
 		fn   func(ProxyParams) string
 	}{
-		{"Nginx", GenerateNginx},
 		{"Caddy", GenerateCaddy},
 		{"Traefik", GenerateTraefik},
 		{"HAProxy", GenerateHAProxy},
@@ -271,19 +219,6 @@ func TestAllGenerators_SSLDisabled_NoSSLDirectives(t *testing.T) {
 		absent  []string // patterns that must NOT appear
 		present []string // patterns that MUST appear
 	}{
-		{
-			name: "Nginx",
-			fn:   GenerateNginx,
-			absent: []string{
-				"ssl_certificate",
-				"ssl_certificate_key",
-				"listen 443",
-				"ssl_protocols",
-				"ssl_ciphers",
-				"return 301 https://",
-			},
-			present: []string{"listen 80", "nossl.example.com"},
-		},
 		{
 			name: "Caddy",
 			fn:   GenerateCaddy,
@@ -341,7 +276,7 @@ func TestAllGenerators_DomainAppearsInOutput(t *testing.T) {
 		"sub.domain.deep.example.org",
 	}
 
-	types := []ProxyType{ProxyNginx, ProxyCaddy, ProxyTraefik, ProxyHAProxy}
+	types := []ProxyType{ProxyCaddy, ProxyTraefik, ProxyHAProxy}
 
 	for _, domain := range domains {
 		for _, pt := range types {
@@ -364,66 +299,3 @@ func TestAllGenerators_DomainAppearsInOutput(t *testing.T) {
 	}
 }
 
-func TestDetectNginx_Integration_GenerateCompatibleNginx(t *testing.T) {
-	// Integration test: DetectNginx() returns an NginxInfo, and GenerateCompatibleNginx
-	// should produce valid output regardless of whether nginx is installed.
-	// On CI/dev machines, nginx is likely not installed, so we test both paths.
-	info := DetectNginx()
-
-	params := ProxyParams{
-		Domain:      "integration.example.com",
-		BackendAddr: "127.0.0.1:8080",
-		SSLEnabled:  false,
-	}
-
-	result := GenerateCompatibleNginx(params, info)
-
-	if result == "" {
-		t.Fatal("GenerateCompatibleNginx returned empty output with DetectNginx() result")
-	}
-	if !strings.Contains(result, "integration.example.com") {
-		t.Error("GenerateCompatibleNginx missing domain in output")
-	}
-	if !strings.Contains(result, "listen 80") {
-		t.Error("GenerateCompatibleNginx missing listen 80 for non-SSL")
-	}
-
-	// If nginx was detected, the version comment should appear
-	if info.Installed && info.Version != "" {
-		if !strings.Contains(result, "# Detected nginx version:") {
-			t.Error("expected version comment when nginx is detected")
-		}
-	}
-}
-
-func TestGenerateCompatibleNginx_NotInstalled(t *testing.T) {
-	// Simulates the case where nginx is not installed at all
-	info := NginxInfo{
-		Installed: false,
-		Version:   "",
-	}
-	params := ProxyParams{
-		Domain:      "notinstalled.example.com",
-		BackendAddr: "127.0.0.1:8080",
-		SSLCertPath: "/etc/ssl/cert.pem",
-		SSLKeyPath:  "/etc/ssl/key.pem",
-		SSLEnabled:  true,
-	}
-
-	result := GenerateCompatibleNginx(params, info)
-
-	if result == "" {
-		t.Fatal("GenerateCompatibleNginx returned empty output when nginx not installed")
-	}
-	if !strings.Contains(result, "notinstalled.example.com") {
-		t.Error("output missing domain")
-	}
-	// Should not contain version comment since not installed
-	if strings.Contains(result, "# Detected nginx version:") {
-		t.Error("should not have version comment when nginx not installed")
-	}
-	// Should not include http2 since version is unknown
-	if strings.Contains(result, "http2") {
-		t.Error("unknown version should not include http2 directives")
-	}
-}
