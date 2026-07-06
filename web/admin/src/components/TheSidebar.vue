@@ -593,7 +593,7 @@ function handleToggleTheme() {
   flex-direction: column;
   gap: 2px;
   height: 100vh;
-  overflow-y: auto;
+  overflow: hidden;
   transition: width var(--duration-slow, 0.2s) var(--ease-default, ease);
 }
 
@@ -822,6 +822,8 @@ function handleToggleTheme() {
   gap: 2px;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-category-wrapper {
