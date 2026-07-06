@@ -5,6 +5,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useToast } from '@koris/composables/useToast'
 import { formatDate } from '@koris/composables/useFormatDate'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
 import FormField from '@koris/ui/FormField.vue'
@@ -212,6 +213,7 @@ onMounted(fetchInvoices)
 
 <template>
   <div class="page invoices-view">
+    <PageHeader :title="t('invoices.title') || 'Invoices'" subtitle="Customer invoices and receipts" />
     <!-- Filter Controls -->
     <section class="panel filter-section">
       <div class="panel-header">

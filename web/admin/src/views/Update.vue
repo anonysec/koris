@@ -7,6 +7,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useNodesStore } from '@/stores/nodes'
 import { storeToRefs } from 'pinia'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 import EmptyState from '@koris/ui/EmptyState.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
@@ -169,6 +170,7 @@ onMounted(() => {
 
 <template>
   <div class="page update-view">
+    <PageHeader :title="t('update.title') || 'Updates'" subtitle="Panel and node version management" />
     <!-- Panel Update Section -->
     <section class="update-section">
       <h3 class="section-title">{{ t('update.panel_update') }}</h3>

@@ -5,6 +5,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import { useToast } from '@koris/composables/useToast'
 import { formatDate } from '@koris/composables/useFormatDate'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import FormField from '@koris/ui/FormField.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
@@ -178,6 +179,7 @@ onMounted(fetchGateways)
 
 <template>
   <div class="page gateways-view">
+    <PageHeader :title="t('gateways.title') || 'Payment Gateways'" subtitle="Configure payment providers" />
     <section class="panel">
       <div class="panel-header">
         <div>

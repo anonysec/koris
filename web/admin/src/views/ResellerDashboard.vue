@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@koris/ui/PageHeader.vue'
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@koris/composables/useI18n'
@@ -62,7 +63,7 @@ onMounted(loadStats)
 
 <template>
   <div class="reseller-dashboard">
-    <h1 class="page-title">{{ t('reseller_dashboard.title') }}</h1>
+    <PageHeader :title="t('reseller_dashboard.title')" subtitle="Your reseller overview" />
 
     <div v-if="loading" class="stats-grid">
       <div v-for="i in 4" :key="i" class="stat-card skeleton" />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@koris/ui/PageHeader.vue'
 import { ref, onMounted } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
@@ -37,7 +38,7 @@ onMounted(loadTransactions)
 
 <template>
   <div class="reseller-transactions">
-    <h1 class="page-title">{{ t('nav.transactions') }}</h1>
+    <PageHeader :title="t('nav.transactions')" subtitle="Your credit and transaction history" />
 
     <div v-if="loading" class="loading-state">
       <div v-for="i in 5" :key="i" class="skeleton-row" />

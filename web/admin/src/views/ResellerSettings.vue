@@ -4,6 +4,7 @@ import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 
 const { t } = useI18n()
 const { get, patch, loading } = useApi()
@@ -38,7 +39,7 @@ onMounted(loadSettings)
 
 <template>
   <div class="reseller-settings">
-    <h1 class="reseller-settings__title">{{ t('reseller_settings.title') }}</h1>
+    <PageHeader :title="t('reseller_settings.title')" subtitle="Your reseller account settings" />
 
     <div v-if="loaded" class="reseller-settings__card">
       <h2 class="reseller-settings__section-title">{{ t('reseller_settings.billing_mode') }}</h2>

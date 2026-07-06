@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@koris/ui/PageHeader.vue'
 import { ref, onMounted } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
@@ -59,7 +60,7 @@ onMounted(loadPlans)
 
 <template>
   <div class="reseller-plans">
-    <h1 class="page-title">{{ t('reseller_plans.title') }}</h1>
+    <PageHeader :title="t('reseller_plans.title')" subtitle="Plans available to your customers" />
 
     <div v-if="loading" class="loading-state">
       <div v-for="i in 3" :key="i" class="skeleton-row" />

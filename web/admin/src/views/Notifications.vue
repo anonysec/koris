@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@koris/ui/PageHeader.vue'
 import { computed } from 'vue'
 import { useRealtimeStore } from '@/stores/realtime'
 import { useI18n } from '@koris/composables/useI18n'
@@ -36,6 +37,7 @@ function notifIcon(type: string): string {
 
 <template>
   <div class="notifications-page">
+    <PageHeader :title="t('nav.notifications') || 'Notifications'" subtitle="System and account notifications" />
     <div class="notifications-header">
       <button
         v-if="realtimeStore.notificationCount > 0"
