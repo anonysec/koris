@@ -254,18 +254,28 @@ jobs:
           fi
           cat release-notes.md
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.VERSION }}
-          name: ${{ env.VERSION }}
-          body_path: release-notes.md
-          files: |
-            release-assets/koris-*.tar.gz
-            release-assets/koris-*.tar.gz.sha256
-            release-assets/koris-*-linux-*
-            release-assets/koris-*.sha256
+      - name: Create/update GitHub Release + upload assets (via API)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.VERSION }}
+        run: |
+          set -euo pipefail
+          # gh CLI is preinstalled on the ubuntu-latest runner.
+          prerelease_flag=""
+          case "$TAG" in *-*) prerelease_flag="--prerelease" ;; esac
+
+          # If a release for this tag already exists, delete it (idempotent re-runs).
+          gh release delete "$TAG" --yes --repo "${{ github.repository }}" 2>/dev/null || true
+
+          # Create the release + upload every asset in one shot.
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            --latest \
+            $prerelease_flag \
+            release-assets/koris-*.tar.gz \
+            release-assets/koris-*.tar.gz.sha256 \
+            release-assets/koris-full-linux-* \
+            release-assets/koris-lite-linux-* \
             release-assets/SHA256SUMS
-          fail_on_unmatched_files: false
-          draft: false
-          prerelease: ${{ contains(env.VERSION, '-') }}
