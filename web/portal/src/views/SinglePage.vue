@@ -20,6 +20,18 @@ import Input from '@koris/ui/Input.vue'
 import UsageBar from '@koris/ui/UsageBar.vue'
 import PortalWelcome from '@/components/PortalWelcome.vue'
 
+/** Sanitize URLs to prevent javascript:/data: XSS via dynamic href bindings. */
+function safeUrl(url: string): string {
+  if (!url) return '#'
+  try {
+    const u = new URL(url, window.location.origin)
+    if (u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'blob:') return url
+  } catch { /* ignore */ }
+  if (url.startsWith('/') && !url.startsWith('//')) return url
+  return '#'
+}
+
+
 // ---- Composables ----
 const auth = usePortalAuthStore()
 const usageStore = useUsageStore()
@@ -468,7 +480,7 @@ async function handleRate() {
                   <p class="sp__ssh-note">Password is your login password. Click any field to copy.</p>
                 </div>
                 <div v-else-if="profile.type === 'mtproto'" class="sp__ssh-info">
-                  <a v-if="profile.tg_url" :href="profile.tg_url" target="_blank" class="sp__mtproto-link">
+                  <a v-if="profile.tg_url" :href="safeUrl(profile.tg_url)" target="_blank" class="sp__mtproto-link">
                     {{ profile.tg_url }}
                   </a>
                   <p class="sp__ssh-note">Tap the link or paste in Telegram → Settings → Data and Storage → Proxy.</p>
@@ -493,7 +505,7 @@ async function handleRate() {
                 >
                   {{ copiedProfileUrl === profile.download ? '✓' : '📋' }} URL
                 </Button>
-                <a :href="profile.download" download class="sp__profile-dl">
+                <a :href="safeUrl(profile.download)" download class="sp__profile-dl">
                   <Button variant="primary" size="sm">{{ t('portal.vpn.download') }}</Button>
                 </a>
               </template>
@@ -575,7 +587,7 @@ async function handleRate() {
         <a
           v-for="link in displayAppLinks"
           :key="link.platform"
-          :href="link.url"
+          :href="safeUrl(link.url)"
           target="_blank"
           rel="noopener noreferrer"
           class="sp__app-card"

@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/anonysec/koris/internal/safehttp"
 )
 
 // DNSUpdater is the interface for programmatic DNS record updates.
@@ -66,9 +68,7 @@ func NewCloudflareUpdater(apiToken, zoneID, recordID string) *CloudflareUpdater 
 		apiToken: apiToken,
 		zoneID:   zoneID,
 		recordID: recordID,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: safehttp.NewClient(30 * time.Second),
 	}
 }
 

@@ -7,7 +7,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
+	"time"
+
+	"github.com/anonysec/koris/internal/safehttp"
+)
+
+// zarinpalClient is an SSRF-protected HTTP client for Zarinpal API calls.
+var zarinpalClient = safehttp.AllowlistClient(
+	[]string{"api.zarinpal.com", "sandbox.zarinpal.com"},
+	30*time.Second,
 )
 
 const (
@@ -63,7 +71,7 @@ func (z *Zarinpal) CreatePayment(amount float64, currency string, callbackURL st
 		return "", "", fmt.Errorf("zarinpal: marshal request: %w", err)
 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewReader(body))
+	resp, err := zarinpalClient.Post(apiURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", "", fmt.Errorf("zarinpal: request failed: %w", err)
 	}
@@ -109,7 +117,7 @@ func (z *Zarinpal) VerifyPayment(reference string) (amount float64, err error) {
 		return 0, fmt.Errorf("zarinpal: marshal verify request: %w", err)
 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewReader(body))
+	resp, err := zarinpalClient.Post(apiURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("zarinpal: verify request failed: %w", err)
 	}

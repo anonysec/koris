@@ -29,6 +29,18 @@ const { get, loading } = useApi()
 const { copy, copied } = useClipboard()
 const auth = usePortalAuthStore()
 
+/** Sanitize URLs to prevent javascript: / data: XSS via dynamic href bindings. */
+function safeUrl(url: string): string {
+  if (!url) return #
+  try {
+    const u = new URL(url, window.location.origin)
+    if (u.protocol === http: || u.protocol === https: || u.protocol === blob:) return url
+  } catch { /* ignore */ }
+  // Relative paths starting with / are safe
+  if (url.startsWith(/) && !url.startsWith(//)) return url
+  return #
+}
+
 const profiles = ref<VpnProfile[]>([])
 
 const subUrl = ref('')
@@ -114,7 +126,7 @@ function getProfileIcon(type: string): string {
               </StatusPill>
               <a
                 v-if="profile.available"
-                :href="profile.download"
+                :href="safeUrl(profile.download)"
                 download
                 class="profile-card__download"
               >

@@ -10,6 +10,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
+
+	"github.com/anonysec/koris/internal/safehttp"
 )
 
 const (
@@ -38,7 +41,7 @@ func NewZarinpalGateway(config map[string]string) *ZarinpalGateway {
 		merchantID:  config["merchant_id"],
 		callbackURL: config["callback_url"],
 		sandbox:     sandbox,
-		httpClient:  &http.Client{},
+		httpClient:  safehttp.AllowlistClient([]string{"api.zarinpal.com", "sandbox.zarinpal.com"}, 30*time.Second),
 	}
 }
 

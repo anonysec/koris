@@ -22,7 +22,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-w -s" ${BUILD_TAGS:+-tags $BUILD_TAGS} -o /koris ./cmd/panel
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata wget
+RUN apk add --no-cache ca-certificates tzdata wget libcap
+# Create non-root koris user
+RUN addgroup -S koris && adduser -S koris -G koris -h /app -s /sbin/nologin
 WORKDIR /app
 COPY --from=builder /koris /app/koris
 # Admin UI static assets (served by the panel)
@@ -30,10 +32,12 @@ COPY --from=builder /build/web/admin/www /opt/koris/web/admin/www
 # SQL migrations: the binary resolves this relative to its CWD (/app),
 # so it must live at /app/migrations.
 COPY --from=builder /build/migrations /app/migrations
-RUN mkdir -p /var/lib/koris
-# NOTE: the process binds 443/80 and writes to /etc/koris and /var/lib/koris,
-# so it runs as root in the default deployment. For non-root: setcap
-# cap_net_bind_service=+ep /app/koris, chown the bind mounts, then USER <uid>.
+# Grant capability to bind privileged ports (443, 80) without root
+RUN setcap cap_net_bind_service=+ep /app/koris
+# Create writable directories and set ownership
+RUN mkdir -p /var/lib/koris /etc/koris && \
+    chown -R koris:koris /app /var/lib/koris /etc/koris /opt/koris
+USER koris
 EXPOSE 2026 443
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=15s \
     CMD wget --no-check-certificate -q --spider https://localhost:2026/api/health || \

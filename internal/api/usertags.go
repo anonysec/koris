@@ -480,12 +480,15 @@ func (s *Server) listCustomersFiltered(w http.ResponseWriter, r *http.Request) {
 
 	if needTagJoin {
 		// AND logic: customer must have ALL specified tags
-		// Use subquery: customer_id IN (SELECT customer_id FROM customer_tags WHERE tag_id IN (...) GROUP BY customer_id HAVING COUNT(DISTINCT tag_id) = ?)
+		// Use parameterized placeholders ($N) to prevent SQL injection
+		argOffset := len(args) + 1
 		placeholders := make([]string, len(tagIDs))
 		for i, tid := range tagIDs {
-			placeholders[i] = strconv.FormatInt(tid, 10)
+			placeholders[i] = fmt.Sprintf("$%d", argOffset+i)
+			args = append(args, tid)
 		}
-		where += fmt.Sprintf(` AND c.id IN (SELECT customer_id FROM customer_tags WHERE tag_id IN (%s) GROUP BY customer_id HAVING COUNT(DISTINCT tag_id) = $1)`, strings.Join(placeholders, ","))
+		countPlaceholder := fmt.Sprintf("$%d", argOffset+len(tagIDs))
+		where += fmt.Sprintf(` AND c.id IN (SELECT customer_id FROM customer_tags WHERE tag_id IN (%s) GROUP BY customer_id HAVING COUNT(DISTINCT tag_id) = %s)`, strings.Join(placeholders, ","), countPlaceholder)
 		args = append(args, len(tagIDs))
 	}
 

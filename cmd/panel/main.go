@@ -458,7 +458,14 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 		}
 		logger.Info("tls", "HTTPS listener started", map[string]any{"addr": cfg.TLSAddr})
 
-		if err := http.Serve(httpsListener, handler); err != nil {
+		customSrv := &http.Server{
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+		if err := customSrv.Serve(httpsListener); err != nil {
 			logger.Error("tls", "HTTPS server failed (custom cert)", map[string]any{"error": err.Error()})
 		}
 		return
@@ -551,7 +558,14 @@ func startHTTPLoopback(handler http.Handler, addr string) {
 
 	// Apply redirectToHTTPS middleware as defense-in-depth
 	httpHandler := redirectToHTTPS(handler)
-	if err := http.Serve(httpListener, httpHandler); err != nil {
+	loopbackSrv := &http.Server{
+		Handler:           httpHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	if err := loopbackSrv.Serve(httpListener); err != nil {
 		logger.Error("http", "HTTP loopback server error", map[string]any{"error": err.Error()})
 	}
 }
@@ -975,7 +989,14 @@ func main() {
 	} else if socketLn != nil {
 		logger.Info("main", "unix socket listener started", map[string]any{"path": socketPath})
 		go func() {
-			if err := http.Serve(socketLn, handler); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			socketSrv := &http.Server{
+				Handler:           handler,
+				ReadHeaderTimeout: 10 * time.Second,
+				ReadTimeout:       30 * time.Second,
+				WriteTimeout:      60 * time.Second,
+				IdleTimeout:       120 * time.Second,
+			}
+			if err := socketSrv.Serve(socketLn); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 				logger.Error("main", "unix socket serve error", map[string]any{"error": err.Error()})
 			}
 		}()
@@ -1034,7 +1055,7 @@ func main() {
 			if certErr != nil {
 				logger.Error("tls", "TLS server failed to load cert", map[string]any{"error": certErr.Error()})
 				logger.Warn("tls", "falling back to plain HTTP — fix your certificate and restart", map[string]any{"addr": cfg.Addr})
-				if httpErr := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); httpErr != nil {
+				if httpErr := func() error { s := &http.Server{Addr: cfg.Addr, Handler: limiter.Middleware(handler), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}; return s.ListenAndServe() }(); httpErr != nil {
 					logger.Error("main", "HTTP server failed", map[string]any{"error": httpErr.Error()})
 					os.Exit(1)
 				}
@@ -1045,7 +1066,7 @@ func main() {
 			if listenErr != nil {
 				logger.Error("tls", "TLS server failed to bind", map[string]any{"addr": cfg.TLSAddr, "error": listenErr.Error()})
 				logger.Warn("tls", "falling back to plain HTTP — fix your certificate and restart", map[string]any{"addr": cfg.Addr})
-				if httpErr := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); httpErr != nil {
+				if httpErr := func() error { s := &http.Server{Addr: cfg.Addr, Handler: limiter.Middleware(handler), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}; return s.ListenAndServe() }(); httpErr != nil {
 					logger.Error("main", "HTTP server failed", map[string]any{"error": httpErr.Error()})
 					os.Exit(1)
 				}
@@ -1053,7 +1074,7 @@ func main() {
 			}
 
 			logger.Info("tls", "HTTPS server running", map[string]any{"addr": cfg.TLSAddr})
-			if err := http.Serve(httpsListener, limiter.Middleware(handler)); err != nil {
+			if err := func() error { s := &http.Server{Handler: limiter.Middleware(handler), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}; return s.Serve(httpsListener) }(); err != nil {
 				logger.Error("tls", "HTTPS server failed", map[string]any{"error": err.Error()})
 				os.Exit(1)
 			}
@@ -1064,7 +1085,7 @@ func main() {
 			} else if !fileExists(tlsCert) || !fileExists(tlsKey) {
 				logger.Info("tls", "TLS disabled: cert/key not found", map[string]any{"cert": tlsCert, "key": tlsKey})
 			}
-			if httpErr := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); httpErr != nil {
+			if httpErr := func() error { s := &http.Server{Addr: cfg.Addr, Handler: limiter.Middleware(handler), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}; return s.ListenAndServe() }(); httpErr != nil {
 				logger.Error("main", "HTTP server failed", map[string]any{"error": httpErr.Error()})
 				os.Exit(1)
 			}
