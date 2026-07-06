@@ -532,7 +532,7 @@ function handleToggleTheme() {
 .sidebar {
   width: 240px;
   flex-shrink: 0;
-  background: rgba(23, 29, 36, 0.95);
+  background: color-mix(in srgb, var(--color-surface) 96%, var(--color-bg));
   border-right: 1px solid var(--color-border, var(--border, #28333f));
   padding: var(--space-5, 20px) var(--space-3, 14px);
   display: flex;
@@ -577,6 +577,7 @@ function handleToggleTheme() {
   font-size: var(--text-lg, 16px);
   font-weight: var(--font-bold, 700);
   margin: 0;
+  color: var(--color-text);
 }
 
 .brand-text span {
@@ -656,9 +657,10 @@ function handleToggleTheme() {
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(91, 157, 255, 0.15), rgba(124, 92, 255, 0.12));
-  color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(91, 157, 255, 0.25);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+  font-weight: var(--font-semibold, 600);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .nav-item.active svg {

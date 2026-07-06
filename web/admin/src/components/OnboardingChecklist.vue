@@ -185,6 +185,7 @@ const progressPct = computed(() =>
   font-weight: var(--font-semibold);
   letter-spacing: var(--tracking-tight);
   margin: 0 0 2px;
+  color: var(--color-text);
 }
 .onboarding__sub {
   font-size: var(--text-sm);
