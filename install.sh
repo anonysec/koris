@@ -124,7 +124,7 @@ prompt_config() {
   # Edition selection
   echo -e "${BOLD}What do you want to install?${NC}"
   echo ""
-  echo -e "  ${CYAN}1)${NC} koris      — Full panel (billing, tickets, xray, reseller, all features)"
+  echo -e "  ${CYAN}1)${NC} koris      — Full panel (billing, tickets, reseller, all features)"
   echo -e "  ${CYAN}2)${NC} korislite  — Lite panel (OpenVPN, L2TP, users, nodes, settings)"
   echo -e "  ${CYAN}3)${NC} knode      — Node agent only (install on VPN servers)"
   echo ""
