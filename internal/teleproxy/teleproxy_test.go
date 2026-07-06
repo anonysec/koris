@@ -27,28 +27,28 @@ func TestGenerateLinks(t *testing.T) {
 	}{
 		{
 			name:      "standard IPv4",
-			proxy:     &Proxy{Port: 443, Secret: "abcdef1234567890abcdef1234567890"},
+			proxy:     &Proxy{Port: 443, Secret: "test_abcdef1234567890_fake"},
 			nodeIP:    "192.168.1.100",
 			wantShare: "https://t.me/proxy?server=192.168.1.100&port=443&secret=abcdef1234567890abcdef1234567890",
 			wantTg:    "tg://proxy?server=192.168.1.100&port=443&secret=abcdef1234567890abcdef1234567890",
 		},
 		{
 			name:      "different port",
-			proxy:     &Proxy{Port: 8443, Secret: "1111222233334444aaaabbbbccccdddd"},
+			proxy:     &Proxy{Port: 8443, Secret: "test_1111222233334444_fake"},
 			nodeIP:    "10.0.0.1",
 			wantShare: "https://t.me/proxy?server=10.0.0.1&port=8443&secret=1111222233334444aaaabbbbccccdddd",
 			wantTg:    "tg://proxy?server=10.0.0.1&port=8443&secret=1111222233334444aaaabbbbccccdddd",
 		},
 		{
 			name:      "public IP with standard secret",
-			proxy:     &Proxy{Port: 2096, Secret: "ee00ff11aa22bb33cc44dd55ee66ff77"},
+			proxy:     &Proxy{Port: 2096, Secret: "test_ee00ff11aa22bb33_fake"},
 			nodeIP:    "91.107.168.34",
 			wantShare: "https://t.me/proxy?server=91.107.168.34&port=2096&secret=ee00ff11aa22bb33cc44dd55ee66ff77",
 			wantTg:    "tg://proxy?server=91.107.168.34&port=2096&secret=ee00ff11aa22bb33cc44dd55ee66ff77",
 		},
 		{
 			name:      "domain name as IP",
-			proxy:     &Proxy{Port: 443, Secret: "aabbccddeeff00112233445566778899"},
+			proxy:     &Proxy{Port: 443, Secret: "test_aabbccddeeff0011_fake"},
 			nodeIP:    "vpn.example.com",
 			wantShare: "https://t.me/proxy?server=vpn.example.com&port=443&secret=aabbccddeeff00112233445566778899",
 			wantTg:    "tg://proxy?server=vpn.example.com&port=443&secret=aabbccddeeff00112233445566778899",

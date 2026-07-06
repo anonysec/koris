@@ -7,11 +7,11 @@ import (
 
 func TestGenerateClientConfig(t *testing.T) {
 	cfg := ClientConfig{
-		PrivateKey:      "cGVlcl9wcml2YXRlX2tleV9iYXNlNjRfZW5jb2RlZA==",
+		PrivateKey:      "TEST_cGVlcl9wcml2YXRlX2tl_FAKE",
 		Address:         "10.0.0.2/32",
 		DNS:             "1.1.1.1, 8.8.8.8",
-		ServerPublicKey: "c2VydmVyX3B1YmxpY19rZXlfYmFzZTY0X2VuY29kZWQ=",
-		PresharedKey:    "cHJlc2hhcmVkX2tleV9iYXNlNjRfZW5jb2RlZF9oZXJl",
+		ServerPublicKey: "TEST_c2VydmVyX3B1YmxpY19r_FAKE",
+		PresharedKey:    "TEST_cHJlc2hhcmVkX2tleV9i_FAKE",
 		Endpoint:        "vpn.example.com:51820",
 	}
 
@@ -59,11 +59,11 @@ func TestGenerateClientConfig(t *testing.T) {
 
 func TestGenerateClientConfigGamingOptimize(t *testing.T) {
 	cfg := ClientConfig{
-		PrivateKey:      "cGVlcl9wcml2YXRlX2tleV9iYXNlNjRfZW5jb2RlZA==",
+		PrivateKey:      "TEST_cGVlcl9wcml2YXRlX2tl_FAKE",
 		Address:         "10.0.0.2/32",
 		DNS:             "1.1.1.1, 8.8.8.8",
-		ServerPublicKey: "c2VydmVyX3B1YmxpY19rZXlfYmFzZTY0X2VuY29kZWQ=",
-		PresharedKey:    "cHJlc2hhcmVkX2tleV9iYXNlNjRfZW5jb2RlZF9oZXJl",
+		ServerPublicKey: "TEST_c2VydmVyX3B1YmxpY19r_FAKE",
+		PresharedKey:    "TEST_cHJlc2hhcmVkX2tleV9i_FAKE",
 		Endpoint:        "vpn.example.com:51820",
 		GamingOptimize:  true,
 	}
@@ -88,11 +88,11 @@ func TestGenerateClientConfigGamingOptimize(t *testing.T) {
 
 func TestGenerateClientConfigExplicitMTU(t *testing.T) {
 	cfg := ClientConfig{
-		PrivateKey:      "cGVlcl9wcml2YXRlX2tleV9iYXNlNjRfZW5jb2RlZA==",
+		PrivateKey:      "TEST_cGVlcl9wcml2YXRlX2tl_FAKE",
 		Address:         "10.0.0.2/32",
 		DNS:             "1.1.1.1",
-		ServerPublicKey: "c2VydmVyX3B1YmxpY19rZXlfYmFzZTY0X2VuY29kZWQ=",
-		PresharedKey:    "cHJlc2hhcmVkX2tleV9iYXNlNjRfZW5jb2RlZF9oZXJl",
+		ServerPublicKey: "TEST_c2VydmVyX3B1YmxpY19r_FAKE",
+		PresharedKey:    "TEST_cHJlc2hhcmVkX2tleV9i_FAKE",
 		Endpoint:        "192.168.1.1:51820",
 		MTU:             1420,
 	}
@@ -112,11 +112,11 @@ func TestGenerateClientConfigExplicitMTU(t *testing.T) {
 
 func TestGenerateClientConfigGamingOverridesMTU(t *testing.T) {
 	cfg := ClientConfig{
-		PrivateKey:      "cGVlcl9wcml2YXRlX2tleV9iYXNlNjRfZW5jb2RlZA==",
+		PrivateKey:      "TEST_cGVlcl9wcml2YXRlX2tl_FAKE",
 		Address:         "10.0.0.2/32",
 		DNS:             "1.1.1.1",
-		ServerPublicKey: "c2VydmVyX3B1YmxpY19rZXlfYmFzZTY0X2VuY29kZWQ=",
-		PresharedKey:    "cHJlc2hhcmVkX2tleV9iYXNlNjRfZW5jb2RlZF9oZXJl",
+		ServerPublicKey: "TEST_c2VydmVyX3B1YmxpY19r_FAKE",
+		PresharedKey:    "TEST_cHJlc2hhcmVkX2tleV9i_FAKE",
 		Endpoint:        "192.168.1.1:51820",
 		GamingOptimize:  true,
 		MTU:             1420, // Should be overridden to 1280
@@ -164,11 +164,11 @@ func TestGenerateClientConfigFormat(t *testing.T) {
 
 func TestGenerateClientConfigDualStack(t *testing.T) {
 	cfg := ClientConfig{
-		PrivateKey:      "cGVlcl9wcml2YXRlX2tleV9iYXNlNjRfZW5jb2RlZA==",
+		PrivateKey:      "TEST_cGVlcl9wcml2YXRlX2tl_FAKE",
 		Address:         "10.66.66.2/24, fd00:1::2/64",
 		DNS:             "1.1.1.1, 8.8.8.8",
-		ServerPublicKey: "c2VydmVyX3B1YmxpY19rZXlfYmFzZTY0X2VuY29kZWQ=",
-		PresharedKey:    "cHJlc2hhcmVkX2tleV9iYXNlNjRfZW5jb2RlZF9oZXJl",
+		ServerPublicKey: "TEST_c2VydmVyX3B1YmxpY19r_FAKE",
+		PresharedKey:    "TEST_cHJlc2hhcmVkX2tleV9i_FAKE",
 		Endpoint:        "vpn.example.com:51820",
 	}
 

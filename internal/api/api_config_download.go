@@ -53,6 +53,7 @@ func (s *Server) handleConfigDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 
 	case "openvpn-tcp", "openvpn-tcp.ovpn":
@@ -65,6 +66,7 @@ func (s *Server) handleConfigDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 
 	case "l2tp", "l2tp.mobileconfig":
@@ -77,6 +79,7 @@ func (s *Server) handleConfigDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 
 	case "ikev2", "ikev2.mobileconfig":
@@ -89,6 +92,7 @@ func (s *Server) handleConfigDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 
 	case "wireguard", "wg", "wireguard.conf":
@@ -101,6 +105,7 @@ func (s *Server) handleConfigDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-wireguard-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(config))
 
 	default:

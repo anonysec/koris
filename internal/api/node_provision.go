@@ -124,6 +124,7 @@ func (s *Server) nodeInstallScript(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	w.Header().Set("Content-Disposition", `inline; filename="install.sh"`)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(script))
 }
