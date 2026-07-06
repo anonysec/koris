@@ -5,4 +5,3 @@ packages:
   - core
   - theme
   - themes/*  # fan-made themes
-  - shared  # deprecated: kept for compat during migration

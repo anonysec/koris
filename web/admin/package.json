@@ -9,7 +9,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@koris/shared": "workspace:*",
+    "@koris/core": "workspace:*",
+    "@koris/theme": "workspace:*",
     "@vueuse/core": "^11.3.0",
     "pinia": "^2.3.0",
     "sortablejs": "^1.15.7",
