@@ -12,7 +12,6 @@ import PageHeader from '@koris/ui/PageHeader.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
-import RevenueTrendCard from '@/components/RevenueTrendCard.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -25,10 +24,12 @@ customers.loadCustomers()
 nodes.loadNodes()
 
 const statCards = computed(() => [
-  { label: t('stat.revenue'), value: `$${realtime.stats.approved_payments}`, icon: '💰', route: 'payments' },
-  { label: t('stat.active_users'), value: realtime.stats.active_customers, icon: '👥', route: 'users' },
-  { label: t('stat.nodes_online'), value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
-  { label: t('stat.open_tickets'), value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
+  { label: t('stat.nodes_online') || 'Nodes online', value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
+  { label: t('stat.active_users') || 'Active users', value: realtime.stats.active_customers, icon: '👥', route: 'users' },
+  { label: 'Live download', value: formatBps(realtime.stats.total_rx_bps), icon: '⬇️', route: 'metrics' },
+  { label: 'Live upload', value: formatBps(realtime.stats.total_tx_bps), icon: '⬆️', route: 'metrics' },
+  { label: t('stat.open_tickets') || 'Open tickets', value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
+  { label: 'Pending payments', value: realtime.stats.pending_payments, icon: '💳', route: 'payments' },
 ])
 
 function handleStatClick(routeName: string) {
@@ -75,6 +76,15 @@ const pad = { top: 16, right: 16, bottom: 30, left: 48 }
 
 const chartW = computed(() => svgW - pad.left - pad.right)
 const chartH = computed(() => svgH - pad.top - pad.bottom)
+
+function formatBps(bps: number): string {
+  if (!bps || bps < 1000) return `${Math.round(bps || 0)} bps`
+  const units = ['Kbps', 'Mbps', 'Gbps', 'Tbps']
+  let v = bps / 1000
+  let i = 0
+  while (v >= 1000 && i < units.length - 1) { v /= 1000; i++ }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`
+}
 
 function formatBytesShort(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -192,10 +202,9 @@ function formatDuration(seconds: number): string {
 <template>
   <div class="page dashboard">
     <PageHeader :title="t('dashboard.title') || 'Overview'" :subtitle="t('dashboard.subtitle') || 'Your VPN platform at a glance'" />
-    <OnboardingChecklist />
-    <RevenueTrendCard />
-    <!-- Stats Grid -->
-    <section class="stats-grid" aria-label="Overview statistics">
+
+    <!-- Operational stats first -->
+    <section class="stats-grid stats-grid--top" aria-label="Overview statistics">
       <div v-for="stat in statCards" :key="stat.label" class="stat-card stat-card--clickable" @click="handleStatClick(stat.route)">
         <span class="stat-card__icon">{{ stat.icon }}</span>
         <div class="stat-card__body">
@@ -204,6 +213,8 @@ function formatDuration(seconds: number): string {
         </div>
       </div>
     </section>
+
+    <OnboardingChecklist />
 
     <!-- Charts Row -->
     <section class="charts-row">
@@ -419,6 +430,9 @@ function formatDuration(seconds: number): string {
 .dashboard { display: flex; flex-direction: column; gap: var(--space-6); }
 
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
+.stats-grid--top { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 1200px) { .stats-grid--top { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px)  { .stats-grid--top { grid-template-columns: repeat(2, 1fr); } }
 .stat-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .stat-card--clickable { cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
 .stat-card--clickable:hover { transform: translateY(-2px); border-color: rgba(37, 99, 235, 0.3); }

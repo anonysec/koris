@@ -1,53 +1,39 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  Koris UI/UX Overhaul Layer  (v1)
+ *  Koris UI/UX Overhaul Layer  (v2 — conservative)
  * ───────────────────────────────────────────────────────────────────────────
- *  A cross-cutting polish pass applied on top of the design tokens and shared
- *  theme components. Loaded LAST so it wins the cascade without touching any of
- *  the ~50 individual views. Because it is driven entirely by design tokens it
- *  restyles every tab (admin + portal + landing) consistently and respects all
- *  UI themes (default / kiro / github / soft-dark / corporate / midnight) and
- *  light/dark modes automatically.
- *
- *  Scope of the overhaul:
- *    • Modernised elevation & depth on cards / panels / modals
- *    • Crisper, denser, easier-to-scan data tables
- *    • Refined buttons, inputs, selects with better focus + hover feedback
- *    • Sidebar / nav active-state clarity
- *    • Sticky, layered page headers
- *    • Accessible focus rings everywhere (keyboard users)
- *    • Custom slim scrollbars that match the theme
- *    • Smoother motion with reduced-motion support
+ *  Global, low-risk refinements ONLY. The shared theme components already own
+ *  the shape/border/spacing of cards, inputs, buttons, tables, nav, badges, etc.
+ *  A previous version of this file used blanket selectors (e.g.
+ *  [class*="-card"], bare input/select/table) which leaked borders onto BEM
+ *  child elements (stat values, pill labels) and fought the component styles.
+ *  That is intentionally removed here. We only touch things that cannot
+ *  conflict: focus rings, scrollbars, text smoothing, motion, and a subtle
+ *  page backdrop — all token-driven so every theme/mode adapts automatically.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Design-system extensions (derived from existing tokens) ─────────────── */
 :root {
   --ring: color-mix(in srgb, var(--color-primary) 55%, transparent);
-  --ring-offset: var(--color-bg);
-  --hairline: color-mix(in srgb, var(--color-border) 70%, transparent);
-  --surface-hover: color-mix(in srgb, var(--color-text) 5%, var(--color-surface));
-  --surface-active: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
-  --elevation-1: 0 1px 0 var(--hairline), var(--shadow-sm);
-  --elevation-2: 0 1px 0 var(--hairline), var(--shadow-md);
 }
 
-/* ─── Global smoothing ───────────────────────────────────────────────────── */
+/* ─── Global text smoothing ──────────────────────────────────────────────── */
 * {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+/* ─── Subtle page backdrop (very light; sits behind app surfaces) ─────────── */
 body {
   background:
     radial-gradient(1200px 600px at 100% -10%,
-      color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 60%),
+      color-mix(in srgb, var(--color-primary) 5%, transparent), transparent 60%),
     radial-gradient(1000px 500px at -10% 110%,
-      color-mix(in srgb, var(--color-brand-2, var(--color-primary)) 6%, transparent), transparent 60%),
+      color-mix(in srgb, var(--color-brand-2, var(--color-primary)) 5%, transparent), transparent 60%),
     var(--color-bg);
   background-attachment: fixed;
 }
 
-/* ─── Accessible focus rings (keyboard nav) ──────────────────────────────── */
+/* ─── Accessible focus rings for keyboard users (does not affect layout) ──── */
 :where(a, button, input, select, textarea, [tabindex], [role="button"]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
@@ -55,155 +41,7 @@ body {
 }
 :where(button, a):focus:not(:focus-visible) { outline: none; }
 
-/* ─── Cards / panels — softer, layered elevation ─────────────────────────── */
-:where(.card, .panel, .k-card, .surface, .box, .widget, [class*="-card"]) {
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--hairline);
-  box-shadow: var(--elevation-1);
-  transition:
-    border-color var(--duration-normal) var(--ease-out),
-    box-shadow var(--duration-normal) var(--ease-out),
-    transform var(--duration-normal) var(--ease-out);
-}
-:where(.card, .panel, .k-card, .widget):hover {
-  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
-  box-shadow: var(--elevation-2);
-}
-
-/* ─── Buttons — clearer affordance & press feedback ──────────────────────── */
-:where(button, .btn, .k-btn, [role="button"]) {
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-:where(button, .btn, .k-btn):hover:not(:disabled) { transform: translateY(-1px); }
-:where(button, .btn, .k-btn):active:not(:disabled) { transform: translateY(0) scale(0.985); }
-:where(button, .btn, .k-btn):disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* Primary / brand buttons get the signature gradient + glow */
-:where(.btn-primary, .btn--primary, .k-btn--primary, button.primary) {
-  background-image: var(--gradient-brand);
-  border: none;
-  color: #fff;
-  box-shadow: var(--shadow-brand);
-}
-:where(.btn-primary, .btn--primary, .k-btn--primary, button.primary):hover:not(:disabled) {
-  filter: brightness(1.06);
-}
-
-/* ─── Inputs / selects / textareas — consistent, comfortable fields ──────── */
-:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-       select, textarea, .k-input, .input) {
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-bg));
-  color: var(--color-text);
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out),
-    background-color var(--duration-fast) var(--ease-out);
-}
-:where(input, select, textarea, .k-input, .input):hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
-}
-:where(input, select, textarea, .k-input, .input):focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--ring);
-  background: var(--color-surface);
-}
-::placeholder { color: color-mix(in srgb, var(--color-muted) 85%, transparent); }
-
-/* ─── Data tables — denser, easier to scan ───────────────────────────────── */
-:where(table, .k-table, .data-table) {
-  border-collapse: separate;
-  border-spacing: 0;
-  width: 100%;
-}
-:where(table thead th, .k-table thead th) {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: color-mix(in srgb, var(--color-surface) 96%, var(--color-bg));
-  backdrop-filter: blur(6px);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--color-muted);
-  border-bottom: 1px solid var(--color-border);
-  padding-block: var(--space-3);
-}
-:where(table tbody td, .k-table tbody td) {
-  border-bottom: 1px solid var(--hairline);
-  padding-block: var(--space-3);
-}
-:where(table tbody tr, .k-table tbody tr) {
-  transition: background-color var(--duration-fast) var(--ease-out);
-}
-:where(table tbody tr:hover, .k-table tbody tr:hover) {
-  background: var(--surface-hover);
-}
-
-/* ─── Sidebar / navigation — clearer active state ────────────────────────── */
-:where(.sidebar, .nav, aside) :where(a, .nav-item) {
-  border-radius: var(--radius-md);
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
-}
-:where(.sidebar, .nav, aside) :where(a:hover, .nav-item:hover) {
-  background: var(--surface-hover);
-}
-:where(.sidebar, .nav, aside) :where(a.active, a.router-link-active, a.router-link-exact-active, .nav-item.active) {
-  background: var(--surface-active);
-  color: var(--color-primary);
-  font-weight: var(--font-semibold);
-  position: relative;
-}
-:where(.sidebar, .nav, aside) :where(a.active, a.router-link-exact-active)::before {
-  content: "";
-  position: absolute;
-  inset-block: 18%;
-  inset-inline-start: 0;
-  width: 3px;
-  border-radius: var(--radius-full);
-  background: var(--gradient-brand);
-}
-
-/* ─── Page headers — sticky, layered ─────────────────────────────────────── */
-:where(.page-header, .view-header, header.toolbar) {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  backdrop-filter: blur(10px);
-  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
-  border-bottom: 1px solid var(--hairline);
-}
-:where(h1, .page-title) { letter-spacing: var(--tracking-tight); }
-
-/* ─── Badges / pills / status chips — crisper ────────────────────────────── */
-:where(.badge, .pill, .chip, .tag, .status-pill) {
-  border-radius: var(--radius-full);
-  font-weight: var(--font-medium);
-  font-size: var(--text-xs);
-  letter-spacing: var(--tracking-wide);
-}
-
-/* ─── Modals / dialogs / slide-overs — richer depth + scrim ──────────────── */
-:where(.modal, .dialog, .k-modal, .slide-over, .drawer) {
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-xl);
-  border: 1px solid var(--hairline);
-}
-:where(.modal-backdrop, .overlay, .scrim, .backdrop) {
-  background: color-mix(in srgb, #000 55%, transparent);
-  backdrop-filter: blur(3px);
-}
-
-/* ─── Custom scrollbars matching the theme ───────────────────────────────── */
+/* ─── Slim theme-matched scrollbars ──────────────────────────────────────── */
 * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-muted) 45%, transparent) transparent;
@@ -212,7 +50,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--color-muted) 40%, transparent);
-  border-radius: var(--radius-full);
+  border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -221,21 +59,9 @@ body {
   background-clip: padding-box;
 }
 
-/* ─── Links ──────────────────────────────────────────────────────────────── */
-:where(a:not(.btn):not(.nav-item)) {
-  color: var(--color-primary);
-  text-decoration-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
-  text-underline-offset: 2px;
-}
-
-/* ─── Empty & loading states ─────────────────────────────────────────────── */
-:where(.empty-state, .k-empty) { color: var(--color-muted); }
-
 /* ─── Respect reduced-motion preferences ─────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
