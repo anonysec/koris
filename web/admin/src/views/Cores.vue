@@ -5,6 +5,7 @@ import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
 import Skeleton from '@koris/ui/Skeleton.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Button from '@koris/ui/Button.vue'
 import Input from '@koris/ui/Input.vue'
@@ -467,15 +468,13 @@ async function saveProtocolSettings() {
 
 <template>
   <div class="page services-view">
-    <header class="page-header">
-      <div>
-        <h1>{{ t('services.title') }}</h1>
-        <p class="subtitle">{{ t('services.subtitle') }}</p>
-      </div>
-      <Button variant="primary" @click="showAddNodeSlide = true">
+    <PageHeader :title="t('services.title')" :subtitle="t('services.subtitle')">
+      <template #actions>
+        <Button variant="primary" @click="showAddNodeSlide = true">
         + {{ t('services.add_node') }}
-      </Button>
-    </header>
+        </Button>
+      </template>
+    </PageHeader>
 
     <!-- Add Node Slide-Over Panel -->
     <NodeAddPanel

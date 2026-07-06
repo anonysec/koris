@@ -482,7 +482,7 @@ onMounted(async () => {
                 <Input
                   :id="fieldId"
                   v-model="panelName"
-                  placeholder="KorisPanel"
+                  placeholder="Koris"
                   :disabled="loadingSettings"
                 />
               </template>

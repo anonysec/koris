@@ -4,6 +4,7 @@ import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import FormField from '@koris/ui/FormField.vue'
 
@@ -55,16 +56,7 @@ onMounted(loadSettings)
 
 <template>
   <div class="page telegram-view">
-    <header class="page-header">
-      <div>
-        <h1>Telegram Bot</h1>
-        <p class="subtitle">Connect a Telegram bot to receive admin alerts and run commands from chat.</p>
-      </div>
-      <span class="bot-status" :class="botConfigured ? 'is-on' : 'is-off'">
-        <span class="bot-status__dot" />
-        {{ statusLabel }}
-      </span>
-    </header>
+    <PageHeader title="Telegram Bot" subtitle="Connect a Telegram bot to receive admin alerts and run commands from chat." />
 
     <div class="tg-grid">
       <section class="card tg-config">

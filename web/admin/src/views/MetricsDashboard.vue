@@ -6,6 +6,7 @@ import { useI18n } from '@koris/composables/useI18n'
 import MetricsNodeCard from '@/components/metrics/MetricsNodeCard.vue'
 import AlertsSummaryBar from '@/components/metrics/AlertsSummaryBar.vue'
 import Select from '@koris/ui/Select.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import EmptyState from '@koris/ui/EmptyState.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 
@@ -46,16 +47,7 @@ onUnmounted(() => {
 
 <template>
   <div class="page metrics-dashboard-view">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('metrics.dashboard_title') }}</h2>
-      <div class="page-header__actions">
-        <Select
-          v-model="selectedRange"
-          :options="rangeOptions"
-          size="sm"
-        />
-      </div>
-    </header>
+    <PageHeader :title="t('metrics.dashboard_title')" />
 
     <!-- Alerts Bar -->
     <AlertsSummaryBar

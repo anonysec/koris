@@ -5,6 +5,7 @@ import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useConfirm } from '@koris/composables/useConfirm'
 import Skeleton from '@koris/ui/Skeleton.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Button from '@koris/ui/Button.vue'
 import Input from '@koris/ui/Input.vue'
@@ -237,13 +238,7 @@ async function copyTeleLink(p: any) {
 
 <template>
   <div class="page protocols-view">
-    <header class="page-header">
-      <div>
-        <h1>Protocols</h1>
-        <p class="subtitle">Manage VPN &amp; tunneling protocols across your nodes.</p>
-      </div>
-      <Select v-if="nodeOptions.length" :options="nodeOptions" v-model="selectedNodeId" placeholder="Select node" class="node-select" />
-    </header>
+    <PageHeader title="Protocols" subtitle="Manage VPN &amp; tunneling protocols across your nodes." />
 
     <div v-if="loadingNodes" class="loading-grid">
       <Skeleton v-for="i in 5" :key="i" height="104px" />

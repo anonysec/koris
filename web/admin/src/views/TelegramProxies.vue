@@ -5,6 +5,7 @@ import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useConfirm } from '@koris/composables/useConfirm'
 import Button from '@koris/ui/Button.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Input from '@koris/ui/Input.vue'
 import Select from '@koris/ui/Select.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
@@ -135,16 +136,12 @@ onMounted(() => { load(); loadNodes() })
 
 <template>
   <div class="page teleproxy-view">
-    <header class="page-header">
-      <div>
-        <h1>{{ t('teleproxy.title') }}</h1>
-        <p class="subtitle">{{ t('teleproxy.empty_desc') }}</p>
-      </div>
-      <div class="header-actions">
+    <PageHeader :title="t('teleproxy.title')" :subtitle="t('teleproxy.empty_desc')">
+      <template #actions>
         <Button v-if="hasProxies" variant="ghost" size="sm" :loading="rotatingAll" @click="rotateAll">{{ t('teleproxy.rotate_all') }}</Button>
         <Button variant="primary" size="sm" @click="showCreate = !showCreate">{{ t('teleproxy.add_proxy') }}</Button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section v-if="showCreate" class="card create-card">
       <h3 class="card-title">{{ t('teleproxy.create_title') }}</h3>
