@@ -3,6 +3,7 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"html"
 	"io"
 	"io/fs"
@@ -128,7 +129,7 @@ func (s *Server) readLandingIndexHTML() string {
 		if dir == "" {
 			return ""
 		}
-		f, err = os.Open(filepath.Join(dir, "index.html"))
+		f, err = safepath.Open(filepath.Join(dir, "index.html"))
 	}
 	if err != nil {
 		return ""

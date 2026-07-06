@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -341,7 +342,7 @@ func startSocketListener(handler http.Handler, socketPath string) (net.Listener,
 }
 
 func parseCertInfo(certPath string) (expiry string, issuer string) {
-	data, err := os.ReadFile(certPath)
+	data, err := safepath.ReadFile(certPath)
 	if err != nil {
 		return "", ""
 	}

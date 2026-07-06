@@ -4,6 +4,7 @@
 package postgres
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"database/sql"
 	"errors"
@@ -130,7 +131,7 @@ func (s *Store) Migrate(ctx context.Context, dir string) error {
 		}
 
 		// Read and execute the migration
-		content, err := os.ReadFile(filepath.Join(dir, filename))
+		content, err := safepath.ReadFile(filepath.Join(dir, filename))
 		if err != nil {
 			return fmt.Errorf("%w: read %s: %v", dbstore.ErrMigrationFailed, filename, err)
 		}

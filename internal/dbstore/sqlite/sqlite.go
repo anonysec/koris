@@ -4,6 +4,7 @@
 package sqlite
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"database/sql"
 	"fmt"
@@ -118,7 +119,7 @@ func (s *SQLiteStore) Migrate(ctx context.Context, dir string) error {
 		}
 
 		// Read and execute the migration.
-		content, err := os.ReadFile(filepath.Join(dir, f.Name()))
+		content, err := safepath.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
 			return fmt.Errorf("%w: read migration %s: %v", dbstore.ErrMigrationFailed, f.Name(), err)
 		}

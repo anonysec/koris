@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -205,7 +206,7 @@ func (u *Updater) Rollback() error {
 	}
 
 	// Read backup
-	data, err := os.ReadFile(u.backupPath)
+	data, err := safepath.ReadFile(u.backupPath)
 	if err != nil {
 		return fmt.Errorf("[updater] read backup: %w", err)
 	}
@@ -283,7 +284,7 @@ func (u *Updater) download(dlURL string) ([]byte, error) {
 
 // backupBinary copies the current binary to the backup path.
 func (u *Updater) backupBinary() error {
-	src, err := os.Open(u.binaryPath)
+	src, err := safepath.Open(u.binaryPath)
 	if err != nil {
 		return fmt.Errorf("open current binary: %w", err)
 	}

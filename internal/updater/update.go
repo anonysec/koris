@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -127,7 +128,7 @@ func VerifyChecksum(data []byte, expected string) bool {
 
 // copyFile copies the contents of src to dst, preserving 0755 permissions.
 func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+	in, err := safepath.Open(src)
 	if err != nil {
 		return err
 	}

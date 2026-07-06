@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"github.com/anonysec/koris/internal/auth"
 	"io"
 	"io/fs"
@@ -130,7 +131,7 @@ func spaHandler(dir, prefix string, embedded fs.FS) http.Handler {
 				return
 			}
 			serve = func(name string) (fs.File, error) {
-				return os.Open(filepath.Join(dir, filepath.FromSlash(name)))
+				return safepath.Open(filepath.Join(dir, filepath.FromSlash(name)))
 			}
 		}
 

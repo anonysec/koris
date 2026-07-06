@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"github.com/anonysec/koris/internal/auth"
 	"github.com/anonysec/koris/internal/protocols/wireguard"
 	"context"
@@ -390,7 +391,7 @@ func inlineOpenVPNBlock(name, filePath string) string {
 	if filePath == "" {
 		return ""
 	}
-	b, err := os.ReadFile(filePath)
+	b, err := safepath.ReadFile(filePath)
 	if err != nil {
 		return ""
 	}
@@ -435,7 +436,7 @@ func (s *Server) openVPNCACert(nodeID int64) string {
 	// Priority 2: Filesystem fallback (legacy: panel and OpenVPN on same host)
 	path := getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt")
 	if path != "" {
-		if b, err := os.ReadFile(path); err == nil {
+		if b, err := safepath.ReadFile(path); err == nil {
 			return strings.TrimSpace(string(b))
 		}
 	}
@@ -464,7 +465,7 @@ func (s *Server) openVPNTLSCryptKey(nodeID int64) string {
 	// Filesystem fallback
 	path := getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key")
 	if path != "" {
-		if b, err := os.ReadFile(path); err == nil {
+		if b, err := safepath.ReadFile(path); err == nil {
 			return strings.TrimSpace(string(b))
 		}
 	}

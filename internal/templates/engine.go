@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"bytes"
 	"fmt"
 	"os"
@@ -50,7 +51,7 @@ func NewEngine(basePath string) *TemplateEngine {
 	for _, proto := range protocols {
 		tmplPath := filepath.Join(basePath, proto+".conf.tmpl")
 		if basePath != "" {
-			if content, err := os.ReadFile(tmplPath); err == nil {
+			if content, err := safepath.ReadFile(tmplPath); err == nil {
 				if t, err := template.New(proto).Parse(string(content)); err == nil {
 					e.templates[proto] = t
 					continue
@@ -161,7 +162,7 @@ func (e *TemplateEngine) Apply(protocol, confPath string, vars TemplateVars) err
 	}
 
 	// 4. Backup current config
-	if current, readErr := os.ReadFile(confPath); readErr == nil && len(current) > 0 {
+	if current, readErr := safepath.ReadFile(confPath); readErr == nil && len(current) > 0 {
 		backup := fmt.Sprintf("%s.bak.%d", confPath, timeNowUnix())
 		if writeErr := os.WriteFile(backup, current, 0600); writeErr != nil {
 			return fmt.Errorf("backup failed: %w", writeErr)

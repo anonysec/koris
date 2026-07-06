@@ -1,12 +1,12 @@
 package certrotation
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -205,7 +205,7 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 	}
 
 	// Read new cert data and calculate fingerprint
-	certData, err := os.ReadFile(cert.CertPath)
+	certData, err := safepath.ReadFile(cert.CertPath)
 	if err != nil {
 		return "", fmt.Errorf("read regenerated cert: %v", err)
 	}
@@ -229,7 +229,7 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 // Uses gRPC SetCertificates calls via the configured CertPusher.
 func (w *Worker) DistributeToNodes(cert ExpiringCert) error {
 	// Read cert content for distribution
-	certData, err := os.ReadFile(cert.CertPath)
+	certData, err := safepath.ReadFile(cert.CertPath)
 	if err != nil {
 		return fmt.Errorf("read cert for distribution: %v", err)
 	}
@@ -253,11 +253,11 @@ func (w *Worker) distributeViaGRPC(cert ExpiringCert, certData []byte) error {
 
 	// Also read key file if it exists alongside the cert
 	keyPath := strings.TrimSuffix(cert.CertPath, filepath.Ext(cert.CertPath)) + ".key"
-	keyData, _ := os.ReadFile(keyPath)
+	keyData, _ := safepath.ReadFile(keyPath)
 
 	// Read CA cert if available (look in same directory)
 	caPath := filepath.Join(filepath.Dir(cert.CertPath), "ca.crt")
-	caData, _ := os.ReadFile(caPath)
+	caData, _ := safepath.ReadFile(caPath)
 
 	// Query online and stale nodes
 	rows, err := w.db.Query(`SELECT id FROM nodes WHERE status IN ('online', 'stale')`)

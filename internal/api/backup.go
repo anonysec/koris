@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"archive/tar"
 	"compress/gzip"
 	"context"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -145,7 +145,7 @@ func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	archivePath := filepath.Join(s.BackupService.StorageDir(), filename)
-	f, err := os.Open(archivePath)
+	f, err := safepath.Open(archivePath)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "backup_file_not_found"})
 		return
@@ -377,7 +377,7 @@ func (s *Server) backupPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	archivePath := filepath.Join(s.BackupService.StorageDir(), filename)
-	f, err := os.Open(archivePath)
+	f, err := safepath.Open(archivePath)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "backup_file_not_found"})
 		return

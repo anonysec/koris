@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -10,7 +11,7 @@ import (
 // ComputeChecksum computes and returns the hex-encoded SHA-256 hash of the file at filePath.
 // It streams the file through the hash writer to avoid loading the entire file in memory.
 func ComputeChecksum(filePath string) (string, error) {
-	f, err := os.Open(filePath)
+	f, err := safepath.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("open file for checksum: %w", err)
 	}

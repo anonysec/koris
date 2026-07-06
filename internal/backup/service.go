@@ -1,6 +1,7 @@
 ﻿package backup
 
 import (
+	"github.com/anonysec/koris/internal/safepath"
 	"archive/tar"
 	"bufio"
 	"bytes"
@@ -540,7 +541,7 @@ func marshalJSON(v any) string {
 // countTablesAndRows scans the dump.sql inside a tar.gz archive for CREATE TABLE statements
 // and counts the VALUES tuples in INSERT statements to estimate row counts.
 func countTablesAndRows(archivePath string) (tableCount int, totalRowCount int64) {
-	f, err := os.Open(archivePath)
+	f, err := safepath.Open(archivePath)
 	if err != nil {
 		return 0, 0
 	}
