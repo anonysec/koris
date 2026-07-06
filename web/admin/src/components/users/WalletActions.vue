@@ -2,7 +2,7 @@
 /**
  * WalletActions — Top Up / Deduct modal for wallet management.
  *
- * Opens a KModal with amount and description inputs.
+ * Opens a Modal with amount and description inputs.
  * - Top Up mode: submits positive amount
  * - Deduct mode: shows confirmation warning if amount exceeds balance, submits negative amount
  * - Submit button disabled for invalid amounts (zero, non-numeric, out of range)
@@ -12,10 +12,10 @@
  * Requirements: 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10
  */
 import { ref, computed, watch } from 'vue'
-import KModal from '@koris/ui/KModal.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KFormField from '@koris/ui/KFormField.vue'
+import Modal from '@koris/ui/Modal.vue'
+import Button from '@koris/ui/Button.vue'
+import Input from '@koris/ui/Input.vue'
+import FormField from '@koris/ui/FormField.vue'
 import { useWalletActions } from '@/composables/useWalletActions'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { formatCurrency } from '@/utils/formatCurrency'
@@ -140,7 +140,7 @@ watch(() => props.open, (isOpen) => {
 </script>
 
 <template>
-  <KModal
+  <Modal
     :open="open"
     :title="modalTitle"
     width="440px"
@@ -153,13 +153,13 @@ watch(() => props.open, (isOpen) => {
       </div>
 
       <!-- Amount field -->
-      <KFormField
+      <FormField
         label="Amount"
         name="wallet-amount"
         :error="amountError"
       >
         <template #default="{ fieldId, describedBy }">
-          <KInput
+          <Input
             :id="fieldId"
             v-model="amount"
             type="number"
@@ -168,10 +168,10 @@ watch(() => props.open, (isOpen) => {
             :disabled="loading"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Description field -->
-      <KFormField
+      <FormField
         label="Description"
         name="wallet-description"
         :error="descriptionError"
@@ -189,7 +189,7 @@ watch(() => props.open, (isOpen) => {
             rows="3"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Over-balance warning (inline, for deduct mode) -->
       <div
@@ -226,24 +226,24 @@ watch(() => props.open, (isOpen) => {
 
     <template #footer>
       <div class="wallet-actions__footer">
-        <KButton
+        <Button
           variant="ghost"
           :disabled="loading"
           @click="handleClose"
         >
           Cancel
-        </KButton>
-        <KButton
+        </Button>
+        <Button
           :variant="mode === 'deduct' ? 'danger' : 'primary'"
           :loading="loading"
           :disabled="isSubmitDisabled"
           @click="handleSubmit"
         >
           {{ mode === 'top-up' ? 'Top Up' : 'Deduct' }}
-        </KButton>
+        </Button>
       </div>
     </template>
-  </KModal>
+  </Modal>
 </template>
 
 <style scoped>

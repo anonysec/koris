@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useDomainsStore, type VpnDomain, type DomainIPHistory } from '@/stores/domains'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
 
 const props = defineProps<{
   open: boolean
@@ -49,7 +49,7 @@ function formatDate(dateStr: string): string {
 </script>
 
 <template>
-  <KSlideOver :open="open" title="IP Rotation History" @close="handleClose">
+  <SlideOver :open="open" title="IP Rotation History" @close="handleClose">
     <div class="history-drawer">
       <!-- Domain info header -->
       <div v-if="domain" class="history-drawer__header">
@@ -98,7 +98,7 @@ function formatDate(dateStr: string): string {
         </div>
       </div>
     </div>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>

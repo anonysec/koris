@@ -2,7 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { useDomainsStore, type VpnDomain } from '@/stores/domains'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
+import Button from '@koris/ui/Button.vue'
 
 const props = defineProps<{
   open: boolean
@@ -157,12 +157,12 @@ async function handleConfirm() {
             </div>
 
             <div class="rotate-dialog__actions">
-              <KButton variant="ghost" @click="handleCancel">
+              <Button variant="ghost" @click="handleCancel">
                 Cancel
-              </KButton>
-              <KButton variant="primary" @click="handleNext">
+              </Button>
+              <Button variant="primary" @click="handleNext">
                 Continue
-              </KButton>
+              </Button>
             </div>
           </template>
 
@@ -188,12 +188,12 @@ async function handleConfirm() {
             </div>
 
             <div class="rotate-dialog__actions">
-              <KButton variant="ghost" :disabled="submitting" @click="handleBack">
+              <Button variant="ghost" :disabled="submitting" @click="handleBack">
                 Back
-              </KButton>
-              <KButton variant="primary" :loading="submitting" @click="handleConfirm">
+              </Button>
+              <Button variant="primary" :loading="submitting" @click="handleConfirm">
                 Confirm Rotation
-              </KButton>
+              </Button>
             </div>
           </template>
         </div>

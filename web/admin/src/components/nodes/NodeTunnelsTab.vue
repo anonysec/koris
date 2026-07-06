@@ -3,11 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useNodesStore, type Tunnel, type TunnelConfig } from '@/stores/nodes'
 import { useEditionStore } from '@/stores/edition'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
-import KSkeleton from '@koris/ui/KSkeleton.vue'
+import Button from '@koris/ui/Button.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
 
 const props = defineProps<{
   nodeId: number
@@ -42,7 +42,7 @@ const formValid = computed(() => {
   )
 })
 
-// ─── State mapping for KStatusPill ──────────────────────────────────────────
+// ─── State mapping for StatusPill ──────────────────────────────────────────
 function tunnelStatusMap(state: string): 'running' | 'stopped' | 'error' {
   if (state === 'active') return 'running'
   if (state === 'inactive') return 'stopped'
@@ -100,28 +100,28 @@ onMounted(loadTunnels)
 
     <!-- Setup Tunnel Form -->
     <form class="node-tunnels-tab__form" @submit.prevent="handleSetup">
-      <KSelect
+      <Select
         v-model="newProtocol"
         :options="protocolOptions"
         class="node-tunnels-tab__protocol-select"
       />
-      <KInput
+      <Input
         v-model="newExitAddress"
         placeholder="Exit address"
         class="node-tunnels-tab__address-input"
       />
-      <KInput
+      <Input
         v-model="newExitPort"
         type="number"
         placeholder="Port"
         class="node-tunnels-tab__port-input"
       />
-      <KButton type="submit" variant="primary" size="sm" :loading="submitting" :disabled="!formValid">
+      <Button type="submit" variant="primary" size="sm" :loading="submitting" :disabled="!formValid">
         Setup Tunnel
-      </KButton>
+      </Button>
     </form>
 
-    <KSkeleton v-if="loading" />
+    <Skeleton v-if="loading" />
 
     <div v-else-if="tunnels.length === 0" class="node-tunnels-tab__empty">
       No tunnels configured
@@ -147,18 +147,18 @@ onMounted(loadTunnels)
             <td><code>{{ tunnel.exitAddress }}</code></td>
             <td><code>{{ tunnel.exitPort }}</code></td>
             <td>
-              <KStatusPill :status="tunnelStatusMap(tunnel.state)" size="sm" />
+              <StatusPill :status="tunnelStatusMap(tunnel.state)" size="sm" />
             </td>
             <td>{{ new Date(tunnel.createdAt).toLocaleDateString() }}</td>
             <td>
-              <KButton
+              <Button
                 variant="danger"
                 size="sm"
                 :loading="tearingDown === tunnel.id"
                 @click="handleTeardown(tunnel.id)"
               >
                 Teardown
-              </KButton>
+              </Button>
             </td>
           </tr>
         </tbody>

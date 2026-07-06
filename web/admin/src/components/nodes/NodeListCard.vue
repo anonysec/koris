@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { KnodeNode } from '@/stores/nodes'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 const props = defineProps<{
   node: KnodeNode
@@ -43,7 +43,7 @@ const lastSeenDisplay = computed(() => {
     </div>
 
     <div class="node-list-card__meta">
-      <KStatusPill :status="node.status" size="sm" />
+      <StatusPill :status="node.status" size="sm" />
       <span class="node-list-card__last-seen" :title="node.lastSeenAt">
         {{ lastSeenDisplay }}
       </span>

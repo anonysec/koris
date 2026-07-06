@@ -3,11 +3,11 @@ import { computed } from 'vue'
 import { useEntityForm } from '@/composables/useEntityForm'
 import { usePaymentsStore } from '@/stores/payments'
 import { useI18n } from '@koris/composables/useI18n'
-import KSlideOver from '@koris/ui/KSlideOver.vue'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
+import SlideOver from '@koris/ui/SlideOver.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
 
 defineProps<{
   open: boolean
@@ -60,44 +60,44 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <KSlideOver :open="open" :title="t('payments.record_payment')" @close="handleClose">
+  <SlideOver :open="open" :title="t('payments.record_payment')" @close="handleClose">
     <form class="entity-form" autocomplete="off" @submit.prevent="handleSubmit">
-      <KFormField name="txn-username" :label="t('payments.form_username')" required :error="validationError && !form.username ? validationError : ''">
+      <FormField name="txn-username" :label="t('payments.form_username')" required :error="validationError && !form.username ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.username" placeholder="customer_username" />
+          <Input :id="fieldId" v-model="form.username" placeholder="customer_username" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="txn-amount" :label="t('payments.form_amount')" required :error="validationError && (!form.amount || Number(form.amount) <= 0) ? validationError : ''">
+      <FormField name="txn-amount" :label="t('payments.form_amount')" required :error="validationError && (!form.amount || Number(form.amount) <= 0) ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.amount" type="number" placeholder="10.00" />
+          <Input :id="fieldId" v-model="form.amount" type="number" placeholder="10.00" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="txn-method" :label="t('payments.form_method')" required :error="validationError && !form.method ? validationError : ''">
+      <FormField name="txn-method" :label="t('payments.form_method')" required :error="validationError && !form.method ? validationError : ''">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             v-model="form.method"
             :options="methodOptions"
             :placeholder="t('payments.select_method')"
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="txn-description" :label="t('payments.form_description')">
+      <FormField name="txn-description" :label="t('payments.form_description')">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.description" :placeholder="t('payments.optional_note')" />
+          <Input :id="fieldId" v-model="form.description" :placeholder="t('payments.optional_note')" />
         </template>
-      </KFormField>
+      </FormField>
 
       <div class="entity-form__actions">
-        <KButton type="submit" variant="primary" :loading="submitting" full-width>
+        <Button type="submit" variant="primary" :loading="submitting" full-width>
           {{ t('payments.record_payment') }}
-        </KButton>
+        </Button>
       </div>
     </form>
-  </KSlideOver>
+  </SlideOver>
 </template>
 
 <style scoped>

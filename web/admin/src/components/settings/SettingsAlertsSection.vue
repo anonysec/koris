@@ -3,9 +3,9 @@ import { ref, computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
 
 const { t } = useI18n()
 const store = useSettingsStore()
@@ -67,10 +67,10 @@ async function handleSave() {
 
     <form class="alerts-form" autocomplete="off" @submit.prevent="handleSave">
       <div class="form-grid">
-        <KFormField name="cpu-threshold" :label="t('settings.alert_cpu')" :error="errors.cpu">
+        <FormField name="cpu-threshold" :label="t('settings.alert_cpu')" :error="errors.cpu">
           <template #default="{ fieldId }">
             <div class="input-with-unit">
-              <KInput
+              <Input
                 :id="fieldId"
                 v-model.number="cpuThreshold"
                 type="number"
@@ -80,11 +80,11 @@ async function handleSave() {
               <span class="input-unit">%</span>
             </div>
           </template>
-        </KFormField>
-        <KFormField name="ram-threshold" :label="t('settings.alert_ram')" :error="errors.ram">
+        </FormField>
+        <FormField name="ram-threshold" :label="t('settings.alert_ram')" :error="errors.ram">
           <template #default="{ fieldId }">
             <div class="input-with-unit">
-              <KInput
+              <Input
                 :id="fieldId"
                 v-model.number="ramThreshold"
                 type="number"
@@ -94,11 +94,11 @@ async function handleSave() {
               <span class="input-unit">%</span>
             </div>
           </template>
-        </KFormField>
-        <KFormField name="disk-threshold" :label="t('settings.alert_disk')" :error="errors.disk">
+        </FormField>
+        <FormField name="disk-threshold" :label="t('settings.alert_disk')" :error="errors.disk">
           <template #default="{ fieldId }">
             <div class="input-with-unit">
-              <KInput
+              <Input
                 :id="fieldId"
                 v-model.number="diskThreshold"
                 type="number"
@@ -108,11 +108,11 @@ async function handleSave() {
               <span class="input-unit">%</span>
             </div>
           </template>
-        </KFormField>
+        </FormField>
       </div>
-      <KButton type="submit" variant="primary" size="sm" :loading="saving">
+      <Button type="submit" variant="primary" size="sm" :loading="saving">
         {{ t('settings.save') }}
-      </KButton>
+      </Button>
     </form>
   </section>
 </template>

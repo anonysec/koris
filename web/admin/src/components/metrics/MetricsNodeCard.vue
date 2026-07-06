@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import MetricsGauge from './MetricsGauge.vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 export interface MetricsNodeCardProps {
   nodeId: number
@@ -62,7 +62,7 @@ function formatUptime(seconds: number): string {
     <!-- Header -->
     <div class="card-header">
       <h4 class="card-header__name">{{ name }}</h4>
-      <KStatusPill :status="status" size="sm" />
+      <StatusPill :status="status" size="sm" />
     </div>
 
     <!-- Mini Gauges -->

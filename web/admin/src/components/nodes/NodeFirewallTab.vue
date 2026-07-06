@@ -2,10 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useNodesStore, type FirewallRule } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import KSkeleton from '@koris/ui/KSkeleton.vue'
+import Button from '@koris/ui/Button.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
 
 const props = defineProps<{
   nodeId: number
@@ -86,28 +86,28 @@ onMounted(loadRules)
 
     <!-- Open Port Form -->
     <form class="node-firewall-tab__form" @submit.prevent="handleOpenPort">
-      <KInput
+      <Input
         v-model="newPort"
         type="number"
         placeholder="Port"
         class="node-firewall-tab__port-input"
       />
-      <KSelect
+      <Select
         v-model="newProtocol"
         :options="protocolOptions"
         class="node-firewall-tab__protocol-select"
       />
-      <KInput
+      <Input
         v-model="newComment"
         placeholder="Comment (optional)"
         class="node-firewall-tab__comment-input"
       />
-      <KButton type="submit" variant="primary" size="sm" :loading="submitting" :disabled="!portValid">
+      <Button type="submit" variant="primary" size="sm" :loading="submitting" :disabled="!portValid">
         Open Port
-      </KButton>
+      </Button>
     </form>
 
-    <KSkeleton v-if="loading" />
+    <Skeleton v-if="loading" />
 
     <div v-else-if="rules.length === 0" class="node-firewall-tab__empty">
       No firewall rules configured
@@ -142,14 +142,14 @@ onMounted(loadRules)
             <td><code>{{ rule.sourceCidr || '*' }}</code></td>
             <td class="node-firewall-tab__cell--comment">{{ rule.comment || '—' }}</td>
             <td>
-              <KButton
+              <Button
                 variant="danger"
                 size="sm"
                 :loading="closing === `${rule.port}/${rule.protocol}`"
                 @click="handleClose(rule.port, rule.protocol)"
               >
                 Close
-              </KButton>
+              </Button>
             </td>
           </tr>
         </tbody>

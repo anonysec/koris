@@ -1,0 +1,1297 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useNodesStore } from '@/stores/nodes'
+import { useMetricsStore } from '@/stores/metrics'
+import { useToast } from '@koris/composables/useToast'
+import { useConfirm } from '@koris/composables/useConfirm'
+import { useI18n } from '@koris/composables/useI18n'
+import Tabs from '@koris/ui/Tabs.vue'
+import Button from '@koris/ui/Button.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
+import EmptyState from '@koris/ui/EmptyState.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
+import Textarea from '@koris/ui/Textarea.vue'
+import NodeListCard from '@/components/nodes/NodeListCard.vue'
+import NodeAddPanel from '@/components/nodes/NodeAddPanel.vue'
+
+const { t } = useI18n()
+const router = useRouter()
+const store = useNodesStore()
+const metricsStore = useMetricsStore()
+const toast = useToast()
+const { confirm } = useConfirm()
+const activeTab = ref('nodes')
+const showAddForm = ref(false)
+
+// ─── Edit Node State ─────────────────────────────────────────────────────────
+const editingNodeId = ref<number | null>(null)
+const editNodeForm = ref({
+  name: '',
+  public_ip: '',
+  domain: '',
+  proxy_enabled: false,
+  proxy_type: 'HTTP',
+  proxy_address: '',
+  proxy_username: '',
+  proxy_password: '',
+})
+const savingNode = ref(false)
+const showAdvanced = ref(false)
+
+const tabs = computed(() => [
+  { key: 'nodes', label: t('nodes.nodes') },
+  { key: 'cores', label: t('nodes.cores') },
+])
+
+/** Called when the new NodeAddForm successfully creates a node */
+function onNodeCreated(nodeId: number) {
+  showAddForm.value = false
+  store.loadNodes()
+  router.push({ name: 'node-detail', params: { id: nodeId } })
+}
+
+// ─── Sorted Nodes: offline/stale first ───────────────────────────────────────
+const sortedNodes = computed(() => {
+  const statusOrder: Record<string, number> = { offline: 0, stale: 1, disabled: 2, online: 3 }
+  return [...store.list].sort((a, b) => {
+    const aOrder = statusOrder[a.status] ?? 2
+    const bOrder = statusOrder[b.status] ?? 2
+    return aOrder - bOrder
+  })
+})
+
+
+// ─── Protocol Defaults & Config State ────────────────────────────────────────
+const PROTOCOL_DEFAULTS: Record<string, any> = {
+  openvpn: {
+    port: 1194, network: '10.8.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', auth_mode: 'userpass', backup_domain: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      comp_lzo: false, push_routes: '', fragment: 0, mssfix: 0, keepalive: '10 120', topology: 'subnet', verb: 3, custom_directives: '',
+    },
+  },
+  l2tp: {
+    port: 1701, network: '10.9.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      lcp_echo_interval: 30, lcp_echo_failure: 4, idle_timeout: 0,
+    },
+  },
+  ikev2: {
+    port: 500, network: '10.10.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      dpd_interval: 30, dpd_timeout: 150, rekey_time: '4h', ike_proposals: 'aes256-sha256-modp2048', esp_proposals: 'aes256-sha256', left_id: '', right_id: '%any', fragment_size: 0,
+    },
+  },
+  ssh: {
+    port: 2222, network: '', enabled: true, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      listen_address: '0.0.0.0', key_type: 'ed25519',
+      max_sessions: 10, idle_timeout: 0, shell_access: false, allowed_keys: '',
+      accounting_enabled: true, accounting_interval: 300,
+    },
+  },
+  wireguard: {
+    port: 51820, network: '10.66.0.0/20', enabled: false, mtu: 1420, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      dns_1: '1.1.1.1', dns_2: '8.8.8.8', gaming_optimize: false,
+    },
+  },
+}
+
+const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh', 'wireguard', 'cisco_ipsec'] as const
+const protocolIcons: Record<string, string> = {
+  openvpn: '🔐',
+  l2tp: '🔒',
+  ikev2: '🛡️',
+  ssh: '🖥️',
+  wireguard: '⚡',
+  cisco_ipsec: '🏢',
+}
+const protocolLabels: Record<string, string> = {
+  openvpn: 'OpenVPN',
+  l2tp: 'L2TP',
+  ikev2: 'IKEv2',
+  ssh: 'SSH',
+  wireguard: 'WireGuard',
+  cisco_ipsec: 'Cisco IPSec',
+}
+
+const editingConfig = ref<{ nodeId: number; protocol: string } | null>(null)
+const configForm = ref<any>({})
+const savingConfig = ref(false)
+
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function formatBps(bps: number): string {
+  if (bps < 1000) return `${bps} bps`
+  if (bps < 1000000) return `${(bps / 1000).toFixed(1)} Kbps`
+  return `${(bps / 1000000).toFixed(1)} Mbps`
+}
+
+function getServiceStatus(node: any, protocol: string): string {
+  // If node is offline/disabled, all services are effectively offline
+  if (node.status === 'offline' || node.status === 'disabled') {
+    return 'offline'
+  }
+
+  const metrics = node.status_metrics
+  // Check node_services array first (all services including SSH/WireGuard are stored here)
+  if (node.services && Array.isArray(node.services)) {
+    const svc = node.services.find((s: any) => s.service === protocol)
+    if (svc && svc.status) return svc.status
+  }
+  // Fall back to status_metrics for legacy protocols
+  if (metrics) {
+    if (protocol === 'openvpn' && metrics.openvpn_status) return metrics.openvpn_status
+    if (protocol === 'l2tp' && metrics.l2tp_status) return metrics.l2tp_status
+    if (protocol === 'ikev2' && metrics.ikev2_status) return metrics.ikev2_status
+    if (protocol === 'ssh' && metrics.ssh_status) return metrics.ssh_status
+  }
+  // Check if protocol config exists and is enabled/disabled
+  const config = getNodeConfig(node.id, protocol)
+  if (!config) return 'not_configured'
+  if (!config.enabled) return 'disabled'
+  // Node is online, protocol enabled, but no service status — service not running
+  return node.status === 'online' ? 'inactive' : 'unknown'
+}
+
+function getNodeConfig(nodeId: number, protocol: string) {
+  const configs = store.vpnConfigs[nodeId]
+  if (!configs) return null
+  return configs.find(c => c.protocol === protocol) || null
+}
+
+// ─── Node CRUD ───────────────────────────────────────────────────────────────
+
+async function toggleNode(id: number, currentStatus: string) {
+  const enable = currentStatus === 'disabled'
+  await store.updateNode(id, enable)
+}
+
+async function handleDeleteNode(id: number, name: string) {
+  const confirmed = await confirm({
+    title: t('nodes.confirm_delete_title'),
+    message: t('nodes.confirm_delete_msg').replace('{name}', name),
+    variant: 'danger',
+    icon: '⚠',
+    confirmText: t('btn.delete'),
+    cancelText: t('btn.cancel'),
+  })
+  if (!confirmed) return
+  const success = await store.deleteNode(id)
+  if (success) {
+    toast.success(t('nodes.deleted_success').replace('{name}', name))
+  } else {
+    toast.error(t('nodes.deleted_error').replace('{name}', name))
+  }
+}
+
+// ─── Edit Node Handlers ──────────────────────────────────────────────────────
+function startEditNode(node: any) {
+  editingNodeId.value = node.id
+  editNodeForm.value = {
+    name: node.name || '',
+    public_ip: node.public_ip || '',
+    domain: node.domain || '',
+    proxy_enabled: node.proxy_enabled || false,
+    proxy_type: node.proxy_type || 'HTTP',
+    proxy_address: node.proxy_address || '',
+    proxy_username: node.proxy_username || '',
+    proxy_password: node.proxy_password || '',
+  }
+}
+
+function cancelEditNode() {
+  editingNodeId.value = null
+  editNodeForm.value = { name: '', public_ip: '', domain: '', proxy_enabled: false, proxy_type: 'HTTP', proxy_address: '', proxy_username: '', proxy_password: '' }
+}
+
+async function handleEditNode() {
+  if (!editingNodeId.value) return
+  savingNode.value = true
+  // Build delta payload: only include fields that actually changed
+  const originalNode = store.list.find((n: any) => n.id === editingNodeId.value)
+  const payload: Record<string, any> = {}
+  if (editNodeForm.value.name !== (originalNode?.name || '')) {
+    payload.name = editNodeForm.value.name
+  }
+  if (editNodeForm.value.public_ip !== (originalNode?.public_ip || '')) {
+    payload.public_ip = editNodeForm.value.public_ip
+  }
+  if (editNodeForm.value.domain !== (originalNode?.domain || '')) {
+    payload.domain = editNodeForm.value.domain
+  }
+  // Always include proxy fields when editing
+  payload.proxy_enabled = editNodeForm.value.proxy_enabled
+  payload.proxy_type = editNodeForm.value.proxy_type
+  payload.proxy_address = editNodeForm.value.proxy_address
+  payload.proxy_username = editNodeForm.value.proxy_username
+  payload.proxy_password = editNodeForm.value.proxy_password
+  const success = await store.editNode(editingNodeId.value, payload)
+  savingNode.value = false
+  if (success) {
+    toast.success(t('nodes.edit_success'))
+    cancelEditNode()
+  } else {
+    toast.error(t('nodes.edit_error'))
+  }
+}
+
+
+// ─── Protocol Config Handlers ────────────────────────────────────────────────
+function startEdit(nodeId: number, protocol: string, currentConfig: any) {
+  editingConfig.value = { nodeId, protocol }
+  showAdvanced.value = false
+  const defaults = PROTOCOL_DEFAULTS[protocol]
+  if (currentConfig) {
+    configForm.value = {
+      protocol: currentConfig.protocol,
+      port: currentConfig.port,
+      network: currentConfig.network,
+      enabled: currentConfig.enabled,
+      mtu: currentConfig.mtu ?? defaults.mtu ?? null,
+      max_clients: currentConfig.max_clients ?? defaults.max_clients ?? 0,
+      enable_logs: currentConfig.enable_logs ?? defaults.enable_logs ?? true,
+      conn_limit: currentConfig.conn_limit ?? defaults.conn_limit ?? 0,
+      extra_json: { ...defaults.extra_json, ...(currentConfig.extra_json || {}) },
+    }
+  } else {
+    configForm.value = {
+      protocol,
+      port: defaults.port,
+      network: defaults.network,
+      enabled: defaults.enabled,
+      mtu: defaults.mtu ?? null,
+      max_clients: defaults.max_clients ?? 0,
+      enable_logs: defaults.enable_logs ?? true,
+      conn_limit: defaults.conn_limit ?? 0,
+      extra_json: { ...defaults.extra_json },
+    }
+  }
+}
+
+function cancelEdit() {
+  editingConfig.value = null
+  configForm.value = {}
+}
+
+// ─── Validation Helpers ──────────────────────────────────────────────────────
+function isPortValid(port: number | string | null | undefined): boolean {
+  const num = Number(port)
+  return Number.isInteger(num) && num >= 1 && num <= 65535
+}
+
+function isCidrValid(cidr: string | null | undefined): boolean {
+  if (!cidr) return true // empty is ok for SSH
+  const match = cidr.match(/^(\d{1,3}\.){3}\d{1,3}\/(\d{1,2})$/)
+  if (!match) return false
+  const parts = cidr.split('/')[0].split('.')
+  const mask = Number(cidr.split('/')[1])
+  return parts.every(p => Number(p) >= 0 && Number(p) <= 255) && mask >= 0 && mask <= 32
+}
+
+// ─── Config Preview ──────────────────────────────────────────────────────────
+const showConfigPreview = ref(false)
+
+function getConfigPreview(): string[] {
+  if (!editingConfig.value) return []
+  const lines: string[] = []
+  const f = configForm.value
+  lines.push(`protocol=${f.protocol}`)
+  lines.push(`port=${f.port}`)
+  if (f.network) lines.push(`network=${f.network}`)
+  lines.push(`enabled=${f.enabled}`)
+  if (f.mtu) lines.push(`mtu=${f.mtu}`)
+  if (f.max_clients) lines.push(`max_clients=${f.max_clients}`)
+  if (f.conn_limit) lines.push(`conn_limit=${f.conn_limit}`)
+  lines.push(`enable_logs=${f.enable_logs}`)
+  if (f.extra_json) {
+    for (const [key, val] of Object.entries(f.extra_json)) {
+      if (val !== '' && val !== null && val !== undefined) {
+        lines.push(`${key}=${val}`)
+      }
+    }
+  }
+  return lines
+}
+
+// ─── Chip Array Helpers ──────────────────────────────────────────────────────
+const newRouteInput = ref('')
+const newKeyInput = ref('')
+
+function getPushRoutesArray(): string[] {
+  const raw = configForm.value?.extra_json?.push_routes || ''
+  if (!raw) return []
+  return raw.split(',').map((r: string) => r.trim()).filter(Boolean)
+}
+
+function addPushRoute() {
+  const val = newRouteInput.value.trim()
+  if (!val) return
+  const current = getPushRoutesArray()
+  if (!current.includes(val)) {
+    current.push(val)
+    configForm.value.extra_json.push_routes = current.join(', ')
+  }
+  newRouteInput.value = ''
+}
+
+function removePushRoute(index: number) {
+  const current = getPushRoutesArray()
+  current.splice(index, 1)
+  configForm.value.extra_json.push_routes = current.join(', ')
+}
+
+function getAllowedKeysArray(): string[] {
+  const raw = configForm.value?.extra_json?.allowed_keys || ''
+  if (!raw) return []
+  return raw.split('\n').map((k: string) => k.trim()).filter(Boolean)
+}
+
+function addAllowedKey() {
+  const val = newKeyInput.value.trim()
+  if (!val) return
+  const current = getAllowedKeysArray()
+  if (!current.includes(val)) {
+    current.push(val)
+    configForm.value.extra_json.allowed_keys = current.join('\n')
+  }
+  newKeyInput.value = ''
+}
+
+function removeAllowedKey(index: number) {
+  const current = getAllowedKeysArray()
+  current.splice(index, 1)
+  configForm.value.extra_json.allowed_keys = current.join('\n')
+}
+
+// ─── Protocol Config Helpers ──────────────────────────────────────────────
+
+async function saveConfig() {
+  if (!editingConfig.value) return
+  savingConfig.value = true
+  const { nodeId } = editingConfig.value
+  const payload = {
+    protocol: configForm.value.protocol,
+    port: configForm.value.port,
+    network: configForm.value.network,
+    enabled: configForm.value.enabled,
+    mtu: configForm.value.mtu ?? undefined,
+    max_clients: configForm.value.max_clients ?? 0,
+    enable_logs: configForm.value.enable_logs ?? true,
+    conn_limit: configForm.value.conn_limit ?? 0,
+    extra_json: configForm.value.extra_json,
+  }
+  await store.saveNodeVpnConfig(nodeId, payload)
+  await store.loadNodeVpnConfigs(nodeId)
+  editingConfig.value = null
+  configForm.value = {}
+  savingConfig.value = false
+  toast.success('Configuration saved')
+}
+
+async function toggleProtocol(nodeId: number, protocol: string, currentConfig: any, newEnabled: boolean) {
+  const config = currentConfig
+    ? { protocol: currentConfig.protocol, port: currentConfig.port, network: currentConfig.network, enabled: newEnabled, extra_json: currentConfig.extra_json }
+    : { protocol, ...PROTOCOL_DEFAULTS[protocol], enabled: newEnabled }
+  await store.saveNodeVpnConfig(nodeId, config)
+  await store.loadNodeVpnConfigs(nodeId)
+}
+
+// ─── Reset to Defaults ───────────────────────────────────────────────────────
+function resetToDefaults() {
+  if (!editingConfig.value) return
+  const proto = editingConfig.value.protocol
+  const defaults = PROTOCOL_DEFAULTS[proto]
+  if (!defaults) {
+    toast.error(t('nodes.no_defaults'))
+    return
+  }
+  configForm.value = {
+    protocol: proto,
+    port: defaults.port,
+    network: defaults.network,
+    enabled: defaults.enabled,
+    mtu: defaults.mtu ?? null,
+    max_clients: defaults.max_clients ?? 0,
+    enable_logs: defaults.enable_logs ?? true,
+    conn_limit: defaults.conn_limit ?? 0,
+    extra_json: { ...defaults.extra_json },
+  }
+}
+
+// ─── Restart Service ─────────────────────────────────────────────────────────
+const restartingService = ref<string | null>(null)
+
+async function restartService(nodeId: number, protocol: string) {
+  restartingService.value = `${nodeId}-${protocol}`
+  try {
+    const success = await store.createNodeTask({
+      node_id: nodeId,
+      action: 'restart_service',
+      payload_json: { protocol },
+    })
+    if (success) {
+      toast.success(t('nodes.restart_success'))
+    } else {
+      toast.error(t('nodes.restart_error'))
+    }
+  } catch {
+    toast.error(t('nodes.restart_error'))
+  } finally {
+    restartingService.value = null
+  }
+}
+
+// ─── Danger field detection ──────────────────────────────────────────────────
+function isDangerField(proto: string, fieldName: string): boolean {
+  if (proto === 'ssh' && fieldName === 'shell_access') return true
+  if (proto === 'openvpn' && fieldName === 'comp_lzo') return true
+  if (proto === 'openvpn' && fieldName === 'tls_mode' && configForm.value?.extra_json?.tls_mode === 'none') return true
+  if (proto === 'l2tp' && fieldName === 'ipsec_mode' && configForm.value?.extra_json?.ipsec_mode === 'plain') return true
+  return false
+}
+
+// ─── Clear PSK when mode switches away from PSK-based auth ──────────────────
+watch(() => configForm.value?.extra_json?.ipsec_mode, (newMode, oldMode) => {
+  if (oldMode === 'ipsec' && newMode === 'plain' && configForm.value?.extra_json) {
+    configForm.value.extra_json.psk = ''
+  }
+})
+
+watch(() => configForm.value?.extra_json?.auth_type, (newType, oldType) => {
+  if (oldType === 'psk' && newType === 'certificate' && configForm.value?.extra_json) {
+    configForm.value.extra_json.psk = ''
+  }
+})
+
+// ─── Load configs when Cores tab is activated ────────────────────────────────
+watch(activeTab, (tab) => {
+  if (tab === 'cores') {
+    store.list.forEach(node => store.loadNodeVpnConfigs(node.id))
+  }
+})
+
+onMounted(() => {
+  store.loadNodes()
+})
+</script>
+
+
+<template>
+  <div class="page nodes-view">
+    <header class="page-header">
+      <Button variant="primary" icon="+" @click="showAddForm = !showAddForm">{{ t('nodes.add_node') }}</Button>
+      <Button variant="ghost" @click="router.push({ name: 'node-compare' })">{{ t('node_compare.compare_nodes') }}</Button>
+    </header>
+
+    <!-- Add Node Slide-Over Panel -->
+    <NodeAddPanel
+      :open="showAddForm"
+      @close="showAddForm = false"
+      @created="onNodeCreated"
+    />
+
+
+    <Tabs v-model="activeTab" :tabs="tabs" aria-label="Nodes navigation">
+      <!-- Nodes Tab -->
+      <template #nodes>
+        <div class="nodes-content">
+          <div v-if="store.loading && store.list.length === 0" class="nodes-list">
+            <Skeleton v-for="i in 3" :key="i" variant="rect" :width="'100%'" :height="64" />
+          </div>
+          <EmptyState
+            v-else-if="store.list.length === 0"
+            icon="🖥️"
+            :title="t('nodes.no_nodes')"
+            :description="t('nodes.no_nodes_desc')"
+          />
+          <div v-else class="nodes-list">
+            <NodeListCard
+              v-for="node in sortedNodes"
+              :key="node.id"
+              :node="node"
+              @select="(id) => router.push({ name: 'node-detail', params: { id } })"
+            />
+          </div>
+        </div>
+      </template>
+
+
+      <!-- Cores Tab: Protocol Configuration -->
+      <template #cores>
+        <div class="cores-content">
+          <EmptyState
+            v-if="store.list.length === 0"
+            icon="⚡"
+            :title="t('nodes.no_nodes')"
+            :description="t('nodes.no_nodes_cores')"
+          />
+          <div v-else class="cores-grid">
+            <div v-for="node in store.list" :key="node.id" class="core-node-section">
+              <h4 class="core-node-title">{{ node.name }}</h4>
+              <div class="protocol-cards">
+                <div
+                  v-for="proto in protocolList"
+                  :key="proto"
+                  class="protocol-card"
+                  :class="{ 'protocol-card--disabled': getNodeConfig(node.id, proto)?.enabled === false }"
+                >
+                  <!-- Protocol Summary Row -->
+                  <div class="protocol-card__header">
+                    <div class="protocol-card__info">
+                      <span class="protocol-card__icon">{{ protocolIcons[proto] }}</span>
+                      <span class="protocol-card__name">{{ protocolLabels[proto] }}</span>
+                    </div>
+                    <div class="protocol-card__meta">
+                      <span class="protocol-card__port text-muted">
+                        Port {{ getNodeConfig(node.id, proto)?.port ?? PROTOCOL_DEFAULTS[proto].port }}
+                      </span>
+                      <span v-if="getNodeConfig(node.id, proto)?.network || PROTOCOL_DEFAULTS[proto].network" class="protocol-card__network text-muted">
+                        {{ getNodeConfig(node.id, proto)?.network || PROTOCOL_DEFAULTS[proto].network }}
+                      </span>
+                    </div>
+                    <div class="protocol-card__controls">
+                      <StatusPill :status="getServiceStatus(node, proto)" size="sm" />
+                      <label class="toggle-switch">
+                        <input
+                          type="checkbox"
+                          :checked="getNodeConfig(node.id, proto)?.enabled ?? PROTOCOL_DEFAULTS[proto].enabled"
+                          @change="toggleProtocol(node.id, proto, getNodeConfig(node.id, proto), ($event.target as HTMLInputElement).checked)"
+                        />
+                        <span class="toggle-switch__slider" />
+                      </label>
+                      <Button variant="ghost" size="sm" @click="startEdit(node.id, proto, getNodeConfig(node.id, proto))">
+                        {{ t('btn.edit') }}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        :loading="restartingService === `${node.id}-${proto}`"
+                        @click="restartService(node.id, proto)"
+                      >
+                        {{ t('nodes.restart_service') }}
+                      </Button>
+                    </div>
+                  </div>
+
+
+                  <!-- Inline Edit Form -->
+                  <div
+                    v-if="editingConfig && editingConfig.nodeId === node.id && editingConfig.protocol === proto"
+                    class="protocol-form"
+                  >
+                    <!-- Networking Group -->
+                    <div class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_networking') }}</h5>
+                      <div class="protocol-form__grid">
+                        <FormField :name="`${proto}-port`" :label="t('label.port')" :hint="t('nodes.hint_port')" :class="{ 'field--invalid': configForm.port && !isPortValid(configForm.port) }">
+                          <template #default="{ fieldId }">
+                            <Input :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
+                            <span v-if="configForm.port && !isPortValid(configForm.port)" class="validation-msg">{{ t('nodes.validation_port') }}</span>
+                          </template>
+                        </FormField>
+                        <FormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')" :class="{ 'field--invalid': configForm.network && !isCidrValid(configForm.network) }">
+                          <template #default="{ fieldId }">
+                            <Input :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/20" />
+                            <span v-if="configForm.network && !isCidrValid(configForm.network)" class="validation-msg">{{ t('nodes.validation_cidr') }}</span>
+                          </template>
+                        </FormField>
+                        <FormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" :label="t('nodes.mtu')">
+                          <template #default="{ fieldId }">
+                            <Input :id="fieldId" v-model="configForm.mtu" type="number" placeholder="1500" />
+                          </template>
+                        </FormField>
+
+                        <!-- OpenVPN networking -->
+                        <template v-if="proto === 'openvpn'">
+                          <FormField :name="`${proto}-transport`" :label="t('nodes.transport')" :hint="t('nodes.hint_transport')">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-auth-mode`" label="Auth Mode" hint="userpass = FreeRADIUS, certificate = passwordless TLS">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.auth_mode" :options="[{ label: 'Username/Password', value: 'userpass' }, { label: 'Certificate (passwordless)', value: 'certificate' }]" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-backup-domain`" label="Backup Domain" hint="Failover domain if main IP is blocked">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.backup_domain" placeholder="e.g. backup.vpn.example.com" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-topology`" :label="t('nodes.topology')">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.topology" :options="[{ label: 'subnet', value: 'subnet' }, { label: 'net30', value: 'net30' }, { label: 'p2p', value: 'p2p' }]" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-push-routes`" :label="t('nodes.push_routes')" class="form-group__full-width">
+                            <template #default>
+                              <div class="chip-field">
+                                <div class="chip-list">
+                                  <span v-for="(route, idx) in getPushRoutesArray()" :key="idx" class="chip">
+                                    {{ route }}
+                                    <button type="button" class="chip__remove" @click="removePushRoute(idx)">&times;</button>
+                                  </span>
+                                </div>
+                                <div class="chip-input-row">
+                                  <Input v-model="newRouteInput" :placeholder="t('nodes.add_route_placeholder')" @keydown.enter.prevent="addPushRoute" />
+                                  <Button variant="ghost" size="sm" type="button" @click="addPushRoute">{{ t('nodes.add') }}</Button>
+                                </div>
+                              </div>
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-fragment`" :label="t('nodes.fragment')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.fragment" type="number" placeholder="0" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-mssfix`" :label="t('nodes.mssfix')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.mssfix" type="number" placeholder="0" />
+                            </template>
+                          </FormField>
+                        </template>
+
+
+                        <!-- L2TP networking -->
+                        <template v-if="proto === 'l2tp'">
+                          <FormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                            </template>
+                          </FormField>
+                        </template>
+
+                        <!-- IKEv2 networking -->
+                        <template v-if="proto === 'ikev2'">
+                          <FormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-fragment-size`" :label="t('nodes.fragment_size')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.fragment_size" type="number" placeholder="0" />
+                            </template>
+                          </FormField>
+                        </template>
+
+                        <!-- SSH networking -->
+                        <template v-if="proto === 'ssh'">
+                          <FormField :name="`${proto}-listen`" :label="t('nodes.listen_address')" :hint="t('nodes.hint_listen_address')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.listen_address" placeholder="0.0.0.0" />
+                            </template>
+                          </FormField>
+                        </template>
+
+                        <!-- WireGuard networking -->
+                        <template v-if="proto === 'wireguard'">
+                          <FormField :name="`${proto}-dns1`" :label="t('wireguard.primary_dns')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns_1" placeholder="1.1.1.1" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-dns2`" :label="t('wireguard.secondary_dns')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dns_2" placeholder="8.8.8.8" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-gaming`" :label="t('wireguard.gaming_optimize')">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.gaming_optimize" @change="configForm.extra_json.gaming_optimize = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                              <span class="toggle-hint">{{ t('wireguard.gaming_optimize_hint') }}</span>
+                            </template>
+                          </FormField>
+                        </template>
+                      </div>
+                    </div>
+
+                    <!-- Advanced Settings Toggle -->
+                    <div class="form-group advanced-toggle">
+                      <Button variant="ghost" size="sm" @click="showAdvanced = !showAdvanced">
+                        {{ showAdvanced ? t('nodes.hide_advanced') : t('nodes.show_advanced') }}
+                      </Button>
+                    </div>
+
+                    <!-- Security Group -->
+                    <div v-if="showAdvanced" class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_security') }}</h5>
+                      <div class="protocol-form__grid">
+                        <template v-if="proto === 'openvpn'">
+                          <FormField :name="`${proto}-cipher`" :label="t('nodes.cipher')" :hint="t('nodes.hint_cipher')">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.cipher" :options="[{ label: 'AES-256-GCM', value: 'AES-256-GCM' }, { label: 'AES-128-GCM', value: 'AES-128-GCM' }, { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' }]" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-tls`" :label="t('nodes.tls_mode')" :hint="t('nodes.hint_tls_mode')" :class="{ 'field--danger': isDangerField(proto, 'tls_mode') }">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.tls_mode" :options="[{ label: 'tls-crypt', value: 'tls-crypt' }, { label: 'tls-auth', value: 'tls-auth' }, { label: 'none', value: 'none' }]" />
+                            </template>
+                          </FormField>
+                        </template>
+
+                        <template v-if="proto === 'l2tp'">
+                          <FormField :name="`${proto}-ipsec`" :label="t('nodes.mode')" :hint="t('nodes.hint_ipsec_mode')" :class="{ 'field--danger': isDangerField(proto, 'ipsec_mode') }">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.ipsec_mode" :options="[{ label: 'L2TP/IPSec', value: 'ipsec' }, { label: 'Plain L2TP', value: 'plain' }]" />
+                            </template>
+                          </FormField>
+                          <FormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-auth`" :label="t('nodes.auth_method')" :hint="t('nodes.hint_auth_method')">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
+                            </template>
+                          </FormField>
+                        </template>
+
+                        <template v-if="proto === 'ikev2'">
+                          <FormField :name="`${proto}-authtype`" :label="t('nodes.auth_type')" :hint="t('nodes.hint_auth_type')">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.auth_type" :options="[{ label: 'PSK', value: 'psk' }, { label: 'Certificate', value: 'certificate' }]" />
+                            </template>
+                          </FormField>
+                          <FormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
+                            </template>
+                          </FormField>
+                          <FormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" :label="t('nodes.cert_id')" :hint="t('nodes.hint_cert_id')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.cert_id" placeholder="Certificate identifier" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-ike-proposals`" :label="t('nodes.ike_proposals')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.ike_proposals" placeholder="aes256-sha256-modp2048" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-esp-proposals`" :label="t('nodes.esp_proposals')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.esp_proposals" placeholder="aes256-sha256" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-left-id`" :label="t('nodes.left_id')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.left_id" placeholder="Server identity" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-right-id`" :label="t('nodes.right_id')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.right_id" placeholder="%any" />
+                            </template>
+                          </FormField>
+                        </template>
+
+                        <template v-if="proto === 'ssh'">
+                          <FormField :name="`${proto}-keytype`" :label="t('nodes.key_type')" :hint="t('nodes.hint_key_type')">
+                            <template #default="{ fieldId }">
+                              <Select :id="fieldId" v-model="configForm.extra_json.key_type" :options="[{ label: 'ed25519', value: 'ed25519' }, { label: 'rsa', value: 'rsa' }, { label: 'ecdsa', value: 'ecdsa' }]" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-shell-access`" :label="t('nodes.shell_access')" :class="{ 'field--danger': isDangerField(proto, 'shell_access') }">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.shell_access" @change="configForm.extra_json.shell_access = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-allowed-keys`" :label="t('nodes.allowed_keys')" class="form-group__full-width">
+                            <template #default>
+                              <div class="chip-field">
+                                <div class="chip-list">
+                                  <span v-for="(key, idx) in getAllowedKeysArray()" :key="idx" class="chip chip--key">
+                                    {{ key.length > 40 ? key.slice(0, 40) + '...' : key }}
+                                    <button type="button" class="chip__remove" @click="removeAllowedKey(idx)">&times;</button>
+                                  </span>
+                                </div>
+                                <div class="chip-input-row">
+                                  <Input v-model="newKeyInput" :placeholder="t('nodes.add_key_placeholder')" @keydown.enter.prevent="addAllowedKey" />
+                                  <Button variant="ghost" size="sm" type="button" @click="addAllowedKey">{{ t('nodes.add') }}</Button>
+                                </div>
+                              </div>
+                            </template>
+                          </FormField>
+                        </template>
+                      </div>
+                    </div>
+
+                    <!-- Performance Group -->
+                    <div v-if="showAdvanced" class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_performance') }}</h5>
+                      <div class="protocol-form__grid">
+                        <template v-if="proto === 'openvpn'">
+                          <FormField :name="`${proto}-keepalive`" :label="t('nodes.keepalive')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.keepalive" placeholder="10 120" />
+                            </template>
+                          </FormField>
+                        </template>
+                        <template v-if="proto === 'l2tp'">
+                          <FormField :name="`${proto}-lcp-echo-interval`" :label="t('nodes.lcp_echo_interval')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.lcp_echo_interval" type="number" placeholder="30" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-lcp-echo-failure`" :label="t('nodes.lcp_echo_failure')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.lcp_echo_failure" type="number" placeholder="4" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-idle-timeout`" :label="t('nodes.idle_timeout')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
+                            </template>
+                          </FormField>
+                        </template>
+                        <template v-if="proto === 'ikev2'">
+                          <FormField :name="`${proto}-dpd-interval`" :label="t('nodes.dpd_interval')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dpd_interval" type="number" placeholder="30" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-dpd-timeout`" :label="t('nodes.dpd_timeout')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.dpd_timeout" type="number" placeholder="150" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-rekey-time`" :label="t('nodes.rekey_time')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.rekey_time" placeholder="4h" />
+                            </template>
+                          </FormField>
+                        </template>
+                        <template v-if="proto === 'ssh'">
+                          <FormField :name="`${proto}-max-sessions`" :label="t('nodes.max_sessions')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.max_sessions" type="number" placeholder="10" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-idle-timeout`" :label="t('nodes.idle_timeout')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-accounting-enabled`" :label="t('nodes.accounting_enabled')">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.accounting_enabled" @change="configForm.extra_json.accounting_enabled = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-accounting-interval`" :label="t('nodes.accounting_interval')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.accounting_interval" type="number" placeholder="300" />
+                            </template>
+                          </FormField>
+                        </template>
+                      </div>
+                    </div>
+
+                    <!-- Logging & Advanced Group -->
+                    <div v-if="showAdvanced" class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_logging') }}</h5>
+                      <div class="protocol-form__grid">
+                        <FormField :name="`${proto}-enable-logs`" :label="t('nodes.enable_logs')">
+                          <template #default>
+                            <label class="toggle-switch">
+                              <input type="checkbox" :checked="configForm.enable_logs" @change="configForm.enable_logs = ($event.target as HTMLInputElement).checked" />
+                              <span class="toggle-switch__slider" />
+                            </label>
+                          </template>
+                        </FormField>
+                        <template v-if="proto === 'openvpn'">
+                          <FormField :name="`${proto}-verb`" :label="t('nodes.verbosity')">
+                            <template #default="{ fieldId }">
+                              <Input :id="fieldId" v-model="configForm.extra_json.verb" type="number" placeholder="3" />
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-comp-lzo`" :label="t('nodes.comp_lzo')" :class="{ 'field--danger': isDangerField(proto, 'comp_lzo') }">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.comp_lzo" @change="configForm.extra_json.comp_lzo = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </FormField>
+                          <FormField :name="`${proto}-custom-directives`" :label="t('nodes.custom_directives')" class="form-group__full-width">
+                            <template #default="{ fieldId }">
+                              <Textarea :id="fieldId" v-model="configForm.extra_json.custom_directives" :rows="3" placeholder="One directive per line" />
+                            </template>
+                          </FormField>
+                        </template>
+                      </div>
+                    </div>
+
+                    <div class="protocol-form__actions">
+                      <Button variant="ghost" size="sm" @click="showConfigPreview = !showConfigPreview">
+                        {{ showConfigPreview ? t('nodes.hide_preview') : t('nodes.show_preview') }}
+                      </Button>
+                      <Button variant="ghost" size="sm" @click="resetToDefaults">{{ t('nodes.reset_defaults') }}</Button>
+                      <Button variant="ghost" size="sm" @click="cancelEdit">{{ t('btn.cancel') }}</Button>
+                      <Button variant="primary" size="sm" :loading="savingConfig" @click="saveConfig">{{ t('nodes.save_config') }}</Button>
+                    </div>
+
+                    <!-- Config Preview Panel -->
+                    <div v-if="showConfigPreview" class="config-preview">
+                      <h5 class="config-preview__title">{{ t('nodes.config_preview') }}</h5>
+                      <pre class="config-preview__code"><code>{{ getConfigPreview().join('\n') }}</code></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </Tabs>
+  </div>
+</template>
+
+
+<style scoped>
+.nodes-view { display: flex; flex-direction: column; gap: var(--space-5); }
+.page-header { display: flex; align-items: center; justify-content: flex-end; }
+
+.token-banner { padding: var(--space-3) var(--space-4); background: rgba(34, 211, 238, 0.08); border: 1px solid var(--color-accent); border-radius: var(--radius-lg); }
+.token-banner code { background: var(--color-surface-2); padding: 2px 6px; border-radius: var(--radius-sm); font-size: var(--text-sm); word-break: break-all; }
+
+.panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.panel-title { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--font-semibold); }
+.node-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+.form-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+.nodes-content, .cores-content { padding: var(--space-4) 0; }
+.nodes-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-4); }
+
+.node-card { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); display: flex; flex-direction: column; gap: var(--space-3); }
+.node-card__header { display: flex; flex-direction: column; gap: var(--space-1); }
+.node-card__title { display: flex; align-items: center; justify-content: space-between; }
+.node-card__name { margin: 0; font-size: var(--text-base); font-weight: var(--font-semibold); }
+.node-card__ip { font-size: var(--text-xs); }
+
+
+.node-card__metrics { display: flex; flex-direction: column; gap: var(--space-2); }
+.metric-row { display: flex; align-items: center; gap: var(--space-2); }
+.metric-row__label { font-size: var(--text-xs); color: var(--color-muted); width: 32px; }
+.metric-row__bar { flex: 1; height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden; }
+.metric-row__fill { height: 100%; background: var(--color-primary); border-radius: 3px; transition: width 0.3s ease; }
+.metric-row__fill--accent { background: var(--color-accent); }
+.metric-row__fill--warning { background: var(--color-warning); }
+.metric-row__val { font-size: var(--text-xs); color: var(--color-muted); width: 36px; text-align: right; }
+.metric-text { font-size: var(--text-xs); padding-top: var(--space-1); }
+
+.node-card__actions { border-top: 1px solid var(--color-border); padding-top: var(--space-2); display: flex; gap: var(--space-2); }
+
+/* ─── Cores / Protocol Cards ─────────────────────────────────────────────── */
+.cores-grid { display: flex; flex-direction: column; gap: var(--space-5); }
+.core-node-title { margin: 0 0 var(--space-3); font-size: var(--text-base); font-weight: var(--font-semibold); }
+.protocol-cards { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.protocol-card {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: opacity 0.2s ease;
+}
+.protocol-card--disabled { opacity: 0.5; }
+
+
+.protocol-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.protocol-card__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 120px;
+}
+.protocol-card__icon { font-size: var(--text-lg); }
+.protocol-card__name { font-size: var(--text-sm); font-weight: var(--font-semibold); }
+.protocol-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+}
+.protocol-card__port { font-size: var(--text-xs); }
+.protocol-card__network { font-size: var(--text-xs); }
+.protocol-card__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* Toggle Switch */
+.toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-switch__slider {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--color-border);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+.toggle-switch__slider::before {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+.toggle-switch input:checked + .toggle-switch__slider { background: var(--color-primary); }
+.toggle-switch input:checked + .toggle-switch__slider::before { transform: translateX(16px); }
+
+
+/* Protocol Form */
+.protocol-form {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.protocol-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+.protocol-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* Form Groups */
+.form-group {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.form-group:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.form-group__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.form-group__desc {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+.form-group__full-width {
+  grid-column: 1 / -1;
+}
+
+/* Danger field indicator */
+.field--danger {
+  border-left: 3px solid rgba(239, 68, 68, 0.5);
+  padding-left: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.text-muted { color: var(--color-muted); }
+.text-sm { font-size: var(--text-sm); }
+
+/* Responsive: single column on mobile */
+@media (max-width: 640px) {
+  .protocol-form__grid {
+    grid-template-columns: 1fr;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .nodes-grid {
+    grid-template-columns: 1fr;
+  }
+  .protocol-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .protocol-card__controls {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+
+/* Node Edit Form */
+.node-edit-form {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* Advanced Toggle */
+.advanced-toggle {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+/* Validation indicators */
+.field--invalid :deep(input) {
+  border-color: var(--color-danger, #ef4444) !important;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+}
+.validation-msg {
+  font-size: var(--text-xs);
+  color: var(--color-danger, #ef4444);
+  margin-top: 2px;
+  display: block;
+}
+
+/* Config Preview */
+.config-preview {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.config-preview__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+.config-preview__code {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Chip Field */
+.chip-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-height: 24px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+  border-radius: 9999px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  max-width: 100%;
+  word-break: break-all;
+}
+.chip--key {
+  font-family: monospace;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.chip__remove {
+  border: none;
+  background: none;
+  color: var(--color-danger, #ef4444);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.7;
+  transition: opacity var(--duration-fast);
+}
+.chip__remove:hover { opacity: 1; }
+.chip-input-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.chip-input-row :deep(input) {
+  flex: 1;
+}
+
+/* Drag handle */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: grab;
+  color: var(--color-muted);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  letter-spacing: -1px;
+  transition: color var(--duration-fast), background var(--duration-fast);
+  user-select: none;
+  flex-shrink: 0;
+}
+.drag-handle:hover { color: var(--color-text); background: rgba(0, 0, 0, 0.05); }
+.drag-handle:active { cursor: grabbing; }
+
+/* Sortable states */
+.nodes-grid--dragging { cursor: grabbing; }
+.nodes-grid :deep(.sortable-ghost) { opacity: 0.4; background: rgba(59, 130, 246, 0.08); border-radius: var(--radius-lg); }
+.nodes-grid :deep(.sortable-chosen) { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); border-radius: var(--radius-lg); }
+
+</style>

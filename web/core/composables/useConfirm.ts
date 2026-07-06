@@ -21,11 +21,11 @@ export interface UseConfirmReturn {
   confirm(options: ConfirmOptions): Promise<boolean>
   /** Whether the dialog is currently open */
   isOpen: Ref<boolean>
-  /** Current dialog options (read by KConfirmDialog) */
+  /** Current dialog options (read by ConfirmDialog) */
   options: Ref<ConfirmOptions>
-  /** Called by KConfirmDialog when user confirms */
+  /** Called by ConfirmDialog when user confirms */
   handleConfirm(): void
-  /** Called by KConfirmDialog when user cancels */
+  /** Called by ConfirmDialog when user cancels */
   handleCancel(): void
 }
 
@@ -33,7 +33,7 @@ export interface UseConfirmReturn {
  * Composable for programmatic confirmation dialogs.
  *
  * Uses a singleton pattern with module-level refs so that a single
- * KConfirmDialog component can serve the entire application.
+ * ConfirmDialog component can serve the entire application.
  *
  * @example
  * ```ts

@@ -4,7 +4,7 @@
  * Minimal style: two small fields side by side with labels.
  */
 import { computed } from 'vue'
-import KInput from '@koris/ui/KInput.vue'
+import Input from '@koris/ui/Input.vue'
 
 const props = defineProps<{
   speedLimit: number
@@ -29,7 +29,7 @@ function onConnectionInput(value: string | number) {
   <div class="advanced-settings">
     <div class="advanced-settings__field">
       <label class="advanced-settings__label">Speed Limit (Mbps)</label>
-      <KInput
+      <Input
         :model-value="String(props.speedLimit)"
         type="number"
         placeholder="0 = unlimited"
@@ -38,7 +38,7 @@ function onConnectionInput(value: string | number) {
     </div>
     <div class="advanced-settings__field">
       <label class="advanced-settings__label">Connection Limit</label>
-      <KInput
+      <Input
         :model-value="String(props.connectionLimit)"
         type="number"
         placeholder="0 = unlimited"

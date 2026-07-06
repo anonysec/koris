@@ -2,20 +2,20 @@
   <div class="profile-fields">
     <!-- Row 1: Username + Status side by side (hidden in create mode) -->
     <div v-if="mode !== 'create'" class="profile-fields__row">
-      <KFormField v-if="showUsername" name="username" :label="t('customer.username')">
+      <FormField v-if="showUsername" name="username" :label="t('customer.username')">
         <template #default="{ fieldId, describedBy }">
-          <KInput
+          <Input
             :id="fieldId"
             :model-value="modelValue.username"
             :aria-describedby="describedBy"
             disabled
           />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="status" :label="t('customer.status')">
+      <FormField name="status" :label="t('customer.status')">
         <template #default="{ fieldId, describedBy }">
-          <KSelect
+          <Select
             :id="fieldId"
             :model-value="modelValue.status"
             :options="statusOptions"
@@ -23,15 +23,15 @@
             @update:model-value="updateField('status', $event)"
           />
         </template>
-      </KFormField>
+      </FormField>
     </div>
 
     <!-- Row 2: Plan + Data Limit -->
     <div class="profile-fields__row">
       <!-- Plan -->
-      <KFormField name="plan" :label="t('user.plan')">
+      <FormField name="plan" :label="t('user.plan')">
         <template #default="{ fieldId }">
-          <KSelect
+          <Select
             :id="fieldId"
             :model-value="modelValue.plan_id"
             :options="planOptions"
@@ -39,13 +39,13 @@
             @update:model-value="updateField('plan_id', $event)"
           />
         </template>
-      </KFormField>
+      </FormField>
 
       <!-- Data Limit (GB only, decimals supported) -->
-      <KFormField name="data-limit" :label="t('customer.data_limit')">
+      <FormField name="data-limit" :label="t('customer.data_limit')">
         <template #default="{ fieldId }">
           <div class="profile-fields__data-limit-wrapper">
-            <KInput
+            <Input
               :id="fieldId"
               :model-value="modelValue.data_limit"
               type="number"
@@ -58,7 +58,7 @@
             <span class="profile-fields__data-limit-suffix">GB</span>
           </div>
         </template>
-      </KFormField>
+      </FormField>
     </div>
 
     <!-- Expiry Date (own row with badge in label) -->
@@ -106,9 +106,9 @@
     </div>
 
     <!-- Note -->
-    <KFormField name="note" :label="t('customer.note')">
+    <FormField name="note" :label="t('customer.note')">
       <template #default="{ fieldId, describedBy }">
-        <KTextarea
+        <Textarea
           :id="fieldId"
           :model-value="modelValue.note"
           :aria-describedby="describedBy"
@@ -117,10 +117,10 @@
           @update:model-value="updateField('note', $event)"
         />
       </template>
-    </KFormField>
+    </FormField>
 
     <!-- Proxy settings — styled cards (no checkboxes) -->
-    <KFormField name="proxy-settings" :label="t('customer.proxy_settings')">
+    <FormField name="proxy-settings" :label="t('customer.proxy_settings')">
       <template #default>
         <div class="profile-fields__proxy-list">
           <button
@@ -153,10 +153,10 @@
           </button>
         </div>
       </template>
-    </KFormField>
+    </FormField>
 
     <!-- Avatar -->
-    <KFormField name="avatar" :label="t('user.avatar')">
+    <FormField name="avatar" :label="t('user.avatar')">
       <template #default>
         <div class="profile-fields__emoji-picker">
           <button
@@ -169,7 +169,7 @@
           >{{ em }}</button>
         </div>
       </template>
-    </KFormField>
+    </FormField>
   </div>
 </template>
 
@@ -177,10 +177,10 @@
 import { ref, computed } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import { usePlansStore } from '@/stores/plans'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import KTextarea from '@koris/ui/KTextarea.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Select from '@koris/ui/Select.vue'
+import Textarea from '@koris/ui/Textarea.vue'
 import { computeExpiryDate, type ExpiryOffset } from '@/utils/computeExpiryDate'
 
 const { t } = useI18n()
@@ -399,7 +399,7 @@ function setProtocolOption(protocol: string, value: string) {
   pointer-events: none;
 }
 
-/* ─── Custom label for expiry (since KFormField doesn't support #label slot) */
+/* ─── Custom label for expiry (since FormField doesn't support #label slot) */
 .profile-fields__field-wrapper {
   display: flex;
   flex-direction: column;

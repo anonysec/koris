@@ -3,11 +3,11 @@ import { ref, computed } from 'vue'
 import { useNodesStore, type NodeFormData } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KTextarea from '@koris/ui/KTextarea.vue'
-import KAlert from '@koris/ui/KAlert.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Textarea from '@koris/ui/Textarea.vue'
+import Alert from '@koris/ui/Alert.vue'
 
 const emit = defineEmits<{
   (e: 'created', nodeId: number): void
@@ -95,55 +95,55 @@ function resetForm() {
   <div class="node-add-slide">
     <div class="node-add-slide__header">
       <h3 class="node-add-slide__title">{{ t('nodes.add_node') }}</h3>
-      <KButton variant="ghost" size="sm" @click="emit('close')">✕</KButton>
+      <Button variant="ghost" size="sm" @click="emit('close')">✕</Button>
     </div>
 
     <p class="node-add-slide__hint">
       {{ t('nodes.add_hint') }}
     </p>
 
-    <KAlert v-if="feedback" :variant="feedback.type" closable @close="feedback = null">
+    <Alert v-if="feedback" :variant="feedback.type" closable @close="feedback = null">
       {{ feedback.message }}
-    </KAlert>
+    </Alert>
 
     <form class="node-add-slide__form" @submit.prevent="handleSubmit">
-      <KFormField name="node-name" :label="t('nodes.node_name')" hint="Optional — defaults to address">
+      <FormField name="node-name" :label="t('nodes.node_name')" hint="Optional — defaults to address">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="name" placeholder="e.g. de-1, us-west" />
+          <Input :id="fieldId" v-model="name" placeholder="e.g. de-1, us-west" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-address" :label="t('nodes.address')" :error="errors.address">
+      <FormField name="node-address" :label="t('nodes.address')" :error="errors.address">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="address" placeholder="IP or hostname (e.g. 185.1.2.3)" />
+          <Input :id="fieldId" v-model="address" placeholder="IP or hostname (e.g. 185.1.2.3)" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-port" :label="t('label.port')" :error="errors.port">
+      <FormField name="node-port" :label="t('label.port')" :error="errors.port">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="port" type="number" placeholder="2083" />
+          <Input :id="fieldId" v-model="port" type="number" placeholder="2083" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-api-key" :label="t('nodes.api_key')" :error="errors.apiKey" hint="Shown when knode is installed">
+      <FormField name="node-api-key" :label="t('nodes.api_key')" :error="errors.apiKey" hint="Shown when knode is installed">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="apiKey" type="password" placeholder="Paste from knode install output" />
+          <Input :id="fieldId" v-model="apiKey" type="password" placeholder="Paste from knode install output" />
         </template>
-      </KFormField>
+      </FormField>
 
-      <KFormField name="node-cert" :label="t('nodes.certificate')" :error="errors.certPem" hint="CA certificate from knode install output">
+      <FormField name="node-cert" :label="t('nodes.certificate')" :error="errors.certPem" hint="CA certificate from knode install output">
         <template #default="{ fieldId }">
-          <KTextarea :id="fieldId" v-model="certPem" :rows="5" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" />
+          <Textarea :id="fieldId" v-model="certPem" :rows="5" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" />
         </template>
-      </KFormField>
+      </FormField>
 
       <div class="node-add-slide__actions">
-        <KButton type="submit" variant="primary" :loading="saving" :disabled="!isValid">
+        <Button type="submit" variant="primary" :loading="saving" :disabled="!isValid">
           {{ t('nodes.test_and_save') }}
-        </KButton>
-        <KButton variant="ghost" @click="emit('close')">
+        </Button>
+        <Button variant="ghost" @click="emit('close')">
           {{ t('btn.cancel') }}
-        </KButton>
+        </Button>
       </div>
     </form>
   </div>

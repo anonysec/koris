@@ -4,10 +4,10 @@ import { useWireGuard } from '@/composables/useWireGuard'
 import { useNodesStore } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KSelect from '@koris/ui/KSelect.vue'
-import KInput from '@koris/ui/KInput.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Select from '@koris/ui/Select.vue'
+import Input from '@koris/ui/Input.vue'
 
 const emit = defineEmits<{
   close: []
@@ -87,41 +87,41 @@ onMounted(() => {
             <span class="assigned-ip__label">{{ t('wireguard.assigned_ip') }}:</span>
             <code class="assigned-ip__value">{{ assignedIp }}</code>
           </div>
-          <KButton variant="primary" @click="handleClose">{{ t('btn.close') }}</KButton>
+          <Button variant="primary" @click="handleClose">{{ t('btn.close') }}</Button>
         </div>
 
         <!-- Create form -->
         <form v-else @submit.prevent="handleCreate">
           <div class="form-stack">
-            <KFormField name="peer-node" :label="t('wireguard.select_node')" required>
+            <FormField name="peer-node" :label="t('wireguard.select_node')" required>
               <template #default="{ fieldId }">
-                <KSelect
+                <Select
                   :id="fieldId"
                   v-model="selectedNode"
                   :options="nodeOptions"
                   :placeholder="t('wireguard.select_node_placeholder')"
                 />
               </template>
-            </KFormField>
+            </FormField>
 
-            <KFormField name="peer-customer" :label="t('wireguard.customer_optional')">
+            <FormField name="peer-customer" :label="t('wireguard.customer_optional')">
               <template #default="{ fieldId }">
-                <KInput
+                <Input
                   :id="fieldId"
                   v-model="customerSearch"
                   :placeholder="t('wireguard.customer_search_placeholder')"
                 />
               </template>
-            </KFormField>
+            </FormField>
 
             <p class="hint-text">{{ t('wireguard.ip_auto_assigned_hint') }}</p>
           </div>
 
           <div class="dialog-actions">
-            <KButton variant="ghost" @click="handleClose">{{ t('btn.cancel') }}</KButton>
-            <KButton type="submit" variant="primary" :loading="creating">
+            <Button variant="ghost" @click="handleClose">{{ t('btn.cancel') }}</Button>
+            <Button type="submit" variant="primary" :loading="creating">
               {{ t('wireguard.create_peer') }}
-            </KButton>
+            </Button>
           </div>
         </form>
       </div>

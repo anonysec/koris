@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 interface Props {
   planName: string
@@ -32,7 +32,7 @@ const statusVariant = computed(() => {
   <div class="plan-card">
     <div class="plan-card__header">
       <span class="plan-card__label">Current Plan</span>
-      <KStatusPill :status="statusVariant">{{ status }}</KStatusPill>
+      <StatusPill :status="statusVariant">{{ status }}</StatusPill>
     </div>
     <h3 class="plan-card__name">{{ planName }}</h3>
     <div class="plan-card__expiry">

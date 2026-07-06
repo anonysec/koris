@@ -9,7 +9,7 @@
  */
 import { computed } from 'vue'
 import KExpandableRow from '@koris/ui/KExpandableRow.vue'
-import KUsageBar from '@koris/ui/KUsageBar.vue'
+import UsageBar from '@koris/ui/UsageBar.vue'
 import type { Customer } from '@koris/types'
 import { formatBytes } from '@/utils/formatBytes'
 
@@ -151,7 +151,7 @@ function handleQR() {
       <div class="expandable-row__summary">
         <!-- Usage bar (current period) -->
         <div class="expandable-row__usage">
-          <KUsageBar
+          <UsageBar
             :used="currentUsed"
             :limit="dataLimit"
             :show-label="true"

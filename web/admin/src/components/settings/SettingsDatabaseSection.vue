@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useI18n } from '@koris/composables/useI18n'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 const { t } = useI18n()
 const store = useSettingsStore()
@@ -32,7 +32,7 @@ const backendLabel = computed(() => {
       </div>
       <div class="info-item">
         <span class="info-item__label">{{ t('settings.db_status') }}</span>
-        <KStatusPill :status="db.connected ? 'online' : 'offline'" size="sm" />
+        <StatusPill :status="db.connected ? 'online' : 'offline'" size="sm" />
       </div>
       <div class="info-item">
         <span class="info-item__label">{{ t('settings.db_version') }}</span>
@@ -45,7 +45,7 @@ const backendLabel = computed(() => {
         </div>
         <div class="info-item">
           <span class="info-item__label">{{ t('settings.hypertable_status') }}</span>
-          <KStatusPill :status="db.hypertableEnabled ? 'online' : 'offline'" size="sm" />
+          <StatusPill :status="db.hypertableEnabled ? 'online' : 'offline'" size="sm" />
         </div>
       </template>
     </div>

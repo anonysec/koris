@@ -2,11 +2,11 @@
 import { ref, computed, watch } from 'vue'
 import { useNodesStore, type KnodeNode, type NodeFormData } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
-import KTextarea from '@koris/ui/KTextarea.vue'
-import KAlert from '@koris/ui/KAlert.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
+import Textarea from '@koris/ui/Textarea.vue'
+import Alert from '@koris/ui/Alert.vue'
 
 const props = defineProps<{
   node: KnodeNode
@@ -115,53 +115,53 @@ function clearField(field: 'apiKey' | 'clientCertPem' | 'clientKeyPem' | 'caCert
   <form class="node-edit-form" @submit.prevent="handleSubmit">
     <h3 class="node-edit-form__title">Edit Node</h3>
 
-    <KAlert v-if="feedback" :variant="feedback.type" closable @close="feedback = null">
+    <Alert v-if="feedback" :variant="feedback.type" closable @close="feedback = null">
       {{ feedback.message }}
-    </KAlert>
+    </Alert>
 
-    <KFormField name="node-name" label="Name">
+    <FormField name="node-name" label="Name">
       <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="name" placeholder="Node name" />
+        <Input :id="fieldId" v-model="name" placeholder="Node name" />
       </template>
-    </KFormField>
+    </FormField>
 
-    <KFormField name="node-address" label="Address" :error="errors.address">
+    <FormField name="node-address" label="Address" :error="errors.address">
       <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="address" placeholder="IP or hostname" />
+        <Input :id="fieldId" v-model="address" placeholder="IP or hostname" />
       </template>
-    </KFormField>
+    </FormField>
 
-    <KFormField name="node-port" label="Port" :error="errors.port">
+    <FormField name="node-port" label="Port" :error="errors.port">
       <template #default="{ fieldId }">
-        <KInput :id="fieldId" v-model="port" type="number" />
+        <Input :id="fieldId" v-model="port" type="number" />
       </template>
-    </KFormField>
+    </FormField>
 
-    <KFormField name="node-api-key" label="API Key" hint="Clear to enter a new key">
+    <FormField name="node-api-key" label="API Key" hint="Clear to enter a new key">
       <template #default="{ fieldId }">
         <div class="node-edit-form__masked-field">
-          <KInput
+          <Input
             :id="fieldId"
             v-model="apiKey"
             :type="apiKey === MASKED ? 'text' : 'password'"
             :disabled="apiKey === MASKED"
           />
-          <KButton
+          <Button
             v-if="apiKey === MASKED"
             variant="ghost"
             size="sm"
             @click="clearField('apiKey')"
           >
             Change
-          </KButton>
+          </Button>
         </div>
       </template>
-    </KFormField>
+    </FormField>
 
-    <KFormField name="node-client-cert" label="Client Certificate (PEM)" :error="errors.clientCertPem">
+    <FormField name="node-client-cert" label="Client Certificate (PEM)" :error="errors.clientCertPem">
       <template #default="{ fieldId }">
         <div class="node-edit-form__masked-field">
-          <KTextarea
+          <Textarea
             v-if="clientCertPem !== MASKED"
             :id="fieldId"
             v-model="clientCertPem"
@@ -170,18 +170,18 @@ function clearField(field: 'apiKey' | 'clientCertPem' | 'clientKeyPem' | 'caCert
           />
           <div v-else class="node-edit-form__masked-value">
             <span class="node-edit-form__masked-text">{{ MASKED }}</span>
-            <KButton variant="ghost" size="sm" @click="clearField('clientCertPem')">
+            <Button variant="ghost" size="sm" @click="clearField('clientCertPem')">
               Change
-            </KButton>
+            </Button>
           </div>
         </div>
       </template>
-    </KFormField>
+    </FormField>
 
-    <KFormField name="node-client-key" label="Client Key (PEM)" :error="errors.clientKeyPem">
+    <FormField name="node-client-key" label="Client Key (PEM)" :error="errors.clientKeyPem">
       <template #default="{ fieldId }">
         <div class="node-edit-form__masked-field">
-          <KTextarea
+          <Textarea
             v-if="clientKeyPem !== MASKED"
             :id="fieldId"
             v-model="clientKeyPem"
@@ -190,18 +190,18 @@ function clearField(field: 'apiKey' | 'clientCertPem' | 'clientKeyPem' | 'caCert
           />
           <div v-else class="node-edit-form__masked-value">
             <span class="node-edit-form__masked-text">{{ MASKED }}</span>
-            <KButton variant="ghost" size="sm" @click="clearField('clientKeyPem')">
+            <Button variant="ghost" size="sm" @click="clearField('clientKeyPem')">
               Change
-            </KButton>
+            </Button>
           </div>
         </div>
       </template>
-    </KFormField>
+    </FormField>
 
-    <KFormField name="node-ca-cert" label="CA Certificate (PEM)" :error="errors.caCertPem">
+    <FormField name="node-ca-cert" label="CA Certificate (PEM)" :error="errors.caCertPem">
       <template #default="{ fieldId }">
         <div class="node-edit-form__masked-field">
-          <KTextarea
+          <Textarea
             v-if="caCertPem !== MASKED"
             :id="fieldId"
             v-model="caCertPem"
@@ -210,22 +210,22 @@ function clearField(field: 'apiKey' | 'clientCertPem' | 'clientKeyPem' | 'caCert
           />
           <div v-else class="node-edit-form__masked-value">
             <span class="node-edit-form__masked-text">{{ MASKED }}</span>
-            <KButton variant="ghost" size="sm" @click="clearField('caCertPem')">
+            <Button variant="ghost" size="sm" @click="clearField('caCertPem')">
               Change
-            </KButton>
+            </Button>
           </div>
         </div>
       </template>
-    </KFormField>
+    </FormField>
 
-    <KButton
+    <Button
       type="submit"
       variant="primary"
       :loading="saving"
       :disabled="!isValid || !hasChanges"
     >
       Test &amp; Save
-    </KButton>
+    </Button>
   </form>
 </template>
 

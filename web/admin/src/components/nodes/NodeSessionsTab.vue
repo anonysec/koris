@@ -2,8 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useNodesStore, type VPNSession } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KSkeleton from '@koris/ui/KSkeleton.vue'
+import Button from '@koris/ui/Button.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
 
 const props = defineProps<{
   nodeId: number
@@ -61,12 +61,12 @@ onMounted(loadSessions)
   <div class="node-sessions-tab">
     <div class="node-sessions-tab__header">
       <h4 class="node-sessions-tab__title">Active Sessions</h4>
-      <KButton variant="ghost" size="sm" :loading="loading" @click="loadSessions">
+      <Button variant="ghost" size="sm" :loading="loading" @click="loadSessions">
         Refresh
-      </KButton>
+      </Button>
     </div>
 
-    <KSkeleton v-if="loading" />
+    <Skeleton v-if="loading" />
 
     <div v-else-if="sessions.length === 0" class="node-sessions-tab__empty">
       No active sessions
@@ -96,14 +96,14 @@ onMounted(loadSessions)
             <td>{{ formatBytes(session.rxBytes) }}</td>
             <td>{{ formatBytes(session.txBytes) }}</td>
             <td>
-              <KButton
+              <Button
                 variant="danger"
                 size="sm"
                 :loading="disconnecting === session.username"
                 @click="handleDisconnect(session.username)"
               >
                 Disconnect
-              </KButton>
+              </Button>
             </td>
           </tr>
         </tbody>

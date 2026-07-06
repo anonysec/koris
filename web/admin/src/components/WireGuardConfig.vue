@@ -3,9 +3,9 @@ import { ref, watch, onMounted } from 'vue'
 import { useWireGuard, type WireGuardNodeConfig } from '@/composables/useWireGuard'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
-import KButton from '@koris/ui/KButton.vue'
-import KFormField from '@koris/ui/KFormField.vue'
-import KInput from '@koris/ui/KInput.vue'
+import Button from '@koris/ui/Button.vue'
+import FormField from '@koris/ui/FormField.vue'
+import Input from '@koris/ui/Input.vue'
 
 const props = defineProps<{
   nodeId: number
@@ -80,35 +80,35 @@ onMounted(loadFromConfig)
 
     <form class="wg-config-form" @submit.prevent="handleSave">
       <div class="form-grid">
-        <KFormField name="wg-port" :label="t('wireguard.listen_port')">
+        <FormField name="wg-port" :label="t('wireguard.listen_port')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.port" type="number" placeholder="51820" />
+            <Input :id="fieldId" v-model="form.port" type="number" placeholder="51820" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="wg-network" :label="t('wireguard.network_cidr')">
+        <FormField name="wg-network" :label="t('wireguard.network_cidr')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.network" placeholder="10.66.66.0/24" />
+            <Input :id="fieldId" v-model="form.network" placeholder="10.66.66.0/24" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="wg-dns1" :label="t('wireguard.primary_dns')">
+        <FormField name="wg-dns1" :label="t('wireguard.primary_dns')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.dns_1" placeholder="1.1.1.1" />
+            <Input :id="fieldId" v-model="form.dns_1" placeholder="1.1.1.1" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="wg-dns2" :label="t('wireguard.secondary_dns')">
+        <FormField name="wg-dns2" :label="t('wireguard.secondary_dns')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.dns_2" placeholder="8.8.8.8" />
+            <Input :id="fieldId" v-model="form.dns_2" placeholder="8.8.8.8" />
           </template>
-        </KFormField>
+        </FormField>
 
-        <KFormField name="wg-mtu" :label="t('wireguard.mtu')">
+        <FormField name="wg-mtu" :label="t('wireguard.mtu')">
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="form.mtu" type="number" placeholder="1420" />
+            <Input :id="fieldId" v-model="form.mtu" type="number" placeholder="1420" />
           </template>
-        </KFormField>
+        </FormField>
       </div>
 
       <!-- Gaming Optimize Toggle -->
@@ -124,9 +124,9 @@ onMounted(loadFromConfig)
       </div>
 
       <div class="form-actions">
-        <KButton type="submit" variant="primary" :loading="saving">
+        <Button type="submit" variant="primary" :loading="saving">
           {{ t('wireguard.save_config') }}
-        </KButton>
+        </Button>
       </div>
     </form>
   </div>

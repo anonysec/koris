@@ -4,9 +4,9 @@ import Sortable from 'sortablejs'
 import { useDomainsStore, type ProtocolBinding, type VpnDomain } from '@/stores/domains'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
-import KButton from '@koris/ui/KButton.vue'
-import KModal from '@koris/ui/KModal.vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import Button from '@koris/ui/Button.vue'
+import Modal from '@koris/ui/Modal.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 /**
  * ProtocolBindingsPanel — Per-node protocol binding management.
@@ -247,7 +247,7 @@ function formatProtocolLabel(protocol: string): string {
           <span class="protocol-group__count">
             {{ bindingsByProtocol[protocol].length }} domain{{ bindingsByProtocol[protocol].length !== 1 ? 's' : '' }}
           </span>
-          <KButton
+          <Button
             variant="ghost"
             size="sm"
             icon="+"
@@ -255,7 +255,7 @@ function formatProtocolLabel(protocol: string): string {
             @click="openDomainPicker(protocol)"
           >
             Add
-          </KButton>
+          </Button>
         </div>
 
         <!-- Bindings List (sortable) -->
@@ -296,7 +296,7 @@ function formatProtocolLabel(protocol: string): string {
 
             <!-- Status / Warning -->
             <div class="binding-status">
-              <KStatusPill
+              <StatusPill
                 v-if="isBlocked(binding)"
                 status="blocked"
                 size="sm"
@@ -313,7 +313,7 @@ function formatProtocolLabel(protocol: string): string {
             </div>
 
             <!-- Remove Button -->
-            <KButton
+            <Button
               variant="ghost"
               size="sm"
               icon="×"
@@ -331,7 +331,7 @@ function formatProtocolLabel(protocol: string): string {
     </div>
 
     <!-- Domain Picker Modal -->
-    <KModal
+    <Modal
       :open="showDomainPicker"
       :title="`Add Domain to ${formatProtocolLabel(pickerProtocol)}`"
       width="440px"
@@ -355,7 +355,7 @@ function formatProtocolLabel(protocol: string): string {
           </button>
         </div>
       </div>
-    </KModal>
+    </Modal>
   </div>
 </template>
 

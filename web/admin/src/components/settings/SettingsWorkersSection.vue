@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useI18n } from '@koris/composables/useI18n'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
+import StatusPill from '@koris/ui/StatusPill.vue'
 
 const { t } = useI18n()
 const store = useSettingsStore()
@@ -38,7 +38,7 @@ const healthStatus = computed(() => {
       </div>
       <div class="info-item">
         <span class="info-item__label">{{ t('settings.workers_health') }}</span>
-        <KStatusPill :status="healthStatus" size="sm" />
+        <StatusPill :status="healthStatus" size="sm" />
       </div>
     </div>
     <div v-else class="info-empty">{{ t('settings.loading') }}</div>
