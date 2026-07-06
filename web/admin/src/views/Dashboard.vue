@@ -222,7 +222,7 @@ function formatDuration(seconds: number): string {
         <div class="panel-header">
           <div>
             <div class="panel-title">Usage</div>
-            <div class="panel-subtitle">Monitor admin traffic usage over time</div>
+            <div class="panel-subtitle">Total this period: <strong style="color: var(--color-text)">{{ formatBytes(totalUsage) }}</strong></div>
           </div>
           <select v-model="selectedPeriod" class="period-select" aria-label="Select time period">
             <option value="1d">24 hours</option>

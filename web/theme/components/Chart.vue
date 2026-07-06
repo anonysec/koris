@@ -198,20 +198,29 @@
           'k-chart__donut-segment--animated': shouldAnimate,
           'k-chart__donut-segment--active': hoveredIndex === i,
         }"
-        stroke-linecap="round"
+        stroke-linecap="butt"
         @mouseenter="handlePointHover(i, $event)"
         @mouseleave="handlePointLeave"
         @click="handlePointClick(i, $event)"
       />
+      <!-- center: total (default) or hovered value -->
       <text
-        v-if="hoveredIndex !== null && type === 'donut'"
         :x="donutSize / 2"
-        :y="donutSize / 2"
+        :y="donutSize / 2 - (hoveredIndex !== null ? 6 : 0)"
         text-anchor="middle"
         dominant-baseline="middle"
-        class="k-chart__donut-label"
+        class="k-chart__donut-total"
       >
-        {{ data[hoveredIndex]?.label }}
+        {{ hoveredIndex !== null ? data[hoveredIndex]?.value : donutTotal }}
+      </text>
+      <text
+        :x="donutSize / 2"
+        :y="donutSize / 2 + 14"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        class="k-chart__donut-sub"
+      >
+        {{ hoveredIndex !== null ? data[hoveredIndex]?.label : "total" }}
       </text>
     </svg>
 
@@ -415,6 +424,10 @@ const computedDonutSegments = computed(() => {
   })
 })
 
+const donutTotal = computed(() =>
+  props.data.reduce((sum, d) => sum + (d.value || 0), 0)
+)
+
 const tooltipData = computed(() => {
   if (hoveredIndex.value === null) return null
   return props.data[hoveredIndex.value] || null
@@ -570,6 +583,18 @@ function handlePointClick(index: number, event: MouseEvent) {
   fill: var(--color-text);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
+}
+.k-chart__donut-total {
+  fill: var(--color-text);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-extrabold);
+  font-variant-numeric: tabular-nums;
+}
+.k-chart__donut-sub {
+  fill: var(--color-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
 }
 
 /* ─── Tooltip ─── */

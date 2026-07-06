@@ -7,6 +7,7 @@ import { useRealtimeStore } from '@/stores/realtime'
 import { useAuthStore } from '@/stores/auth'
 import type { BulkActionRequest } from '@/stores/customers'
 import DataTable from '@koris/ui/DataTable.vue'
+import PageHeader from '@koris/ui/PageHeader.vue'
 import Button from '@koris/ui/Button.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
 import Input from '@koris/ui/Input.vue'
@@ -905,22 +906,25 @@ onMounted(async () => {
     <!-- Main content area (table side) -->
     <div class="customers-view__main">
     <!-- Header -->
-    <header class="page-header">
-      <div class="page-header__actions">
-      </div>
-      <Button
-        v-if="currentMainTab === 'users'"
-        variant="primary"
-        icon="+"
-        @click="openNewUserSlideOver"
-      >{{ t('customers.new_user') }}</Button>
-      <Button
-        v-if="currentMainTab === 'resellers'"
-        variant="primary"
-        icon="+"
-        @click="openNewReseller"
-      >{{ t('resellers.add') }}</Button>
-    </header>
+    <PageHeader
+      :title="currentMainTab === 'resellers' ? (t('resellers.title') || 'Resellers') : (t('customers.title') || 'Customers')"
+      :subtitle="currentMainTab === 'resellers' ? 'Manage reseller accounts and credit' : 'Manage customer accounts and subscriptions'"
+    >
+      <template #actions>
+        <Button
+          v-if="currentMainTab === 'users'"
+          variant="primary"
+          icon="+"
+          @click="openNewUserSlideOver"
+        >{{ t('customers.new_user') }}</Button>
+        <Button
+          v-if="currentMainTab === 'resellers'"
+          variant="primary"
+          icon="+"
+          @click="openNewReseller"
+        >{{ t('resellers.add') }}</Button>
+      </template>
+    </PageHeader>
 
     <!-- Page-level sub-tab navigation: Users | Resellers -->
     <nav class="main-tabs" aria-label="Customer section navigation">
