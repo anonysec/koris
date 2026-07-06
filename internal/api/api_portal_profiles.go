@@ -2,7 +2,7 @@ package api
 
 import (
 	"github.com/anonysec/koris/internal/auth"
-	"github.com/anonysec/koris/internal/wireguard"
+	"github.com/anonysec/koris/internal/protocols/wireguard"
 	"context"
 	"encoding/base64"
 	"encoding/json"

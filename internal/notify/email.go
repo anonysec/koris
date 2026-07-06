@@ -1,4 +1,4 @@
-package email
+package notify
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type Config struct {
+type EmailConfig struct {
 	Host     string
 	Port     string
 	Username string
@@ -16,8 +16,8 @@ type Config struct {
 	Enabled  bool
 }
 
-func LoadConfig() Config {
-	return Config{
+func LoadEmailConfig() EmailConfig {
+	return EmailConfig{
 		Host:     os.Getenv("PANEL_SMTP_HOST"),
 		Port:     os.Getenv("PANEL_SMTP_PORT"),
 		Username: os.Getenv("PANEL_SMTP_USER"),
@@ -27,12 +27,12 @@ func LoadConfig() Config {
 	}
 }
 
-type Sender struct {
-	cfg Config
+type EmailSender struct {
+	cfg EmailConfig
 }
 
-func New(cfg Config) *Sender {
-	return &Sender{cfg: cfg}
+func NewEmailSender(cfg EmailConfig) *EmailSender {
+	return &EmailSender{cfg: cfg}
 }
 
 // sanitizeHeader removes \r and \n characters from a string to prevent
@@ -45,7 +45,7 @@ func sanitizeHeader(s string) string {
 	return s
 }
 
-func (s *Sender) Send(to, subject, body string) error {
+func (s *EmailSender) Send(to, subject, body string) error {
 	if !s.cfg.Enabled || s.cfg.Host == "" {
 		return nil
 	}
@@ -60,7 +60,7 @@ func (s *Sender) Send(to, subject, body string) error {
 	return smtp.SendMail(addr, auth, s.cfg.From, []string{sanitizeHeader(to)}, []byte(msg))
 }
 
-func (s *Sender) SendExpiryWarning(to, username string, daysLeft int) error {
+func (s *EmailSender) SendExpiryWarning(to, username string, daysLeft int) error {
 	subject := fmt.Sprintf("KorisPanel: Your subscription expires in %d day(s)", daysLeft)
 	body := fmt.Sprintf(`<h2>Subscription Expiring Soon</h2>
 <p>Hi <b>%s</b>,</p>
@@ -70,7 +70,7 @@ func (s *Sender) SendExpiryWarning(to, username string, daysLeft int) error {
 	return s.Send(to, subject, body)
 }
 
-func (s *Sender) SendPaymentReceipt(to, username string, amount float64, method string) error {
+func (s *EmailSender) SendPaymentReceipt(to, username string, amount float64, method string) error {
 	subject := "KorisPanel: Payment Confirmed"
 	body := fmt.Sprintf(`<h2>Payment Received</h2>
 <p>Hi <b>%s</b>,</p>
