@@ -115,9 +115,18 @@ const displayedArticles = computed(() => {
   return articles.value
 })
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\u0027/g, '&#39;')
+}
+
 function renderMarkdown(body: string): string {
-  // Simple markdown rendering: headings, bold, italic, links, code blocks, paragraphs
-  let html = body
+  // XSS protection: escape HTML entities BEFORE applying markdown transforms
+  let html = escapeHtml(body)
     // Code blocks
     .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
     // Inline code
@@ -130,8 +139,8 @@ function renderMarkdown(body: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Italic
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    // Links — only allow http/https URLs
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     // Line breaks (double newline = paragraph)
     .replace(/\n\n/g, '</p><p>')
     // Single newline = br

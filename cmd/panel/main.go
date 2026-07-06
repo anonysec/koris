@@ -488,9 +488,13 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 	tlsCfg.MinVersion = tls.VersionTLS12
 
 	tlsSrv := &http.Server{
-		Addr:      cfg.TLSAddr,
-		Handler:   handler,
-		TLSConfig: tlsCfg,
+		Addr:              cfg.TLSAddr,
+		Handler:           handler,
+		TLSConfig:         tlsCfg,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	logger.Info("tls", "starting HTTPS with Let's Encrypt autocert", map[string]any{
@@ -503,8 +507,12 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 	// This must listen on all interfaces for Let's Encrypt validation.
 	go func() {
 		httpSrv := &http.Server{
-			Addr:    ":80",
-			Handler: m.HTTPHandler(nil),
+			Addr:              ":80",
+			Handler:           m.HTTPHandler(nil),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
 		}
 		if err := httpSrv.ListenAndServe(); err != nil {
 			logger.Error("tls", "HTTP challenge/redirect server error", map[string]any{"error": err.Error()})

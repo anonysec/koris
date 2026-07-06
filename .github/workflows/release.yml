@@ -20,8 +20,8 @@ on:
         required: true
 
 permissions:
-  contents: write   # create releases
-  packages: write   # push to ghcr
+  contents: read    # minimal top-level; jobs escalate as needed
+  packages: read
 
 env:
   VERSION: ${{ github.event.inputs.tag || github.ref_name }}
@@ -33,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -72,6 +74,8 @@ jobs:
         edition: [full, lite]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
@@ -118,8 +122,15 @@ jobs:
     name: Docker image · ghcr.io/${{ github.repository_owner }}/koris
     needs: frontend
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push to ghcr.io
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+        with:
+          persist-credentials: false
       - name: Download frontend assets
         uses: actions/download-artifact@v4
         with:
@@ -189,8 +200,14 @@ jobs:
     name: Publish GitHub Release
     needs: [binaries, docker]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create releases + upload assets
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+        with:
+          persist-credentials: false
 
       - name: Download binary artifacts
         uses: actions/download-artifact@v4

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,35 @@ import (
 	"testing"
 	"time"
 )
+
+// maxDownloadSize is the maximum size of an update binary (256 MB).
+const maxDownloadSize = 256 << 20
+
+// validateURL checks that a URL is HTTPS with a public hostname, preventing SSRF.
+func validateURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("only HTTPS URLs are allowed, got %q", u.Scheme)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("empty hostname")
+	}
+	// Block private/loopback/link-local addresses
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("DNS lookup failed for %q: %w", host, err)
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("URL resolves to blocked address %s (SSRF protection)", ip)
+		}
+	}
+	return nil
+}
 
 // UpdateInfo holds information about an available update.
 type UpdateInfo struct {
@@ -70,6 +101,9 @@ func New(version, releaseURL, binaryPath string) *Updater {
 
 // Check queries the release URL for the latest version and returns UpdateInfo.
 func (u *Updater) Check() (*UpdateInfo, error) {
+	if err := validateURL(u.releaseURL); err != nil {
+		return nil, fmt.Errorf("[updater] release URL validation: %w", err)
+	}
 	req, err := http.NewRequest(http.MethodGet, u.releaseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("[updater] create check request: %w", err)
@@ -212,8 +246,13 @@ func (u *Updater) Rollback() error {
 }
 
 // download fetches the binary from the given URL and returns its contents.
-func (u *Updater) download(url string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+// The URL is validated against SSRF and the response is capped at maxDownloadSize.
+func (u *Updater) download(dlURL string) ([]byte, error) {
+	if err := validateURL(dlURL); err != nil {
+		return nil, fmt.Errorf("download URL validation: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, dlURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create download request: %w", err)
 	}
@@ -230,9 +269,13 @@ func (u *Updater) download(url string) ([]byte, error) {
 		return nil, fmt.Errorf("download returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	// Cap download size to prevent memory exhaustion
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read download body: %w", err)
+	}
+	if int64(len(data)) > maxDownloadSize {
+		return nil, fmt.Errorf("download exceeds maximum size of %d bytes", maxDownloadSize)
 	}
 
 	return data, nil

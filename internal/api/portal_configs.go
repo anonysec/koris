@@ -59,6 +59,7 @@ func (s *Server) handlePortalConfigDownload(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(config))
 
 	case "openvpn-tcp":
@@ -71,6 +72,7 @@ func (s *Server) handlePortalConfigDownload(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(config))
 
 	case "l2tp":
@@ -83,6 +85,7 @@ func (s *Server) handlePortalConfigDownload(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(config))
 
 	case "ikev2":
@@ -95,6 +98,7 @@ func (s *Server) handlePortalConfigDownload(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(config))
 
 	case "wireguard", "wg":
@@ -111,6 +115,7 @@ func (s *Server) handlePortalConfigDownload(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Type", "application/x-wireguard-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(filename)))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(config))
 
 	default:

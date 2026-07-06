@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"math"
 	"net/http"
 	"strings"
@@ -194,7 +195,13 @@ rules:
 
 	langsBar := fmt.Sprintf(t["langs"], token, token, token, token)
 
-	html := fmt.Sprintf(`<!doctype html>
+	// Escape user-controlled values to prevent XSS
+	escUsername := html.EscapeString(username)
+	escToken := html.EscapeString(token)
+	escStatus := html.EscapeString(status)
+	escTotalGB := html.EscapeString(totalGBStr)
+
+	page := fmt.Sprintf(`<!doctype html>
 <html lang="%s" dir="%s">
 <head>
 	<meta charset="utf-8">
@@ -353,10 +360,11 @@ rules:
 		<p class="mu" style="font-size: 13px; line-height: 1.5; margin: 5px 0 0 0; color: var(--text); opacity: 0.85;">%s</p>
 	</div>
 </body>
-</html>`, lang, dir, t["title"], pct, langsBar, t["title"], t["username"], username, map[bool]string{true: "online", false: "offline"}[isOnline], map[bool]string{true: t["online"], false: t["offline"]}[isOnline], t["usage"], usedGB, totalGBStr, t["status"], status, t["l2tp_psk"], token, t["download"], t["guide_title"], t["guide_desc"])
+</html>`, lang, dir, t["title"], pct, langsBar, t["title"], t["username"], escUsername, map[bool]string{true: "online", false: "offline"}[isOnline], map[bool]string{true: t["online"], false: t["offline"]}[isOnline], t["usage"], usedGB, escTotalGB, t["status"], escStatus, t["l2tp_psk"], escToken, t["download"], t["guide_title"], t["guide_desc"])
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	w.Write([]byte(page))
 }

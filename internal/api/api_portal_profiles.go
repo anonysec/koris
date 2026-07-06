@@ -39,6 +39,7 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/openvpn-tcp.ovpn"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
@@ -52,6 +53,7 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/openvpn.ovpn"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
@@ -77,6 +79,7 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/l2tp.mobileconfig"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
@@ -91,6 +94,7 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/ikev2.mobileconfig"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
@@ -105,6 +109,7 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(profile))
 	case strings.HasSuffix(path, "/wireguard.conf"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
@@ -661,6 +666,7 @@ func (s *Server) portalWireguardConfByNode(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 	w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = w.Write([]byte(conf))
 }
 
