@@ -1,0 +1,17 @@
+{
+  "name": "@koris/theme-example",
+  "version": "1.0.0",
+  "description": "Example custom Koris theme — light aesthetic. Copy this to build your own.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./manifest": "./manifest.ts",
+    "./styles/*": "./styles/*"
+  },
+  "dependencies": {
+    "@koris/core": "workspace:*",
+    "@koris/theme": "workspace:*",
+    "vue": "^3.5.13"
+  }
+}

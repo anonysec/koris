@@ -238,6 +238,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/auth/customer", s.customerLogin)
 	mux.HandleFunc("/api/auth/customer/logout", s.customerLogout)
 	mux.HandleFunc("/api/dashboard/stats", s.requireAdmin(s.dashboardStats))
+	mux.HandleFunc("/api/admin/revenue-trend", s.requireAdmin(s.revenueTrend))
 	mux.HandleFunc("/api/customers", s.requireAdmin(s.customers))
 	mux.HandleFunc("/api/customers/bulk", s.requireAdmin(s.customersBulk))
 	mux.HandleFunc("/api/admin/customers/bulk", s.requireFullAdmin(s.adminCustomersBulk))

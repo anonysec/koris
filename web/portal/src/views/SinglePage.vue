@@ -18,6 +18,7 @@ import FormField from '@koris/ui/FormField.vue'
 import Textarea from '@koris/ui/Textarea.vue'
 import Input from '@koris/ui/Input.vue'
 import UsageBar from '@koris/ui/UsageBar.vue'
+import PortalWelcome from '@/components/PortalWelcome.vue'
 
 // ---- Composables ----
 const auth = usePortalAuthStore()
@@ -341,6 +342,7 @@ async function handleRate() {
 </script>
 <template>
   <div class="sp">
+    <PortalWelcome />
     <!-- Welcome -->
     <div class="sp__welcome">
       <h1 class="sp__hello">{{ t('portal.hello') }}, {{ displayName }} 👋</h1>

@@ -104,7 +104,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/anonysec/knode/master/install.
 | Frontend | Vue 3, TypeScript, Vite, Pinia |
 | Database | TimescaleDB (PostgreSQL 16) |
 | Node Communication | gRPC with mTLS, protobuf |
-| Frontend Workspaces | pnpm monorepo (admin, portal, landing, shared) |
+| Frontend Workspaces | pnpm monorepo (admin, portal, landing, core, theme) |
 | Testing | gopter (Go PBT), fast-check (TS PBT), vitest |
 | Containerization | Docker Compose |
 
@@ -115,16 +115,17 @@ bash <(curl -Ls https://raw.githubusercontent.com/anonysec/knode/master/install.
 ```bash
 # Clone
 git clone https://github.com/anonysec/koris.git
-cd panel
+cd koris
 
 # Backend
-go run ./panel/cmd/panel
+go run ./cmd/panel
 
 # Frontend (pnpm workspace)
-cd panel/web
+cd web
 pnpm install
 pnpm --filter admin dev     # Admin dashboard
 pnpm --filter portal dev    # Customer portal
+pnpm --filter landing dev   # Marketing landing page
 
 # Build everything
 make build          # Frontend + full backend
@@ -142,10 +143,10 @@ make test-frontend  # Vitest
 ```bash
 make frontend       # Build all frontend apps (admin, portal, landing)
 make backend        # Build full Go binary
-make backend-lite   # Build lite Go binary (excludes premium features)
+make backend-lite   # Build lite Go binary (excludes billing / reseller / bot)
 make build          # frontend + backend
 make build-lite     # frontend + backend-lite
-make test           # go test ./panel/...
+make test           # go test ./...
 make test-frontend  # pnpm test
 make clean          # Remove all build artifacts
 ```
@@ -167,8 +168,8 @@ Both editions are built from this single repository using Go build tags:
 | Reseller, LDAP, reports, segments | ✓ | ✗ |
 
 ```bash
-go build ./panel/cmd/panel              # Full
-go build -tags lite ./panel/cmd/panel   # Lite
+go build ./cmd/panel              # Full
+go build -tags lite ./cmd/panel   # Lite
 ```
 
 The `/api/info` endpoint returns `{"edition": "full"}` or `{"edition": "lite"}`.
@@ -192,6 +193,60 @@ Panel config directory: `/etc/koris/`
 | `POSTGRES_DB` | Database name | `koris` |
 | `POSTGRES_USER` | Database user | `koris` |
 | `POSTGRES_PASSWORD` | Database password | — |
+| `PANEL_ADMIN_PATH` | Admin panel URL prefix | `/admin/` |
+| `PANEL_PORTAL_PATH` | Customer portal URL prefix | `/account/` |
+| `PANEL_ADMIN_HOST` | Serve admin at subdomain (empty = path routing) | — |
+| `PANEL_PORTAL_HOST` | Serve portal at subdomain (empty = path routing) | — |
+
+### URL routing
+
+By default the panel serves the admin dashboard at `/admin/` and the customer
+portal at `/account/`. Legacy paths `/dashboard/` and `/portal/` redirect to
+the new locations for backward compatibility.
+
+**Path mode** (default) — everything on one host:
+```
+https://your-domain/admin/       # admin dashboard
+https://your-domain/account/     # customer portal
+https://your-domain/             # decoy landing page
+```
+
+**Subdomain mode** — dedicated subdomains:
+```yaml
+# In panel.env:
+PANEL_ADMIN_HOST=admin.your-domain
+PANEL_PORTAL_HOST=account.your-domain
+PANEL_ADMIN_PATH=/     # path becomes root under the subdomain
+PANEL_PORTAL_PATH=/
+```
+
+The interactive installer prompts for this at setup; also settable
+via `--admin-path=`, `--portal-path=`, `--admin-host=`, `--portal-host=`
+flags. Changing after install: edit `/etc/koris/panel.env` and
+`docker compose up -d panel` (also rebuild if you changed a path — the
+Vite base path is baked in at build time via `KORIS_ADMIN_BASE` /
+`KORIS_PORTAL_BASE`).
+
+---
+
+## Theming
+
+The frontend lives in two swappable packages:
+
+| Package | Role | Swappable? |
+|---------|------|------------|
+| `@koris/core` | Framework layer — composables, API client, types, base CSS (reset/tokens/utilities) | **No** — required |
+| `@koris/theme` | Visual layer — 30+ UI components (Button, DataTable, Modal, …), component CSS, polish CSS | **Yes** — replace to reskin |
+
+To create a custom theme:
+1. Copy `web/theme/` to `web/themes/my-theme/`
+2. Edit `manifest.ts` — change `id`, `name`, `author`
+3. Override any subset of `.vue` components or `.css` files
+4. Update the Vite alias `@koris/theme` in each app to point at your directory
+
+Both apps (admin, portal) resolve visual components via the alias, so a
+theme swap doesn'''t touch app code. See `web/theme/manifest.ts` for the
+component slot registry.
 
 ---
 
@@ -199,9 +254,10 @@ Panel config directory: `/etc/koris/`
 
 | Service | Image | Port |
 |---------|-------|------|
-| `koris` | Built from source | 443 (HTTPS), 80 (HTTP) |
+| `panel` | Built from source | 443 (HTTPS), 80 (HTTP) |
+| `knode` | Built from anonysec/knode | 62050 (gRPC, per-node) |
 | `koris-db` | `timescale/timescaledb:latest-pg16` | 5432 (internal) |
-| `koris-pgadmin` | `dpage/pgadmin4` | 5050 |
+| `pgadmin` | `dpage/pgadmin4` | 5050 (localhost only) |
 
 ---
 

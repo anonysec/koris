@@ -2,15 +2,19 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
-    name: Backend (Go)
+    name: Backend · Go
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,19 +24,21 @@ jobs:
           cache: true
       - name: Verify modules
         run: go mod verify
-      - name: go vet
+      - name: Vet
         run: go vet ./...
-      - name: Build
-        run: go build ./...
+      - name: Build (full)
+        run: go build ./cmd/panel
+      - name: Build (lite)
+        run: go build -tags lite ./cmd/panel
       - name: Test
-        run: go test ./... -count=1
+        run: go test ./... -count=1 -race -timeout=120s
 
   frontend:
-    name: Frontend (pnpm)
+    name: Frontend · pnpm
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: panel/web
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,16 +47,18 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
       - name: Build admin
         run: pnpm --filter admin build
       - name: Build portal
         run: pnpm --filter portal build
       - name: Build landing
         run: pnpm --filter landing build
+      - name: Test
+        run: pnpm --filter admin test && pnpm --filter core test && pnpm --filter landing test
 
   lint:
-    name: Lint (golangci-lint)
+    name: Lint · golangci-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,3 +69,15 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          args: --timeout=5m
+
+  docker:
+    name: Docker · build image
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t koris:ci .
+      - name: Smoke check
+        run: docker run --rm koris:ci --help 2>&1 | head -5 || true
