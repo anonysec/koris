@@ -4,9 +4,11 @@ name: Release
 #   git tag v0.93.0
 #   git push origin v0.93.0
 #
-# Builds Go binaries with embedded frontends, publishes ONE tarball per
-# (edition × arch) plus a single SHA256SUMS to the GitHub Release,
-# and pushes a multi-arch Docker image to ghcr.io/anonysec/koris.
+# Publishes RAW BINARIES only (one per edition × arch) plus a single
+# SHA256SUMS to the GitHub Release, and pushes a multi-arch Docker image to
+# ghcr.io/anonysec/koris. No source tarballs are attached — anyone who wants
+# the source can clone the repo (GitHub's auto-generated "Source code
+# (zip/tar.gz)" links remain available on every release).
 
 on:
   push:
@@ -81,7 +83,7 @@ jobs:
           name: frontend-www
           path: web
 
-      - name: Build tarball
+      - name: Build binary
         env:
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
@@ -89,38 +91,26 @@ jobs:
           EDITION: ${{ matrix.edition }}
         run: |
           set -euxo pipefail
-          # Build tag: 'full' has no tag, 'lite' uses -tags lite
+          # 'full' has no build tag, 'lite' uses -tags lite.
           if [ "$EDITION" = "lite" ]; then TAGFLAG="-tags lite"; else TAGFLAG=""; fi
 
-          # Stage the release contents in a versioned directory so the tarball
-          # extracts cleanly (users can `tar xzf koris-*.tar.gz && cd koris-*`).
-          STAGE="koris-${VERSION#v}-${EDITION}-linux-${GOARCH}"
-          mkdir -p "$STAGE"
-
-          # Build the panel binary as `koris` (edition is a property of the
-          # tarball name, not the binary name — the user just runs ./koris).
+          # Self-contained binary: frontends are embedded and migrations are
+          # applied from the embedded FS, so the release artifact is a single
+          # executable named koris-<edition>-linux-<arch>.
+          OUT="koris-${EDITION}-linux-${GOARCH}"
           go build -trimpath \
             -ldflags="-s -w -X main.Version=${VERSION#v}" \
             $TAGFLAG \
-            -o "$STAGE/koris" \
+            -o "$OUT" \
             ./cmd/panel
+          chmod +x "$OUT"
+          ls -la "$OUT"
 
-          # Bundle the migration files and installer.
-          cp -r migrations "$STAGE/migrations"
-          cp install.sh    "$STAGE/install.sh"
-          [ -d deploy ]    && cp -r deploy "$STAGE/deploy" || true
-          [ -f VERSION ]   && cp VERSION   "$STAGE/VERSION" || true
-          [ -f README.md ] && cp README.md "$STAGE/README.md" || true
-
-          # Create the tarball with a stable top-level dir name.
-          tar czf "${STAGE}.tar.gz" "$STAGE"
-          ls -la "${STAGE}.tar.gz"
-
-      - name: Upload tarball
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: tarball-${{ matrix.edition }}-${{ matrix.goarch }}
-          path: koris-*.tar.gz
+          name: binary-${{ matrix.edition }}-${{ matrix.goarch }}
+          path: koris-${{ matrix.edition }}-linux-${{ matrix.goarch }}
           retention-days: 1
 
   # ─── Build multi-arch Docker images and push to GHCR ─────────────────────
@@ -194,7 +184,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─── Publish the GitHub Release with tarballs + one checksums file ───────
+  # ─── Publish the GitHub Release with raw binaries + one checksums file ────
   publish:
     name: Publish GitHub Release
     needs: [binaries, docker]
@@ -202,10 +192,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download tarball artifacts
+      - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: tarball-*
+          pattern: binary-*
           path: release-assets
           merge-multiple: true
 
@@ -214,7 +204,8 @@ jobs:
         run: |
           set -euxo pipefail
           ls -la
-          sha256sum koris-*.tar.gz > SHA256SUMS
+          chmod +x koris-* || true
+          sha256sum koris-* > SHA256SUMS
           cat SHA256SUMS
 
       - name: Extract release notes from CHANGELOG
@@ -249,5 +240,8 @@ jobs:
             --notes-file release-notes.md \
             --latest \
             $prerelease_flag \
-            release-assets/koris-*.tar.gz \
+            release-assets/koris-full-linux-amd64 \
+            release-assets/koris-full-linux-arm64 \
+            release-assets/koris-lite-linux-amd64 \
+            release-assets/koris-lite-linux-arm64 \
             release-assets/SHA256SUMS
