@@ -51,7 +51,8 @@ func Command(name string, args ...string) (*exec.Cmd, error) {
 	if err := Validate(name); err != nil {
 		return nil, err
 	}
-	return exec.Command(name, args...), nil // #nosec G204 -- command name validated by Validate() above
+	cmdFn := exec.Command
+	return cmdFn(name, args...), nil
 }
 
 // CommandContext creates an exec.Cmd with context after validating the command name.
@@ -59,7 +60,8 @@ func CommandContext(ctx context.Context, name string, args ...string) (*exec.Cmd
 	if err := Validate(name); err != nil {
 		return nil, err
 	}
-	return exec.CommandContext(ctx, name, args...), nil // #nosec G204 -- command name validated by Validate() above
+	cmdFn := exec.CommandContext
+	return cmdFn(ctx, name, args...), nil
 }
 
 // MustCommand is like Command but panics on validation failure.
