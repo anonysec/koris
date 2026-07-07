@@ -7,5 +7,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
     scopes TEXT NOT NULL DEFAULT 'read',
     last_used_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by TEXT DEFAULT '\n);
+    created_by TEXT NOT NULL DEFAULT ''
+);
 CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix);
