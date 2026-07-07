@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-w -s" ${BUILD_TAGS:+-tags $BUILD_TAGS} -o /koris ./cmd/panel
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata wget libcap
+RUN apk add --no-cache ca-certificates tzdata wget libcap postgresql-client
 # Create non-root koris user
 RUN addgroup -S koris && adduser -S koris -G koris -h /app -s /sbin/nologin
 WORKDIR /app
