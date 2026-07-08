@@ -1,0 +1,68 @@
+# Dockerfile.gateway - API Gateway for Koris
+# Handles TLS termination, rate limiting, and request routing
+# Multi-stage build optimized for minimal image size
+
+# ============================================================
+# Stage 1: Builder
+# ============================================================
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies (layer caching)
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build arguments
+ARG TARGETOS
+ARG TARGETARCH
+
+# Build the gateway binary
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" \
+    -o gateway \
+    ./cmd/gateway
+
+# ============================================================
+# Stage 2: Runner
+# ============================================================
+FROM alpine:3.20 AS runner
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata wget
+
+# Create non-root user
+RUN addgroup -g 1000 koris && \
+    adduser -u 1000 -G koris -s /bin/sh -D koris
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /build/gateway .
+
+# Create ACME certificate directory
+RUN mkdir -p /var/lib/gateway/acme && \
+    chown -R koris:koris /var/lib/gateway
+
+# Expose ports
+# 443 - HTTPS (external)
+# 2025 - gRPC (internal)
+EXPOSE 443 2025
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:443/health || exit 1
+
+# Switch to non-root user
+USER koris
+
+# Run the gateway
+CMD ["./gateway"]
