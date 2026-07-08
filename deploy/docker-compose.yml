@@ -1,8 +1,4 @@
 name: koris
-
-# All secrets are in .env (chmod 600, never committed to git).
-# See .env.example for the template.
-
 services:
   db:
     image: timescale/timescaledb:latest-pg16
@@ -12,83 +8,88 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "127.0.0.1:5432:5432"
+    - 127.0.0.1:5432:5432
     volumes:
-      - db-data:/var/lib/postgresql/data
+    - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U $POSTGRES_USER
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
     mem_limit: 2048m
-    cpus: "2.0"
-
+    cpus: '2.0'
   panel:
     image: panel:fixed
     container_name: panel
     ports:
-      - "443:443"
+    - 443:443
     environment:
-      PANEL_DEV_MODE: "${PANEL_DEV_MODE:-false}"
-      PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET}"
-      PANEL_SETUP_KEY: "${PANEL_SETUP_KEY}"
-      PANEL_RADIUS_SECRET: "${PANEL_RADIUS_SECRET}"
-      PANEL_PG_DSN: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable"
-      PANEL_DOMAIN: "${PANEL_DOMAIN}"
-      PANEL_ADMIN_PATH: "${PANEL_ADMIN_PATH:-/admin/}"
-      PANEL_PORTAL_PATH: "${PANEL_PORTAL_PATH:-/account/}"
-      # PANEL_ADMIN_HOST: "${PANEL_ADMIN_HOST:-}"
-      # PANEL_PORTAL_HOST: "${PANEL_PORTAL_HOST:-}"
+      PANEL_DEV_MODE: ${PANEL_DEV_MODE:-false}
+      PANEL_SESSION_SECRET: ${PANEL_SESSION_SECRET}
+      PANEL_SETUP_KEY: ${PANEL_SETUP_KEY}
+      PANEL_RADIUS_SECRET: ${PANEL_RADIUS_SECRET}
+      PANEL_PG_DSN: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      PANEL_DOMAIN: ${PANEL_DOMAIN}
+      PANEL_ADMIN_PATH: ${PANEL_ADMIN_PATH:-/admin/}
+      PANEL_PORTAL_PATH: ${PANEL_PORTAL_PATH:-/account/}
+      PANEL_TLS_MODE: ${PANEL_TLS_MODE:-selfsigned}
+      PANEL_TLS_CERT: ${PANEL_TLS_CERT:-/etc/koris/cert.pem}
+      PANEL_TLS_KEY: ${PANEL_TLS_KEY:-/etc/koris/key.pem}
     volumes:
-      - /etc/koris:/etc/koris
+    - /etc/koris:/etc/koris
+    - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
     mem_limit: 1024m
-    cpus: "1.0"
+    cpus: '1.0'
     healthcheck:
-      test: ["CMD", "wget", "--no-check-certificate", "-q", "--spider", "https://localhost:443/api/health"]
+      test:
+      - CMD
+      - wget
+      - --no-check-certificate
+      - -q
+      - --spider
+      - https://localhost:443/api/health
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
-
   knode:
     image: knode:fixed
     container_name: knode
     cap_add:
-      - NET_ADMIN
-      - NET_RAW
+    - NET_ADMIN
+    - NET_RAW
     volumes:
-      - /etc/knode:/etc/knode
-      - /dev/net/tun:/dev/net/tun
+    - /etc/knode:/etc/knode
+    - /dev/net/tun:/dev/net/tun
     ports:
-      - "62051:62050"
+    - 62051:62050
     environment:
       KNODE_INSTANCE: knode
     restart: unless-stopped
-
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-      PGADMIN_CONFIG_SERVER_MODE: "True"
-      PGADMIN_CONFIG_ENFORCE_PWD_PASSWORD: "True"
-    # SECURITY: bind to localhost only — access via SSH tunnel or VPN
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+      PGADMIN_CONFIG_ENFORCE_PWD_PASSWORD: 'True'
     ports:
-      - "127.0.0.1:5050:80"
+    - 127.0.0.1:5050:80
     volumes:
-      - pgadmin-data:/var/lib/pgadmin
+    - pgadmin-data:/var/lib/pgadmin
     depends_on:
-      - db
+    - db
     restart: unless-stopped
     mem_limit: 512m
-    cpus: "0.5"
-
+    cpus: '0.5'
 volumes:
-  db-data:
-  pgadmin-data:
+  db-data: null
+  pgadmin-data: null
