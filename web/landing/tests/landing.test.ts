@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, Suspense } from 'vue'
 import App from '../src/App.vue'
+import en from '../src/i18n/en.json'
+import fa from '../src/i18n/fa.json'
 
 describe('Landing Page - App.vue', () => {
   it('renders without errors', () => {
@@ -44,13 +46,14 @@ describe('Landing Page - i18n', () => {
     const { useI18n } = await import('../src/i18n')
     const { t, locale, setLocale } = useI18n()
 
-    // Default locale should be 'en' in test environment
+    // Each test sets its own locale so assertions are order-independent
+    setLocale('en')
     expect(locale.value).toBe('en')
 
-    // Test English translations
-    expect(t('hero.headline')).toBe('Secure, Fast VPN Management')
-    expect(t('features.title')).toBe('Everything You Need to Run a VPN Business')
-    expect(t('faq.title')).toBe('Frequently Asked Questions')
+    // Assert against the source JSON instead of hardcoded copy
+    expect(t('hero.headline')).toBe(en['hero.headline'])
+    expect(t('features.title')).toBe(en['features.title'])
+    expect(t('faq.title')).toBe(en['faq.title'])
   })
 
   it('switches locale to Farsi', async () => {
@@ -58,19 +61,20 @@ describe('Landing Page - i18n', () => {
     const { t, setLocale } = useI18n()
 
     setLocale('fa')
-    expect(t('hero.headline')).toBe('مدیریت VPN امن و سریع')
-    expect(t('features.title')).toBe('همه چیز برای اجرای کسب‌وکار VPN')
+    expect(t('hero.headline')).toBe(fa['hero.headline'])
+    expect(t('features.title')).toBe(fa['features.title'])
 
-    // Reset to English for other tests
+    // Leave locale reset to English for other suites
     setLocale('en')
   })
 
   it('interpolates parameters in translations', async () => {
     const { useI18n } = await import('../src/i18n')
-    const { t } = useI18n()
+    const { t, setLocale } = useI18n()
 
+    setLocale('en')
     const result = t('footer.copyright', { year: 2025 })
-    expect(result).toBe('© 2025 KorisPanel. All rights reserved.')
+    expect(result).toBe(en['footer.copyright'].replace('{year}', '2025'))
   })
 
   it('falls back to key when translation is missing', async () => {
