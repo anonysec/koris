@@ -21,6 +21,7 @@ import (
 	"github.com/anonysec/koris/internal/health"
 	"github.com/anonysec/koris/internal/noderegistry"
 	"github.com/anonysec/koris/internal/notify"
+	"github.com/anonysec/koris/internal/redis"
 	"github.com/anonysec/koris/internal/payment"
 	"github.com/anonysec/koris/internal/support"
 	"github.com/anonysec/koris/internal/teleproxy"
@@ -38,7 +39,7 @@ type Server struct {
 	Support              *support.TicketService
 	TeleProxy            *teleproxy.ProxyService
 	AntiDPI              *antidpi.AntiDPIService
-	Cache                *cache.QueryCache
+	Cache                cache.Cache
 	PaymentRegistry      *payment.Registry
 	FirewallMgr          *grpcclient.FirewallManager
 	CoreMgr              *grpcclient.CoreManager
@@ -153,19 +154,30 @@ func (s *Server) reservedEmojisEndpoint(w http.ResponseWriter, r *http.Request) 
 
 func New(db *sql.DB, cfg config.Config) *Server {
 	analyzer := health.NewAnalyzer()
-	notifier := notify.New()
+	notifier := notify.NewNotifier()
 	return &Server{
 		DB:                   db,
 		Config:               cfg,
 		Auth:                 auth.Service{DB: db},
 		Notify:               notifier,
 		HealthEngine:         health.NewDiagnosticsEngine(db, analyzer, notifier),
-		Cache:                cache.NewQueryCache(500, 60*time.Second),
+		Cache:                newCache(),
 		StartedAt:            time.Now(),
 		failoverOrchestrator: NewFailoverOrchestrator(db, notifier, GetPropagationTimeoutFromDB(db), 10*time.Second),
 		prevSessionBytes:     make(map[int64]SessionBytes),
 		wsNotifChans:         make([]chan map[string]any, 0),
 	}
+}
+
+// newCache selects the Redis-backed cache when Redis is configured, otherwise
+// the in-memory LRU cache. Redis is optional and degrades gracefully.
+func newCache() cache.Cache {
+	if rc, err := redis.NewClient(); err == nil && rc != nil {
+		if rc2 := cache.NewRedisCache(rc, 60*time.Second); rc2 != nil {
+			return rc2
+		}
+	}
+	return cache.NewQueryCache(500, 60*time.Second)
 }
 
 func (s *Server) addWSSubscriber() chan map[string]any {

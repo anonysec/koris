@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/anonysec/koris/internal/testutil"
 )
 
 func TestNodeProvision_MethodNotAllowed(t *testing.T) {
@@ -164,13 +165,13 @@ func TestNodeInstallScript_GET(t *testing.T) {
 	if body == "" {
 		t.Error("expected non-empty script body")
 	}
-	if !contains(body, "#!/usr/bin/env bash") {
+	if !testutil.Contains(body, "#!/usr/bin/env bash") {
 		t.Error("expected script to start with bash shebang")
 	}
-	if !contains(body, "PANEL_URL") {
+	if !testutil.Contains(body, "PANEL_URL") {
 		t.Error("expected script to reference PANEL_URL")
 	}
-	if !contains(body, "NODE_TOKEN") {
+	if !testutil.Contains(body, "NODE_TOKEN") {
 		t.Error("expected script to reference NODE_TOKEN")
 	}
 }
@@ -186,10 +187,10 @@ func TestNodeInstallScript_WithQueryParams(t *testing.T) {
 	}
 
 	body := rr.Body.String()
-	if !contains(body, "abc123") {
+	if !testutil.Contains(body, "abc123") {
 		t.Error("expected script to contain embedded token")
 	}
-	if !contains(body, "https://my.panel.com") {
+	if !testutil.Contains(body, "https://my.panel.com") {
 		t.Error("expected script to contain embedded panel URL")
 	}
 }
@@ -207,23 +208,23 @@ func TestNodeInstallScript_MethodNotAllowed(t *testing.T) {
 
 func TestGenerateInstallScript_NoParams(t *testing.T) {
 	script := generateInstallScript("", "")
-	if !contains(script, "#!/usr/bin/env bash") {
+	if !testutil.Contains(script, "#!/usr/bin/env bash") {
 		t.Error("expected bash shebang")
 	}
-	if !contains(script, `NODE_TOKEN="${NODE_TOKEN:-}"`) {
+	if !testutil.Contains(script, `NODE_TOKEN="${NODE_TOKEN:-}"`) {
 		t.Error("expected empty NODE_TOKEN default when no token provided")
 	}
-	if !contains(script, `PANEL_URL="${PANEL_URL:-}"`) {
+	if !testutil.Contains(script, `PANEL_URL="${PANEL_URL:-}"`) {
 		t.Error("expected empty PANEL_URL default when no URL provided")
 	}
 }
 
 func TestGenerateInstallScript_WithParams(t *testing.T) {
 	script := generateInstallScript("kn_test123", "https://panel.test.com")
-	if !contains(script, "kn_test123") {
+	if !testutil.Contains(script, "kn_test123") {
 		t.Error("expected token in script")
 	}
-	if !contains(script, "https://panel.test.com") {
+	if !testutil.Contains(script, "https://panel.test.com") {
 		t.Error("expected panel URL in script")
 	}
 }
@@ -270,17 +271,4 @@ func TestGetPanelURL_FallbackToHost(t *testing.T) {
 	if url != "https://fallback.host.com" {
 		t.Errorf("expected https://fallback.host.com, got %s", url)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
-}
-
-func containsSubstr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

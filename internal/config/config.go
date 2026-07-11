@@ -90,11 +90,13 @@ func Load() Config {
 		dbDSN = getenv("PANEL_PG_DSN", "")
 	}
 	if dbDSN == "" {
-		if !devMode {
-			log.Fatalf("FATAL: PANEL_DB_DSN or PANEL_PG_DSN is required in production. Set PANEL_DEV_MODE=true for development.")
+		if devMode {
+			// Dev-only convenience default: localhost Postgres with no embedded
+			// secret. Production stays fail-closed and requires an explicit DSN.
+			dbDSN = "postgres://koris@127.0.0.1:5432/koris?sslmode=disable"
+		} else {
+			log.Fatalf("FATAL: PANEL_DB_DSN (or PANEL_PG_DSN) is required (PostgreSQL/TimescaleDB). Set it to your connection string.")
 		}
-		log.Println("[SECURITY WARNING] PANEL_DB_DSN/PANEL_PG_DSN is not set. Using insecure default credentials.")
-		dbDSN = "postgres://radius:RadiusDb2026@127.0.0.1:5432/radius?sslmode=disable"
 	}
 
 	if setupKey == "" {
@@ -172,9 +174,9 @@ func Load() Config {
 
 	return Config{
 		Addr:           getenv("PANEL_ADDR", ":8080"),
-		TLSAddr:        getenv("PANEL_TLS_ADDR", ":443"),
-		TLSCert:        getenv("PANEL_TLS_CERT", "/etc/koris/cert.pem"),
-		TLSKey:         getenv("PANEL_TLS_KEY", "/etc/koris/key.pem"),
+		TLSAddr:        getenv("PANEL_TLS_ADDR", ":2096"),
+		TLSCert:        getenv("PANEL_TLS_CERT", "/etc/koris/certs/cert.pem"),
+		TLSKey:         getenv("PANEL_TLS_KEY", "/etc/koris/certs/key.pem"),
 		TLSEnabled:     tlsEnabled,
 		TLSCertDir:     getenv("PANEL_TLS_CERT_DIR", "/etc/koris/certs"),
 		TLSDomain:      getenv("PANEL_TLS_DOMAIN", ""),
@@ -192,9 +194,12 @@ func Load() Config {
 		AdminHost:      getenv("PANEL_ADMIN_HOST", ""),
 		PortalHost:     getenv("PANEL_PORTAL_HOST", ""),
 		PublicBase:     getenv("PANEL_PUBLIC_BASE", ""), // derived below if empty
-		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/koris/web/admin/www"),
-		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/koris/web/portal/www"),
-		LandingWebDir:  getenv("PANEL_LANDING_WEB_DIR", "/opt/koris/web/landing/www"),
+		// Web UI directories. Empty (default) serves the SPA assets embedded
+		// in the binary; set PANEL_*_WEB_DIR to point at on-disk builds to
+		// override without rebuilding (e.g. hotfixes).
+		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", ""),
+		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", ""),
+		LandingWebDir:  getenv("PANEL_LANDING_WEB_DIR", ""),
 		TemplateDir:    getenv("PANEL_TEMPLATE_DIR", "/etc/koris/templates/"),
 		SecureCookies:  secureCookies,
 		TrustedProxies: trustedProxies,

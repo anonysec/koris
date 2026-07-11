@@ -461,10 +461,14 @@ func (p *connPool) startReconnect(entry *nodeEntry) {
 			delay := p.config.Backoff.Delay(attempt)
 			log.Printf("[grpc-client] Reconnecting to node %q (id=%d) in %s (attempt %d)", cfg.Name, nodeID, delay, attempt+1)
 
+			// Use an explicit timer so it is released immediately when the
+			// context is cancelled, rather than lingering until it fires.
+			timer := time.NewTimer(delay)
 			select {
 			case <-recoCtx.Done():
+				timer.Stop()
 				return
-			case <-time.After(delay):
+			case <-timer.C:
 			}
 
 			dialCtx, dialCancel := context.WithTimeout(recoCtx, p.config.ConnectTimeout)

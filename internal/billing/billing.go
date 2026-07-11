@@ -123,20 +123,17 @@ func (b *BillingEngine) CreateInvoice(ctx context.Context, inv *Invoice) error {
 		return fmt.Errorf("invoice is nil")
 	}
 
-	result, err := b.db.ExecContext(ctx, `
+	var id int64
+	err := b.db.QueryRowContext(ctx, `
 		INSERT INTO invoices (customer_id, invoice_number, amount, currency, status, type, description, plan_id, gateway_id, payment_ref, pdf_path)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id`,
 		inv.CustomerID, inv.InvoiceNumber, inv.Amount, inv.Currency,
 		inv.Status, inv.Type, inv.Description,
 		inv.PlanID, inv.GatewayID, inv.PaymentRef, inv.PDFPath,
-	)
+	).Scan(&id)
 	if err != nil {
 		return fmt.Errorf("insert invoice: %w", err)
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("get invoice id: %w", err)
 	}
 	inv.ID = id
 	inv.CreatedAt = time.Now().UTC()
@@ -213,7 +210,7 @@ func (b *BillingEngine) ListInvoices(ctx context.Context, customerID int64, limi
 		SELECT id, customer_id, invoice_number, amount, currency, status, type,
 		       description, plan_id, gateway_id, payment_ref, pdf_path, created_at, paid_at
 		FROM invoices WHERE customer_id = $1
-		ORDER BY created_at DESC LIMIT $1`, customerID, limit,
+		ORDER BY created_at DESC LIMIT $2`, customerID, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices: %w", err)

@@ -38,6 +38,14 @@ type Worker struct {
 	eventFn     func(eventType, severity, title, message string)
 	pusher      CertPusher   // gRPC cert pusher for distributing certs to nodes
 	ikev2Worker *IKEv2Worker // IKEv2 domain certificate lifecycle worker
+
+	// nodeIDs and nodeIDsErr cache the online/stale node list for the duration
+	// of a single run() cycle. This avoids re-querying the same node list once
+	// per expiring cert (N identical queries). They are reset at the start of
+	// each run() via nodeIDsLoaded.
+	nodeIDs       []int64
+	nodeIDsErr    error
+	nodeIDsLoaded bool
 }
 
 // New creates a new certificate rotation Worker with a 1-hour check interval.
@@ -88,6 +96,11 @@ func (w *Worker) Stop() {
 
 // run performs a single check cycle: finds expiring certs, emits events, and handles rotation.
 func (w *Worker) run() {
+	// Reset the cached node list so each cycle re-queries fresh node state.
+	w.nodeIDsLoaded = false
+	w.nodeIDs = nil
+	w.nodeIDsErr = nil
+
 	certs, err := w.CheckExpiring()
 	if err != nil {
 		log.Printf("[certrotation] check expiring: %v", err)
@@ -260,20 +273,14 @@ func (w *Worker) distributeViaGRPC(cert ExpiringCert, certData []byte) error {
 	caPath := filepath.Join(filepath.Dir(cert.CertPath), "ca.crt")
 	caData, _ := safepath.ReadFile(caPath)
 
-	// Query online and stale nodes
-	rows, err := w.db.Query(`SELECT id FROM nodes WHERE status IN ('online', 'stale')`)
+	// Query online and stale nodes once per run() cycle (cached by loadNodeIDs).
+	nodeIDs, err := w.loadNodeIDs()
 	if err != nil {
-		return fmt.Errorf("query nodes: %v", err)
+		return err
 	}
-	defer rows.Close()
 
 	var lastErr error
-	for rows.Next() {
-		var nodeID int64
-		if err := rows.Scan(&nodeID); err != nil {
-			continue
-		}
-
+	for _, nodeID := range nodeIDs {
 		if err := w.pusher.SetCertificates(ctx, nodeID, coreType, caData, certData, keyData); err != nil {
 			log.Printf("[certrotation] SetCertificates via gRPC failed for node %d, cert %q: %v", nodeID, cert.Name, err)
 			lastErr = err
@@ -282,10 +289,37 @@ func (w *Worker) distributeViaGRPC(cert ExpiringCert, certData []byte) error {
 		log.Printf("[certrotation] pushed cert %q to node %d via gRPC", cert.Name, nodeID)
 	}
 
-	if err := rows.Err(); err != nil {
-		return err
-	}
 	return lastErr
+}
+
+// loadNodeIDs returns the list of online/stale node IDs, querying the database
+// once and caching the result for the remainder of the current run() cycle so
+// that DistributeToNodes does not re-run the same query for every expiring cert.
+func (w *Worker) loadNodeIDs() ([]int64, error) {
+	if w.nodeIDsLoaded {
+		return w.nodeIDs, w.nodeIDsErr
+	}
+
+	rows, err := w.db.Query(`SELECT id FROM nodes WHERE status IN ('online', 'stale')`)
+	if err != nil {
+		w.nodeIDsErr = fmt.Errorf("query nodes: %v", err)
+		w.nodeIDsLoaded = true
+		return nil, w.nodeIDsErr
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var nodeID int64
+		if err := rows.Scan(&nodeID); err != nil {
+			continue
+		}
+		ids = append(ids, nodeID)
+	}
+	w.nodeIDsErr = rows.Err()
+	w.nodeIDs = ids
+	w.nodeIDsLoaded = true
+	return w.nodeIDs, w.nodeIDsErr
 }
 
 // certType determines the certificate type from its file path.

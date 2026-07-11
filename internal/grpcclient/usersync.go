@@ -59,7 +59,7 @@ func (s *UserSyncService) SyncUser(ctx context.Context, username string) error {
 		return nil
 	}
 
-	targetNodes, err := s.getNodesForCoreTypes(ctx, coreTypes)
+	targetNodes, err := getOnlineNodesForCores(ctx, s.store.DB(), s.pool, coreTypes)
 	if err != nil {
 		return fmt.Errorf("usersync: get target nodes for %q: %w", username, err)
 	}
@@ -331,52 +331,6 @@ func (s *UserSyncService) getUserCoreTypes(ctx context.Context, username string)
 		coreTypes = append(coreTypes, ct)
 	}
 	return coreTypes, rows.Err()
-}
-
-// getNodesForCoreTypes returns node IDs of all connected nodes that serve
-// at least one of the given core types.
-func (s *UserSyncService) getNodesForCoreTypes(ctx context.Context, coreTypes []string) ([]int64, error) {
-	if len(coreTypes) == 0 {
-		return nil, nil
-	}
-
-	db := s.store.DB()
-
-	// Build IN clause
-	placeholders := ""
-	args := make([]any, len(coreTypes))
-	for i, ct := range coreTypes {
-		if i > 0 {
-			placeholders += ","
-		}
-		placeholders += "?"
-		args[i] = ct
-	}
-
-	query := fmt.Sprintf(
-		`SELECT DISTINCT node_id FROM node_services WHERE service IN (%s) AND status != 'unknown'`,
-		placeholders,
-	)
-
-	rows, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	// Filter to only nodes that are online in the pool
-	var nodeIDs []int64
-	for rows.Next() {
-		var nodeID int64
-		if err := rows.Scan(&nodeID); err != nil {
-			return nil, err
-		}
-		// Only include nodes that are in the pool (connected)
-		if s.pool.Status(nodeID) != StatusOffline {
-			nodeIDs = append(nodeIDs, nodeID)
-		}
-	}
-	return nodeIDs, rows.Err()
 }
 
 // getNodeCoreTypes returns the core types served by a specific node.

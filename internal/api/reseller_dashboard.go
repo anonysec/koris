@@ -68,8 +68,9 @@ func (s *Server) resellerDashboard(w http.ResponseWriter, r *http.Request) {
 	var credit float64
 	_ = s.DB.QueryRow(`SELECT COALESCE(credit, 0) FROM admins WHERE username=$1`, actor).Scan(&credit)
 
-	totalUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=$1 AND deleted_at IS NULL`, actor)
-	activeUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=$1 AND deleted_at IS NULL AND status='active'`, actor)
+	var totalUsers, activeUsers int64
+	_ = s.DB.QueryRow(`SELECT COUNT(*), COUNT(*) FILTER (WHERE status='active') FROM customers WHERE created_by=$1 AND deleted_at IS NULL`, actor).
+		Scan(&totalUsers, &activeUsers)
 
 	var totalUsageBytes int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = $1 AND c.deleted_at IS NULL`, actor).Scan(&totalUsageBytes)

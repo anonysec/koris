@@ -85,18 +85,29 @@ func (s *Server) nodeBulk(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]NodeBulkResult, 0, len(req.NodeIDs))
 
+	// Pre-fetch which requested nodes exist in a single round-trip.
+	nodeExists := make(map[int64]bool)
+	if neRows, err := s.DB.Query(`SELECT id FROM nodes WHERE id = ANY($1)`, req.NodeIDs); err == nil {
+		defer neRows.Close()
+		for neRows.Next() {
+			var id int64
+			if neRows.Scan(&id) == nil {
+				nodeExists[id] = true
+			}
+		}
+	}
+
 	for _, nodeID := range req.NodeIDs {
 		result := NodeBulkResult{NodeID: nodeID}
 
 		// Check node exists
-		var exists int
-		err := s.DB.QueryRow(`SELECT 1 FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&exists)
-		if err != nil {
+		if !nodeExists[nodeID] {
 			result.Error = "node not found"
 			results = append(results, result)
 			continue
 		}
 
+		var err error
 		switch req.Action {
 		case "maintenance_on":
 			err = s.nodeBulkSetMaintenance(nodeID, true)

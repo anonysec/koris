@@ -84,28 +84,44 @@ func (s *Server) handleSettingsOverview(w http.ResponseWriter, r *http.Request) 
 		"current_worker_id": s.Config.WorkerID,
 	}
 
-	// --- Alert thresholds (from DB, fallback to config defaults) ---
-	cpuThreshold := s.Config.AlertCPUThreshold
-	ramThreshold := s.Config.AlertRAMThreshold
-	diskThreshold := s.Config.AlertDiskThreshold
+	// --- Alert thresholds & gRPC params (from DB panel_settings, fallback to config defaults) ---
+	// Fetch all relevant settings in a single query instead of one round-trip per key.
+	settingsKeys := []string{
+		"alert_cpu_threshold", "alert_ram_threshold", "alert_disk_threshold",
+		"grpc_connect_timeout", "grpc_keepalive_interval", "grpc_metrics_interval",
+	}
+	settingVals := make(map[string]string, len(settingsKeys))
+	{
+		ph := make([]string, len(settingsKeys))
+		args := make([]any, len(settingsKeys))
+		for i, k := range settingsKeys {
+			ph[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = k
+		}
+		q := `SELECT setting_key, setting_value FROM panel_settings WHERE setting_key IN (` + strings.Join(ph, ", ") + `)`
+		if rows, qerr := s.DB.QueryContext(r.Context(), q, args...); qerr == nil {
+			defer rows.Close()
+			var k, val string
+			for rows.Next() {
+				if err := rows.Scan(&k, &val); err == nil {
+					settingVals[k] = val
+				}
+			}
+		}
+	}
 
-	// Try to read overrides from panel_settings
-	var v string
-	if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, "alert_cpu_threshold").Scan(&v); err == nil {
-		if n, err := strconv.Atoi(v); err == nil {
-			cpuThreshold = n
+	intFromSetting := func(key string, def int) int {
+		if v, ok := settingVals[key]; ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				return n
+			}
 		}
+		return def
 	}
-	if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, "alert_ram_threshold").Scan(&v); err == nil {
-		if n, err := strconv.Atoi(v); err == nil {
-			ramThreshold = n
-		}
-	}
-	if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, "alert_disk_threshold").Scan(&v); err == nil {
-		if n, err := strconv.Atoi(v); err == nil {
-			diskThreshold = n
-		}
-	}
+
+	cpuThreshold := intFromSetting("alert_cpu_threshold", s.Config.AlertCPUThreshold)
+	ramThreshold := intFromSetting("alert_ram_threshold", s.Config.AlertRAMThreshold)
+	diskThreshold := intFromSetting("alert_disk_threshold", s.Config.AlertDiskThreshold)
 
 	alerts := map[string]any{
 		"cpu_threshold":  cpuThreshold,
@@ -113,26 +129,9 @@ func (s *Server) handleSettingsOverview(w http.ResponseWriter, r *http.Request) 
 		"disk_threshold": diskThreshold,
 	}
 
-	// --- gRPC params (from DB, fallback to config defaults) ---
-	connectTimeout := int(s.Config.GRPCConnectTimeout.Seconds())
-	keepaliveInterval := int(s.Config.GRPCKeepaliveInterval.Seconds())
-	metricsInterval := int(s.Config.GRPCMetricsInterval.Seconds())
-
-	if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, "grpc_connect_timeout").Scan(&v); err == nil {
-		if n, err := strconv.Atoi(v); err == nil {
-			connectTimeout = n
-		}
-	}
-	if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, "grpc_keepalive_interval").Scan(&v); err == nil {
-		if n, err := strconv.Atoi(v); err == nil {
-			keepaliveInterval = n
-		}
-	}
-	if err := s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key = $1`, "grpc_metrics_interval").Scan(&v); err == nil {
-		if n, err := strconv.Atoi(v); err == nil {
-			metricsInterval = n
-		}
-	}
+	connectTimeout := intFromSetting("grpc_connect_timeout", int(s.Config.GRPCConnectTimeout.Seconds()))
+	keepaliveInterval := intFromSetting("grpc_keepalive_interval", int(s.Config.GRPCKeepaliveInterval.Seconds()))
+	metricsInterval := intFromSetting("grpc_metrics_interval", int(s.Config.GRPCMetricsInterval.Seconds()))
 
 	grpc := map[string]any{
 		"connect_timeout":    connectTimeout,

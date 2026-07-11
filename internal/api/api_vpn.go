@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/anonysec/koris/internal/safeexec"
+	"github.com/anonysec/koris/internal/safepath"
 	"github.com/anonysec/koris/internal/templates"
 	"database/sql"
 	"encoding/json"
@@ -117,8 +118,8 @@ func (s *Server) readVPNSettings(r *http.Request) (VPNSettings, error) {
 	tls := getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key")
 	v.CAFile = ca
 	v.TLSCryptFile = tls
-	_, v.CAExists = fileExists(ca)
-	_, v.TLSCryptExists = fileExists(tls)
+	v.CAExists = safepath.Exists(ca)
+	v.TLSCryptExists = safepath.Exists(tls)
 	// Also check DB-backed certs (remote knode support)
 	var dbCACount int
 	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM vpn_certificates WHERE type='ca' AND status='active'`).Scan(&dbCACount)
@@ -134,14 +135,6 @@ func (s *Server) readVPNSettings(r *http.Request) (VPNSettings, error) {
 	v.OpenVPNServiceStatus = "unknown"
 	_ = s.DB.QueryRow(`SELECT openvpn_status FROM node_status ORDER BY updated_at DESC LIMIT 1`).Scan(&v.OpenVPNServiceStatus)
 	return v, nil
-}
-
-func fileExists(path string) (os.FileInfo, bool) {
-	if strings.TrimSpace(path) == "" {
-		return nil, false
-	}
-	info, err := os.Stat(path)
-	return info, err == nil
 }
 
 func applyOpenVPNServerConfig(v VPNSettings) error {

@@ -2,6 +2,11 @@
 
 Base URL: `http://your-server:8080`
 
+> **Protocols note:** This page documents the **HTTP/JSON** API consumed by the web UIs. Koris also speaks **gRPC**:
+> - **Panel ↔ node** — the panel calls each [knode](https://github.com/anonysec/knode) agent over gRPC + mTLS (RPCs like `EnableCore`, `SyncUsers`, `StreamMetrics`). Schema: [`knode/proto/knode/v1/knode.proto`](https://github.com/anonysec/knode/blob/master/proto/knode/v1/knode.proto).
+> - **Panel ↔ worker** — the panel enqueues jobs to `cmd/worker` over the hand-maintained `proto/korispb` service (not generated from a checked-in `.proto`).
+> Node agents authenticate to the panel's HTTP push/poll endpoints with a Bearer `node_token` (see *Node Agent* below).
+
 ## Authentication
 
 All admin endpoints require a valid session cookie (`session_id`). Sessions are created via the login endpoint.

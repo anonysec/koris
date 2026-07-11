@@ -241,7 +241,7 @@ func testGatewayCallbackSuccess(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// Mock: GenerateInvoiceNumber query
-	mock.ExpectQuery("SELECT invoice_number FROM invoices WHERE invoice_number LIKE \\?").
+	mock.ExpectQuery("SELECT invoice_number FROM invoices WHERE invoice_number LIKE \\$1").
 		WillReturnRows(sqlmock.NewRows([]string{"invoice_number"})) // No previous invoices → first one
 
 	// Mock: insert invoice

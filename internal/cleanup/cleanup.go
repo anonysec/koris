@@ -232,36 +232,36 @@ func (s *Service) deleteInBatches(ctx context.Context, target CleanupTarget, cut
 func buildQueries(target CleanupTarget) (string, string, string) {
 	switch target {
 	case TargetStaleSessions:
-		return "SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < ?",
-			"DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < $1",
+			"DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < $1 LIMIT $2",
 			"acctstoptime"
 	case TargetExpiredSubs:
-		return "SELECT COUNT(*) FROM customers WHERE status='expired' AND updated_at < ?",
-			"DELETE FROM customers WHERE status='expired' AND updated_at < ? AND deleted_at IS NOT NULL LIMIT ?",
+		return "SELECT COUNT(*) FROM customers WHERE status='expired' AND updated_at < $1",
+			"DELETE FROM customers WHERE status='expired' AND updated_at < $1 AND deleted_at IS NOT NULL LIMIT $2",
 			"updated_at"
 	case TargetOrphanedRecords:
-		return "SELECT COUNT(*) FROM radacct WHERE username NOT IN (SELECT username FROM customers WHERE deleted_at IS NULL) AND acctstarttime < ?",
-			"DELETE FROM radacct WHERE username NOT IN (SELECT username FROM customers WHERE deleted_at IS NULL) AND acctstarttime < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM radacct WHERE username NOT IN (SELECT username FROM customers WHERE deleted_at IS NULL) AND acctstarttime < $1",
+			"DELETE FROM radacct WHERE username NOT IN (SELECT username FROM customers WHERE deleted_at IS NULL) AND acctstarttime < $1 LIMIT $2",
 			"acctstarttime"
 	case TargetOldRadAcct:
-		return "SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < ?",
-			"DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < $1",
+			"DELETE FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < $1 LIMIT $2",
 			"acctstoptime"
 	case TargetOldWalletTxns:
-		return "SELECT COUNT(*) FROM wallet_transactions WHERE created_at < ?",
-			"DELETE FROM wallet_transactions WHERE created_at < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM wallet_transactions WHERE created_at < $1",
+			"DELETE FROM wallet_transactions WHERE created_at < $1 LIMIT $2",
 			"created_at"
 	case TargetOldAuditLogs:
-		return "SELECT COUNT(*) FROM audit_logs WHERE created_at < ?",
-			"DELETE FROM audit_logs WHERE created_at < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM audit_logs WHERE created_at < $1",
+			"DELETE FROM audit_logs WHERE created_at < $1 LIMIT $2",
 			"created_at"
 	case TargetOldEvents:
-		return "SELECT COUNT(*) FROM events WHERE created_at < ?",
-			"DELETE FROM events WHERE created_at < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM events WHERE created_at < $1",
+			"DELETE FROM events WHERE created_at < $1 LIMIT $2",
 			"created_at"
 	case TargetOldSnapshots:
-		return "SELECT COUNT(*) FROM node_usage_snapshots WHERE created_at < ?",
-			"DELETE FROM node_usage_snapshots WHERE created_at < ? LIMIT ?",
+		return "SELECT COUNT(*) FROM node_usage_snapshots WHERE created_at < $1",
+			"DELETE FROM node_usage_snapshots WHERE created_at < $1 LIMIT $2",
 			"created_at"
 	default:
 		return "", "", ""
@@ -278,19 +278,19 @@ func buildSubQuery(target CleanupTarget, cutoff time.Time) string {
 	// This is approximate — we just need the oldest row
 	switch target {
 	case TargetStaleSessions, TargetOldRadAcct:
-		return fmt.Sprintf("SELECT %s FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM radacct WHERE acctstoptime IS NOT NULL AND acctstoptime < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	case TargetExpiredSubs:
-		return fmt.Sprintf("SELECT %s FROM customers WHERE status='expired' AND updated_at < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM customers WHERE status='expired' AND updated_at < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	case TargetOrphanedRecords:
-		return fmt.Sprintf("SELECT %s FROM radacct WHERE acctstarttime < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM radacct WHERE acctstarttime < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	case TargetOldWalletTxns:
-		return fmt.Sprintf("SELECT %s FROM wallet_transactions WHERE created_at < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM wallet_transactions WHERE created_at < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	case TargetOldAuditLogs:
-		return fmt.Sprintf("SELECT %s FROM audit_logs WHERE created_at < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM audit_logs WHERE created_at < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	case TargetOldEvents:
-		return fmt.Sprintf("SELECT %s FROM events WHERE created_at < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM events WHERE created_at < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	case TargetOldSnapshots:
-		return fmt.Sprintf("SELECT %s FROM node_usage_snapshots WHERE created_at < ? ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
+		return fmt.Sprintf("SELECT %s FROM node_usage_snapshots WHERE created_at < $1 ORDER BY %s ASC LIMIT 1", dateCol, dateCol)
 	default:
 		return "SELECT NOW() AS dt"
 	}

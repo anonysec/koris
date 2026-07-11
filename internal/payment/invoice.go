@@ -26,7 +26,7 @@ func GenerateInvoiceNumber(db *sql.DB) (string, error) {
 
 	var lastNumber string
 	err := db.QueryRow(
-		"SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY invoice_number DESC LIMIT 1",
+		"SELECT invoice_number FROM invoices WHERE invoice_number LIKE $1 ORDER BY invoice_number DESC LIMIT 1",
 		pattern,
 	).Scan(&lastNumber)
 

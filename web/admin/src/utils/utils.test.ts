@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatBytes } from './formatBytes'
+import { formatBytes } from '@koris/core'
 import { formatCurrency } from './formatCurrency'
 import { computeExpiryDate } from './computeExpiryDate'
 import { formatAdvancedSummary } from './formatAdvancedSummary'

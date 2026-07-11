@@ -1,28 +1,27 @@
-# Git
+# Version control
 .git
 .gitignore
 
-# Node modules (rebuilt in Docker)
-**/node_modules
-
-# Pre-built frontend (rebuilt in Docker from source)
-panel/web/portal/www
-panel/web/landing/www
-
-# Certificates and secrets
-*.pem
+# Local environment / secrets — never bake these into the image.
 .env
 docker/panel.env
+*.pem
 
-# IDE and editor files
+# Dependencies are reinstalled inside the builder; exclude them from the
+# build context to keep it small and force a clean, reproducible install.
+**/node_modules
+web/node_modules
+
+# Pre-built SPAs are regenerated from source during the build. Excluding the
+# stale www/ dirs guarantees the embed step picks up freshly built assets.
+web/admin/www
+web/portal/www
+web/landing/www
+
+# Editor / OS noise
 .vscode
 .idea
 *.swp
-*.swo
-
-# Kiro specs
-.kiro
-
-# OS files
 .DS_Store
 Thumbs.db
+.kiro

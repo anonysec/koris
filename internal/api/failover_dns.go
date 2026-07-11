@@ -145,10 +145,12 @@ func (c *CloudflareUpdater) doWithRetry(ctx context.Context, method, url, body s
 		if attempt > 0 {
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(1<<(attempt-1)) * time.Second
+			timer := time.NewTimer(backoff)
+			defer timer.Stop()
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(backoff):
+			case <-timer.C:
 			}
 		}
 

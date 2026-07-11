@@ -1,85 +1,177 @@
-name: koris
-
-# KorisPanel development / single-host deployment stack.
-# NOTE: for production, override secrets (POSTGRES_PASSWORD, PGADMIN_PASSWORD,
-# PANEL_*) via environment or a secrets manager - never commit them.
+# KorisPanel — single-host deployment stack (panel + TimescaleDB + knode).
+#
+# Core services (always started):
+#   db      TimescaleDB (Postgres 16)         — localhost-bound
+#   panel   Koris panel (Go API + 3 SPAs)     — serves HTTPS on :2096 (single port; loopback HTTP fallback)
+#   knode   VPN node agent (built from ../knode)
+#
+# Optional services (enable with --profile):
+#   --profile redis    shared job queue / cache / rate limiter (Redis)
+#   --profile pgadmin   web DB admin UI (localhost-bound)
+#
+# Secrets come from a local `.env` (auto-loaded by Compose). Copy
+# `.env.example` → `.env`, fill the values, and keep `.env` out of git.
 
 services:
-  panel:
-    container_name: koris
-    # Release mode: docker pull $KORIS_IMAGE first, then `docker compose up`.
-    # Source mode: leave KORIS_IMAGE unset, run `docker compose build && up`.
-    image: ${KORIS_IMAGE:-koris:local}
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        BUILD_TAGS: ${BUILD_TAGS:-}
-        # Vite base path — bundled asset URLs match runtime routing.
-        KORIS_ADMIN_BASE: ${KORIS_ADMIN_BASE:-/admin/}
-        KORIS_PORTAL_BASE: ${KORIS_PORTAL_BASE:-/account/}
-    ports:
-      - "${PANEL_PORT:-2026}:${PANEL_PORT:-2026}"
-      - "80:80"
-    environment:
-      PANEL_PG_DSN: "postgres://${POSTGRES_USER:-koris}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-koris}?sslmode=disable"
-      PANEL_DOMAIN: "${PANEL_DOMAIN:-localhost}"
-      PANEL_DEV_MODE: "${PANEL_DEV_MODE:-false}"
-      PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET}"
-      PANEL_SETUP_KEY: "${PANEL_SETUP_KEY:-}"
-      PANEL_RADIUS_SECRET: "${PANEL_RADIUS_SECRET:-}"
-      # URL routing — path prefixes or subdomains. See panel.env.
-      PANEL_ADMIN_PATH: "${PANEL_ADMIN_PATH:-/admin/}"
-      PANEL_PORTAL_PATH: "${PANEL_PORTAL_PATH:-/account/}"
-      PANEL_ADMIN_HOST: "${PANEL_ADMIN_HOST:-}"
-      PANEL_PORTAL_HOST: "${PANEL_PORTAL_HOST:-}"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - panel-data:/var/lib/koris
-      - /etc/koris:/etc/koris
-    restart: unless-stopped
-    mem_limit: 1024m
-    cpus: "1.0"
-    healthcheck:
-      test: ["CMD", "wget", "--no-check-certificate", "-q", "--spider", "https://localhost:2026/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-
+  # ─────────────────────────── Database ───────────────────────────
   db:
-    container_name: koris-db
     image: timescale/timescaledb:latest-pg16
+    container_name: koris-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-koris}
-      POSTGRES_USER: ${POSTGRES_USER:-koris}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    # Bound to localhost only; the panel reaches it over the internal network.
+      POSTGRES_DB: "${POSTGRES_DB:-koris}"
+      POSTGRES_USER: "${POSTGRES_USER:-koris}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+    # Bound to localhost: the panel reaches it over the internal network.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - "${KORIS_HOME:-/opt/koris}/data:/var/lib/postgresql/data"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-koris}"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
     mem_limit: 2048m
     cpus: "2.0"
+    networks: [koris]
 
-  pgadmin:
-    container_name: koris-pgadmin
-    image: dpage/pgadmin4:latest
+  # ─────────────────────────── Panel ──────────────────────────────
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TAGS: "${BUILD_TAGS:-}"
+        # Vite base paths — bundled asset URLs must match runtime routing.
+        KORIS_ADMIN_BASE: "${KORIS_ADMIN_BASE:-/admin/}"
+        KORIS_PORTAL_BASE: "${KORIS_PORTAL_BASE:-/account/}"
+    image: "${KORIS_IMAGE:-koris:local}"
+    container_name: koris
+    ports:
+      # Single panel port. HTTPS is mandatory; plain HTTP is only a local
+      # (loopback) fallback used when the cert can't load. Let's Encrypt ACME
+      # (HTTP-01) needs :80 during issuance — publish it temporarily if you use ACME.
+      - "${PANEL_PORT:-2096}:2096"
+      # - "80:80"
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@koris.local}
-      # SECURITY: no insecure default - PGADMIN_PASSWORD must be provided.
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PANEL_PG_DSN: "postgres://${POSTGRES_USER:-koris}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-koris}?sslmode=disable"
+      PANEL_DOMAIN: "${PANEL_DOMAIN:-localhost}"
+      PANEL_DEV_MODE: "${PANEL_DEV_MODE:-false}"
+      # Single panel port. HTTPS on PANEL_TLS_ADDR; if the cert fails to load the
+      # panel falls back to loopback HTTP on the same port. KORIS_HOME is mounted
+      # at /etc/koris so certs/config live in one accessible folder on the host.
+      PANEL_ADDR: "0.0.0.0:${PANEL_PORT:-2096}"
+      PANEL_TLS_ADDR: ":${PANEL_PORT:-2096}"
+      PANEL_TLS_ENABLED: "${PANEL_TLS_ENABLED:-true}"
+      PANEL_TLS_MODE: "${PANEL_TLS_MODE:-selfsigned}"
+      PANEL_TLS_CERT: "/etc/koris/certs/cert.pem"
+      PANEL_TLS_KEY: "/etc/koris/certs/key.pem"
+      PANEL_TLS_CERT_DIR: "/etc/koris/certs"
+      PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET:-}"
+      PANEL_SETUP_KEY: "${PANEL_SETUP_KEY:-}"
+      PANEL_RADIUS_SECRET: "${PANEL_RADIUS_SECRET:-}"
+      PANEL_MIGRATIONS: "/app/migrations"
+      # URL routing — path prefixes (or subdomains via *_HOST).
+      PANEL_ADMIN_PATH: "${PANEL_ADMIN_PATH:-/admin/}"
+      PANEL_PORTAL_PATH: "${PANEL_PORTAL_PATH:-/account/}"
+      PANEL_ADMIN_HOST: "${PANEL_ADMIN_HOST:-}"
+      PANEL_PORTAL_HOST: "${PANEL_PORTAL_HOST:-}"
+      # Optional shared Redis: set REDIS_ADDR=redis:6379 in .env to enable.
+      REDIS_ADDR: "${REDIS_ADDR:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - panel-data:/var/lib/koris
+      - "${KORIS_HOME:-/opt/koris}:/etc/koris"
+    restart: unless-stopped
+    mem_limit: 1024m
+    cpus: "1.0"
+    healthcheck:
+      # The panel terminates TLS itself on the single :2096 port (HTTPS).
+      # Self-signed (dev) certs are accepted here.
+      # Fall back to the loopback HTTP listener (cert-failure mode) if needed.
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://localhost:${PANEL_PORT:-2096}/api/health || wget -q --spider http://127.0.0.1:${PANEL_PORT:-2096}/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks: [koris]
+
+  # ─────────────────────────── knode agent ────────────────────────
+  # Built from the sibling repo at ../knode via its own Dockerfile.
+  # The entrypoint renders /etc/knode/config.toml from the env vars below
+  # on first boot (a secure random API key is generated if KNODE_API_KEYS
+  # is empty). Register this node in the panel as `knode:2083` + that key.
+  knode:
+    build:
+      context: ../knode
+      dockerfile: Dockerfile
+    image: "${KNODE_IMAGE:-koris-knode:local}"
+    container_name: knode
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "${KNODE_PORT:-2083}:2083"      # gRPC management API (panel connects here)
+      # VPN data-plane ports are protocol-specific — publish as needed, e.g.:
+      # - "51820:51820/udp"             # WireGuard
+    environment:
+      KNODE_LISTEN_ADDR: "${KNODE_LISTEN_ADDR:-:2083}"
+      KNODE_API_KEYS: "${KNODE_API_KEYS:-}"            # comma-separated; empty => random key
+      KNODE_INSECURE_ALLOW_NO_AUTH: "${KNODE_INSECURE_ALLOW_NO_AUTH:-false}"
+      KNODE_ENABLE_REST: "${KNODE_ENABLE_REST:-false}"
+      KNODE_LOG_LEVEL: "${KNODE_LOG_LEVEL:-info}"
+    volumes:
+      - knode-data:/etc/knode
+      - /lib/modules:/lib/modules:ro
+    depends_on:
+      panel:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "knode", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "1.0"
+    networks: [koris]
+
+  # ─────────────────────────── Redis (optional) ──────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: koris-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.5"
+    networks: [koris]
+    profiles: ["redis"]
+
+  # ─────────────────────────── pgAdmin (optional) ────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: koris-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "${PGADMIN_EMAIL:-admin@koris.local}"
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}"
       PGADMIN_CONFIG_SERVER_MODE: "True"
       PGADMIN_CONFIG_ENFORCE_PWD_PASSWORD: "True"
-    # Do not expose pgAdmin publicly; bind to localhost (use a VPN/SSH tunnel).
+    # Bound to localhost only — reach it via SSH/VPN tunnel, never public.
     ports:
       - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
     volumes:
@@ -90,8 +182,16 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     cpus: "0.5"
+    networks: [koris]
+    profiles: ["pgadmin"]
+
+networks:
+  koris:
+    driver: bridge
+    name: koris
 
 volumes:
   panel-data:
-  db-data:
+  knode-data:
+  redis-data:
   pgadmin-data:

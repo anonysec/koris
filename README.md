@@ -30,44 +30,40 @@ Manage your **entire VPN infrastructure** — nodes, customers, subscriptions, p
 
 ---
 
-## 📚 Table of Contents
+## 🚀 Quick start with Docker
 
-- [🚀 Quick Install](#-quick-install)
-- [🧩 Feature Tour](#-feature-tour)
-- [🏗️ Architecture](#️-architecture)
-- [🛠️ Development](#️-development)
-- [📦 Releases](#-releases)
-- [🔐 Security](#-security)
-- [📖 Documentation](#-documentation)
-- [🤝 Contributing](#-contributing)
-
----
-
-## 🚀 Quick Install
-
-### 🐳 Docker (recommended)
+Docker is the **primary, recommended path**. The installer provisions the whole stack (panel + TimescaleDB + pgAdmin) for you:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 ```
 
-Run without flags for an **interactive setup** (edition, domain, port, DB, SSL). If an install is detected, you'll be offered reinstall / wipe / update / cancel.
+No flags → interactive setup (edition, domain, port, DB, SSL). If an install is detected you'll be offered reinstall / wipe / update / cancel.
 
-<details>
-<summary>⚙️ Non-interactive flags</summary>
+Prefer to build and run the compose stack yourself? The Docker agent maintains the final `docker-compose.yml`:
 
 ```bash
-install.sh --full                       # Full edition (default)
-install.sh --lite                       # Lite edition
-install.sh --port=8080                  # Custom port
-install.sh --domain=panel.example.com   # Public domain (enables ACME TLS)
-install.sh --no-knode                   # Skip bundling the knode agent
+cp .env.example .env && nano .env     # set PANEL_SESSION_SECRET, POSTGRES_PASSWORD, PANEL_DOMAIN, ...
+docker compose up -d --build                 # panel + db
+docker compose --profile redis   up -d       # optional: shared Redis cache/queue
+docker compose --profile pgadmin  up -d       # optional: pgAdmin UI (binds localhost)
+```
+
+Then open `https://<host>:2026/admin/` and complete first-run setup. → full details in [docs/installation.md](docs/installation.md).
+
+<details>
+<summary>⚙️ Non-interactive installer flags</summary>
+
+```bash
+koris.sh install --full                       # Full edition (default)
+koris.sh install --lite                       # Lite edition
+koris.sh install --port=2026                  # Custom HTTPS port
+koris.sh install --domain=panel.example.com   # Public domain (enables ACME TLS)
+koris.sh install --no-knode                   # Skip bundling the knode agent
 ```
 </details>
 
-### 📥 Pre-built binary
-
-Grab a self-contained binary from the [**Releases**](https://github.com/anonysec/koris/releases) page:
+### 📥 Pre-built binary (no Docker)
 
 ```bash
 curl -LO https://github.com/anonysec/koris/releases/latest/download/koris-full-linux-amd64
@@ -75,7 +71,7 @@ chmod +x koris-full-linux-amd64
 ./koris-full-linux-amd64
 ```
 
-> 💡 Binaries are named `koris-<edition>-linux-<arch>` (`full`/`lite` × `amd64`/`arm64`). Verify with the `SHA256SUMS` attached to each release.
+> Binaries are named `koris-<edition>-linux-<arch>` (`full`/`lite` × `amd64`/`arm64`). Verify with the `SHA256SUMS` attached to each release.
 
 ### 🧱 From source
 
@@ -84,38 +80,6 @@ git clone https://github.com/anonysec/koris.git && cd koris
 make build          # frontends + backend  →  ./koris
 make help           # list all targets
 ```
-
----
-
-## 🧩 Feature Tour
-
-### 🔒 VPN & Networking
-- **Multi-protocol** cores per node — OpenVPN, WireGuard, L2TP/IPsec, IKEv2, SSH, MTProto
-- **Outbound tunnels** — VLESS+Reality, WireGuard, SSH, Rathole, GRE/IPIP
-- **FreeRADIUS** AAA with session accounting
-- **Anti-DPI / teleproxy** helpers for censored networks
-
-### 💼 Business & Billing
-- **Subscription plans** — quota-based or pay-as-you-go
-- **Wallets & payments** — manual, crypto, and gateway (e.g. Zarinpal)
-- **Resellers** — sub-accounts with credit and their own customers
-- **Invoices** — auto-generated, PDF export
-
-### 🙋 Customer Experience
-- **Self-service portal** — usage, profiles, VPN configs, support
-- **Telegram bot** — admin ops + customer self-service via inline buttons
-- **Ticketing** — canned responses + knowledge base
-
-### 🖥️ Admin Dashboard
-- **Drag-and-drop sidebar**, command palette, onboarding checklist
-- **6 UI themes** (Default, Kiro, GitHub, Soft-Dark, Corporate, Midnight) + dark/light/system
-- **i18n** — English, Persian (RTL), Chinese, Russian
-
-### 🏭 Infrastructure
-- **Two editions** — Full & Lite from one codebase via Go build tags
-- **Auto-TLS** — Let's Encrypt (ACME), manual, or self-signed
-- **HTTPS enforced** externally; plain HTTP restricted to loopback
-- **Decoy landing page** to blend in
 
 ---
 
@@ -135,6 +99,8 @@ make help           # list all targets
 - **Backend:** Go 1.25, `./cmd/panel`, ~40 internal packages
 - **Frontend:** pnpm workspace — `admin`, `portal`, `landing` (+ shared `core`/`theme`), embedded via `go:embed`
 - **Nodes:** [`anonysec/knode`](https://github.com/anonysec/knode) — see its README
+
+See [docs/architecture.md](docs/architecture.md) for components, editions, and node management.
 
 ---
 
@@ -156,23 +122,6 @@ make clean           # 🧹 remove artifacts
 
 ---
 
-## 📦 Releases
-
-Each tagged release publishes:
-
-- 🔗 **Raw binaries** — `koris-{full,lite}-linux-{amd64,arm64}` + `SHA256SUMS`
-- 🐳 **Multi-arch image** — `ghcr.io/anonysec/koris:<version>` (amd64 + arm64)
-
-> Want a tarball? Clone the repo — GitHub's auto-generated **Source code (zip/tar.gz)** is on every release. We intentionally keep release assets to binaries only. 📉
-
-Cut a release:
-
-```bash
-git tag v0.94.0 && git push origin v0.94.0
-```
-
----
-
 ## 🔐 Security
 
 - 🔑 mTLS between panel and every node
@@ -184,12 +133,13 @@ git tag v0.94.0 && git push origin v0.94.0
 
 ## 📖 Documentation
 
-Full guides live in [`docs/`](docs/) and the [project wiki](https://github.com/anonysec/koris/wiki):
+Full guides live in [`docs/`](docs/):
 
-- 📘 [Installation](docs/installation.md)
-- 🏛️ [Architecture](docs/architecture.md)
+- 📘 [Installation & Operations](docs/installation.md)
+- 🏛️ [Architecture & Nodes](docs/architecture.md)
 - ⚙️ [Configuration](docs/configuration.md)
-- 🛰️ [Node Management](docs/nodes.md)
+- 📡 [API Reference](docs/API.md)
+- 🎨 [UI / UX](docs/ui-ux.md)
 - 🚀 [Release Process](RELEASING.md)
 
 ---

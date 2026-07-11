@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// cloudflareClient is a shared HTTP client for Cloudflare API calls. It reuses
+// its transport for connection pooling across calls; the timeout matches the
+// previous per-call client.
+var cloudflareClient = &http.Client{Timeout: 15 * time.Second}
+
 // failoverProviders handles GET (list) and POST (create) for /api/failover/providers.
 func (s *Server) failoverProviders(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -99,7 +104,7 @@ func (s *Server) testFailoverProvider(w http.ResponseWriter, r *http.Request, id
 		req.Header.Set("Authorization", "Bearer "+apiToken)
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{Timeout: 15 * time.Second}
+		client := cloudflareClient
 		resp, err := client.Do(req)
 		if err != nil {
 			writeJSONCode(w, http.StatusBadGateway, map[string]any{

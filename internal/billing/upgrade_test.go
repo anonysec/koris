@@ -53,8 +53,8 @@ func TestUpgradePlan_Success(t *testing.T) {
 			AddRow(startedAt, expiresAt))
 
 	// Create invoice
-	mock.ExpectExec("INSERT INTO invoices").
-		WillReturnResult(sqlmock.NewResult(100, 1))
+	mock.ExpectQuery("INSERT INTO invoices").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(100))
 
 	// Deduct from wallet (cost = 20 - 10*(15/30) = 20 - 5 = 15)
 	mock.ExpectExec("UPDATE customers SET wallet_balance").
@@ -293,8 +293,8 @@ func TestUpgradePlan_ZeroCostDowngrade(t *testing.T) {
 
 	// Cost = 10 - 30*(25/30) = 10 - 25 = -15 → clamped to 0
 	// Create invoice with amount 0
-	mock.ExpectExec("INSERT INTO invoices").
-		WillReturnResult(sqlmock.NewResult(100, 1))
+	mock.ExpectQuery("INSERT INTO invoices").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(100))
 
 	// No wallet deduction (cost=0)
 

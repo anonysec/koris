@@ -11,7 +11,7 @@ import { computed } from 'vue'
 import KExpandableRow from '@koris/ui/KExpandableRow.vue'
 import UsageBar from '@koris/ui/UsageBar.vue'
 import type { Customer } from '@koris/types'
-import { formatBytes } from '@/utils/formatBytes'
+import { formatBytes } from '@koris/core'
 
 export interface ExpandableRowProps {
   user: Customer

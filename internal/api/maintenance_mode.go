@@ -24,19 +24,23 @@ func (s *Server) maintenanceMode(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getMaintenanceMode(w http.ResponseWriter) {
 	var enabled bool
 	var reason, enabledBy, enabledAt string
-	row := s.DB.QueryRow(`SELECT COALESCE(value,'') FROM panel_settings WHERE key='maintenance_mode'`)
-	var val string
-	_ = row.Scan(&val)
-	enabled = val == "true"
 
-	row2 := s.DB.QueryRow(`SELECT COALESCE(value,'') FROM panel_settings WHERE key='maintenance_reason'`)
-	_ = row2.Scan(&reason)
+	// Fetch all four maintenance settings in a single round-trip.
+	settings := make(map[string]string)
+	if rows, err := s.DB.Query(`SELECT key, value FROM panel_settings WHERE key IN ('maintenance_mode','maintenance_reason','maintenance_enabled_by','maintenance_enabled_at')`); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var k, v string
+			if rows.Scan(&k, &v) == nil {
+				settings[k] = v
+			}
+		}
+	}
 
-	row3 := s.DB.QueryRow(`SELECT COALESCE(value,'') FROM panel_settings WHERE key='maintenance_enabled_by'`)
-	_ = row3.Scan(&enabledBy)
-
-	row4 := s.DB.QueryRow(`SELECT COALESCE(value,'') FROM panel_settings WHERE key='maintenance_enabled_at'`)
-	_ = row4.Scan(&enabledAt)
+	enabled = settings["maintenance_mode"] == "true"
+	reason = settings["maintenance_reason"]
+	enabledBy = settings["maintenance_enabled_by"]
+	enabledAt = settings["maintenance_enabled_at"]
 
 	writeJSON(w, map[string]any{
 		"ok":          true,

@@ -142,19 +142,17 @@ func (b *BillingEngine) UpgradePlan(ctx context.Context, customerID int64, newPl
 		PlanID:        &newPlanID,
 	}
 
-	result, err := tx.ExecContext(ctx, `
+	var invoiceID int64
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO invoices (customer_id, invoice_number, amount, currency, status, type, description, plan_id, gateway_id, payment_ref, pdf_path)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id`,
 		inv.CustomerID, inv.InvoiceNumber, inv.Amount, inv.Currency,
 		inv.Status, inv.Type, inv.Description,
 		inv.PlanID, inv.GatewayID, inv.PaymentRef, inv.PDFPath,
-	)
+	).Scan(&invoiceID)
 	if err != nil {
 		return fmt.Errorf("create upgrade invoice: %w", err)
-	}
-	invoiceID, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("get invoice id: %w", err)
 	}
 	inv.ID = invoiceID
 

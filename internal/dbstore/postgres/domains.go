@@ -481,13 +481,14 @@ func (s *Store) UpdateVpnCertificate(ctx context.Context, cert *dbstore.VpnCerti
 
 // ListExpiringCertificates returns certificates that are active and expire within the given duration.
 func (s *Store) ListExpiringCertificates(ctx context.Context, within time.Duration) ([]dbstore.VpnCertificate, error) {
+	cutoff := time.Now().Add(within)
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, node_id, domain_id, cert_type, status, certificate, private_key, ca_chain,
 		       issued_at, expires_at, retry_count, last_error, created_at, updated_at
 		FROM vpn_certificates
-		WHERE status = 'active' AND expires_at <= NOW() + $1::interval
+		WHERE status = 'active' AND expires_at <= $1
 		ORDER BY expires_at ASC
-	`, within.String())
+	`, cutoff)
 	if err != nil {
 		return nil, wrapPgError(err)
 	}

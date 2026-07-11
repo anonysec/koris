@@ -56,8 +56,8 @@ func TestRunAutoRenewalCheck_ProcessesMultipleCustomers(t *testing.T) {
 	mock.ExpectQuery("SELECT name, price, COALESCE\\(currency, 'IRR'\\)").
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"name", "price", "currency"}).AddRow("Basic", 50.00, "IRR"))
-	mock.ExpectExec("INSERT INTO invoices").
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("INSERT INTO invoices").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 	mock.ExpectExec("UPDATE customers SET wallet_balance").
 		WithArgs(50.00, int64(10)).
 		WillReturnResult(sqlmock.NewResult(0, 1))

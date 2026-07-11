@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/anonysec/koris/internal/proxyconfig"
+	"github.com/anonysec/koris/internal/safepath"
 )
 
 // proxyConfigEntry represents a single proxy type configuration in the response.
@@ -48,8 +49,8 @@ func (s *Server) handleProxyConfigs(w http.ResponseWriter, r *http.Request) {
 	if !sslEnabled && domain != "panel.example.com" {
 		leCert := "/etc/letsencrypt/live/" + domain + "/fullchain.pem"
 		leKey := "/etc/letsencrypt/live/" + domain + "/privkey.pem"
-		if _, ok := fileExists(leCert); ok {
-			if _, ok2 := fileExists(leKey); ok2 {
+		if safepath.Exists(leCert) {
+			if safepath.Exists(leKey) {
 				sslEnabled = true
 				sslCertPath = leCert
 				sslKeyPath = leKey

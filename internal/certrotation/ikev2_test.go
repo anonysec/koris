@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/anonysec/koris/internal/testutil"
 )
 
 // --- Mock implementations for testing ---
@@ -279,7 +281,7 @@ func TestIKEv2Worker_PushFailureNotifiesAdmin(t *testing.T) {
 	// Admin should be notified of push failure
 	found := false
 	for _, e := range notifier.events {
-		if e.EventType == "cert" && contains(e.Title, "push failed") {
+		if e.EventType == "cert" && testutil.Contains(e.Title, "push failed") {
 			found = true
 			break
 		}
@@ -366,17 +368,4 @@ func TestCertStatus_Derivation(t *testing.T) {
 
 func timePtr(t time.Time) *time.Time {
 	return &t
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

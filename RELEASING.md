@@ -17,7 +17,7 @@ That's it. GitHub Actions (`.github/workflows/release.yml`) will:
    `full` and `lite` editions — **4 binaries total**, all with embedded
    frontend assets via `//go:embed`
 3. Package each binary as `koris-<edition>-<os>-<arch>.tar.gz` bundled with
-   `migrations/`, `install.sh`, and `deploy/`
+   `migrations/`, `koris.sh`, and `deploy/`
 4. Compute SHA256 checksums (per-file and combined `SHA256SUMS`)
 5. Build a multi-arch Docker image and push to `ghcr.io/anonysec/koris`
    with tags `:v0.93.0`, `:0.93`, `:0`, and (for main-branch tags) `:latest`

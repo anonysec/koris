@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// webhookClient is a shared HTTP client for webhook dispatch. It reuses its
+// transport for connection pooling across dispatches; the timeout matches the
+// previous per-dispatch client.
+var webhookClient = &http.Client{Timeout: 10 * time.Second}
+
 // checkDataWarnings checks the current data usage for the given username against
 // configured warning thresholds and the plan data cap. If any threshold is crossed
 // and hasn't been warned before, it creates an event and dispatches a notification.
@@ -483,7 +488,7 @@ func (s *Server) dispatchWebhook(eventType, title, message, username string) {
 	})
 
 	go func() {
-		client := &http.Client{Timeout: 10 * time.Second}
+		client := webhookClient
 		resp, err := client.Post(parsed.WebhookURL, "application/json", bytes.NewReader(payload))
 		if err != nil {
 			log.Printf("[webhook] failed to dispatch to %s: %v", parsed.WebhookURL, err)

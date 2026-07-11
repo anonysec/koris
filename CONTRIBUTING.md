@@ -1,14 +1,14 @@
-# Contributing to KorisPanel
+# Contributing to Koris
 
 Thanks for contributing! This document keeps the codebase consistent and CI green.
 
 ## Architecture
 
-- **Backend:** Go (`KorisPanel/panel`) under `panel/internal/...`, entrypoint
-  `panel/cmd/panel`. Exposes an HTTP/gRPC API consumed by the web UIs.
-- **Frontend:** pnpm workspace under `panel/web` with apps `admin`, `portal`,
+- **Backend:** Go (`github.com/anonysec/koris`) under `internal/...`, entrypoint
+  `cmd/panel`. Exposes an HTTP/gRPC API consumed by the web UIs.
+- **Frontend:** pnpm workspace under `web` with apps `admin`, `portal`,
   `landing` (Vue 3 + Vite).
-- **Database:** TimescaleDB (PostgreSQL) with migrations in `panel/migrations`.
+- **Database:** TimescaleDB (PostgreSQL) with migrations in `migrations/`.
 - **Node agent:** the separate [`knode`](https://github.com/anonysec/knode)
   repository connects to this panel.
 
@@ -28,14 +28,14 @@ go vet ./...
 go test ./... -count=1
 
 # Frontend
-cd panel/web
+cd web
 pnpm install --frozen-lockfile
 pnpm --filter admin build
 pnpm --filter portal build
 pnpm --filter landing build
 
 # Full stack
-docker compose -f docker/docker-compose.dev.yml up --build
+docker compose up --build
 ```
 
 ## Commit & PR Guidelines

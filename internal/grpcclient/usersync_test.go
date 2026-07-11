@@ -228,7 +228,7 @@ func TestUserSyncService_GetNodesForCoreTypes(t *testing.T) {
 			3: {NodeID: 3, NodeName: "node3", Status: StatusOffline},
 		},
 	}
-	svc := NewUserSyncService(pool, store)
+	_ = NewUserSyncService(pool, store)
 
 	// node_services query returns nodes 1, 2, and 3
 	mock.ExpectQuery("SELECT DISTINCT node_id FROM node_services").
@@ -239,9 +239,9 @@ func TestUserSyncService_GetNodesForCoreTypes(t *testing.T) {
 			AddRow(3))
 
 	ctx := context.Background()
-	nodes, err := svc.getNodesForCoreTypes(ctx, []string{"openvpn", "wireguard"})
+	nodes, err := getOnlineNodesForCores(ctx, store.DB(), pool, []string{"openvpn", "wireguard"})
 	if err != nil {
-		t.Fatalf("getNodesForCoreTypes: %v", err)
+		t.Fatalf("getOnlineNodesForCores: %v", err)
 	}
 
 	// Node 3 is offline, should be filtered out

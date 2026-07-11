@@ -14,7 +14,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.title': 'Settings',
     'nav.resellers': 'Resellers',
     'customers.title': 'Customers',
-    'resellers.title': 'Resellers',
     'nav.services': 'Services',
     'nav.plans': 'Plans',
     'nav.settings': 'Settings',

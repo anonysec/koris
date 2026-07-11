@@ -13,7 +13,7 @@ import (
 func TestCacheStats_GET(t *testing.T) {
 	tests := []struct {
 		name       string
-		cache      *cache.QueryCache
+		cache      cache.Cache
 		wantHits   int64
 		wantMisses int64
 		wantSize   int

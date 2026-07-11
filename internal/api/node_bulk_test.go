@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,14 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
+
+// passThroughConverter lets sqlmock accept slice arguments (e.g. the
+// []int64 used by the id = ANY($1) bulk existence check) the same way the
+// real pgx driver does in production. The default sqlmock converter rejects
+// slices, which would make the query error and the node be reported missing.
+type passThroughConverter struct{}
+
+func (passThroughConverter) ConvertValue(in any) (driver.Value, error) { return in, nil }
 
 func TestNodeBulk_MethodNotAllowed(t *testing.T) {
 	s := &Server{}
@@ -91,13 +100,13 @@ func TestNodeBulk_RunCommandMissingParam(t *testing.T) {
 }
 
 func TestNodeBulk_MaintenanceOn(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	db, mock, err := sqlmock.New(sqlmock.ValueConverterOption(passThroughConverter{}))
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
 	defer db.Close()
 	s := &Server{DB: db}
-	mock.ExpectQuery("SELECT 1 FROM nodes WHERE id").WithArgs(int64(3)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	mock.ExpectQuery("SELECT id FROM nodes").WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(3))
 	mock.ExpectExec("UPDATE nodes SET maintenance_mode").WithArgs(true, int64(3)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("INSERT INTO audit_logs").WillReturnResult(sqlmock.NewResult(1, 1))
 	body := `{"action":"maintenance_on","node_ids":[3]}`
@@ -118,13 +127,13 @@ func TestNodeBulk_MaintenanceOn(t *testing.T) {
 }
 
 func TestNodeBulk_EnableProtocolNoGRPC(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	db, mock, err := sqlmock.New(sqlmock.ValueConverterOption(passThroughConverter{}))
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
 	defer db.Close()
 	s := &Server{DB: db}
-	mock.ExpectQuery("SELECT 1 FROM nodes WHERE id").WithArgs(int64(1)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	mock.ExpectQuery("SELECT id FROM nodes").WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 	mock.ExpectExec("INSERT INTO audit_logs").WillReturnResult(sqlmock.NewResult(1, 1))
 	body := `{"action":"enable_protocol","node_ids":[1],"params":{"protocol":"wireguard"}}`
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/nodes/bulk", strings.NewReader(body))

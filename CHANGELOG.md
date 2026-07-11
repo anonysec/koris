@@ -14,7 +14,7 @@ All notable changes to the clean Go + Vue rewrite are tracked here.
 ### Added
 - **Releases**: pre-built binaries + multi-arch Docker images to GHCR, triggered by `v*` git tags. See `RELEASING.md`.
 - **`--from-release` installer mode** (default): pulls `ghcr.io/anonysec/koris:<tag>` instead of building locally (~5s vs ~2min). Use `--from-source` to keep the old behavior.
-- **Configurable URL routing**: `PANEL_ADMIN_PATH`, `PANEL_PORTAL_PATH`, `PANEL_ADMIN_HOST`, `PANEL_PORTAL_HOST` env vars. Interactive prompt in `install.sh` for path-vs-subdomain choice. Vite base is env-driven via `KORIS_ADMIN_BASE` / `KORIS_PORTAL_BASE` at build time.
+- **Configurable URL routing**: `PANEL_ADMIN_PATH`, `PANEL_PORTAL_PATH`, `PANEL_ADMIN_HOST`, `PANEL_PORTAL_HOST` env vars. Interactive prompt in `koris.sh` for path-vs-subdomain choice. Vite base is env-driven via `KORIS_ADMIN_BASE` / `KORIS_PORTAL_BASE` at build time.
 - **Onboarding checklist** (admin Dashboard) — new admins see a 3-step "add node · create plan · add customer" guide with progress bar. Auto-hides once populated.
 - **Portal welcome** (customer SinglePage) — new customers see a "download config · install client · connect" guide. Auto-hides once traffic is recorded.
 - **Revenue trend card** — new `/api/admin/revenue-trend` endpoint + SVG area chart on Dashboard with MRR, month-over-month delta, and 7d/30d/90d/365d switcher.

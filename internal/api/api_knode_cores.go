@@ -90,6 +90,35 @@ func (s *Server) listKnodeCores(w http.ResponseWriter, r *http.Request, nodeID i
 		}
 	}
 
+	// Fetch node services (status + last_error) and vpn configs (port) once,
+	// then build lookup maps to avoid per-protocol round-trips in the loop.
+	type nsInfo struct {
+		status    string
+		lastError string
+	}
+	serviceInfo := make(map[string]nsInfo)
+	if srows, err := s.DB.QueryContext(ctx, `SELECT service, status, COALESCE(last_error, '') FROM node_services WHERE node_id=$1`, nodeID); err == nil {
+		defer srows.Close()
+		for srows.Next() {
+			var svc, st, le string
+			if srows.Scan(&svc, &st, &le) == nil {
+				serviceInfo[svc] = nsInfo{status: st, lastError: le}
+			}
+		}
+	}
+
+	vpnPort := make(map[string]int)
+	if prows, err := s.DB.QueryContext(ctx, `SELECT protocol, port FROM node_vpn_configs WHERE node_id=$1`, nodeID); err == nil {
+		defer prows.Close()
+		for prows.Next() {
+			var proto string
+			var port int
+			if prows.Scan(&proto, &port) == nil {
+				vpnPort[proto] = port
+			}
+		}
+	}
+
 	// Build response: merge live data with defaults
 	cores := make([]coreResponse, 0, 5)
 	for _, dp := range defaultProtocols {
@@ -107,23 +136,20 @@ func (s *Server) listKnodeCores(w http.ResponseWriter, r *http.Request, nodeID i
 
 		// Check DB for saved status (fallback when no live data)
 		if _, ok := liveMap[dp.protocol]; !ok {
-			var dbStatus string
-			if err := s.DB.QueryRowContext(ctx, `SELECT status FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, dp.protocol).Scan(&dbStatus); err == nil && dbStatus != "" {
-				cr.State = dbStatus
+			if info, ok := serviceInfo[dp.protocol]; ok && info.status != "" {
+				cr.State = info.status
 			}
 		}
 
 		// Check DB for saved port override
-		var savedPort int
-		if err := s.DB.QueryRowContext(ctx, `SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`, nodeID, dp.protocol).Scan(&savedPort); err == nil && savedPort > 0 {
+		if savedPort, ok := vpnPort[dp.protocol]; ok && savedPort > 0 {
 			cr.Port = savedPort
 		}
 
 		// Enrich with last_error if crashed/error
 		if cr.State == "crashed" || cr.State == "error" {
-			var lastErr string
-			if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(last_error, '') FROM node_services WHERE node_id=$1 AND service=$2`, nodeID, dp.protocol).Scan(&lastErr); err == nil {
-				cr.LastError = lastErr
+			if info, ok := serviceInfo[dp.protocol]; ok {
+				cr.LastError = info.lastError
 			}
 		}
 

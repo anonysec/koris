@@ -4,21 +4,25 @@ import (
 	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/safepath"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"io/fs"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -60,7 +64,7 @@ func dbNameFromDSN(dsn string) string {
 }
 
 func startWorker(db *sql.DB) {
-	notifier := notify.New()
+	notifier := notify.NewNotifier()
 	ticker := time.NewTicker(time.Minute)
 	var tickCount int
 	go func() {
@@ -304,11 +308,6 @@ func loadBotConfigFromDB(database *sql.DB) (token string, chatIDs []int64) {
 	return
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 // startSocketListener starts an HTTP server on a Unix domain socket for local
 // CLI communication. On Windows this is a no-op. Returns the listener (for
 // shutdown) and any error. The caller should serve in a goroutine.
@@ -431,30 +430,46 @@ func redirectToHTTPS(next http.Handler) http.Handler {
 func startTLSListener(handler http.Handler, cfg config.Config) {
 	domain := os.Getenv("PANEL_DOMAIN")
 
+	// Dev-only self-signed mode: generate a self-signed cert if one isn't present.
+	// Browsers will warn — this is for local/dev use only. Production must use a
+	// real cert (manual cert files, or ACME for a domain).
+	if cfg.TLSMode == "selfsigned" && (!safepath.Exists(cfg.TLSCert) || !safepath.Exists(cfg.TLSKey)) {
+		logger.Warn("tls", "SELF-SIGNED certificate (DEV ONLY) — browsers will warn; use a real cert (domain/IP/custom) in production", map[string]any{"cert": cfg.TLSCert})
+		if err := generateSelfSignedCert(cfg.TLSCert, cfg.TLSKey, domain); err != nil {
+			logger.Error("tls", "failed to generate self-signed certificate", map[string]any{"error": err.Error()})
+			logger.Warn("tls", "falling back to loopback-only HTTP so an admin can fix the certificate", map[string]any{"addr": "127.0.0.1"})
+			serveLoopbackHTTP(handler, cfg.TLSAddr)
+			return
+		}
+	}
+
 	// Mode 1: Custom cert/key files provided
-	if fileExists(cfg.TLSCert) && fileExists(cfg.TLSKey) {
+	if safepath.Exists(cfg.TLSCert) && safepath.Exists(cfg.TLSKey) {
 		logger.Info("tls", "starting HTTPS with custom cert/key", map[string]any{
 			"cert": cfg.TLSCert,
 			"key":  cfg.TLSKey,
 			"addr": cfg.TLSAddr,
 		})
 
-		// Start loopback-only HTTP listener with redirect middleware
-		go startHTTPLoopback(handler, cfg.Addr)
-
-		// HTTPS listener on all interfaces with min TLS 1.2
+		// Single-port model: HTTPS occupies the one port, so no separate loopback
+		// HTTP listener here. Plain HTTP is started only as the cert-failure
+		// fallback (serveLoopbackHTTP) further below.
 		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
 		tlsCfg.Certificates = make([]tls.Certificate, 1)
 		var err error
 		tlsCfg.Certificates[0], err = tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
 		if err != nil {
 			logger.Error("tls", "failed to load TLS certificate", map[string]any{"error": err.Error()})
+			logger.Warn("tls", "falling back to loopback-only HTTP so an admin can fix the certificate")
+			serveLoopbackHTTP(handler, cfg.TLSAddr)
 			return
 		}
 
 		httpsListener, err := tls.Listen("tcp", cfg.TLSAddr, tlsCfg)
 		if err != nil {
 			logger.Error("tls", "failed to bind HTTPS listener", map[string]any{"addr": cfg.TLSAddr, "error": err.Error()})
+			logger.Warn("tls", "falling back to loopback-only HTTP so an admin can fix the certificate")
+			serveLoopbackHTTP(handler, cfg.TLSAddr)
 			return
 		}
 		logger.Info("tls", "HTTPS listener started", map[string]any{"addr": cfg.TLSAddr})
@@ -472,10 +487,19 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 		return
 	}
 
-	// Mode 2: Autocert (Let's Encrypt) — requires PANEL_DOMAIN
-	if domain == "" {
-		logger.Error("tls", "TLS enabled but no PANEL_DOMAIN set and no custom cert/key found — cannot start HTTPS")
-		logger.Error("tls", "set PANEL_DOMAIN for autocert or provide PANEL_TLS_CERT/PANEL_TLS_KEY files")
+	// Mode 2: Autocert (Let's Encrypt / ZeroSSL) — only when explicitly
+	// requested (acme) OR when a REAL domain is configured. A bare "localhost"
+	// or empty domain must NOT trigger ACME (it can't issue for localhost),
+	// so it falls through to the loopback-only HTTP fallback instead.
+	isAcmeMode := cfg.TLSMode == "acme" ||
+		(cfg.TLSMode != "selfsigned" && cfg.TLSMode != "manual" && domain != "" && domain != "localhost")
+	if !isAcmeMode {
+		if cfg.TLSMode == "manual" {
+			logger.Error("tls", "manual TLS mode but PANEL_TLS_CERT/PANEL_TLS_KEY not found", map[string]any{"cert": cfg.TLSCert, "key": cfg.TLSKey})
+		}
+		logger.Error("tls", "no usable certificate and no ACME domain — cannot start public HTTPS")
+		logger.Warn("tls", "falling back to loopback-only HTTP so an admin can fix the certificate", map[string]any{"addr": "127.0.0.1"})
+		serveLoopbackHTTP(handler, cfg.TLSAddr)
 		return
 	}
 
@@ -527,13 +551,120 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 		}
 	}()
 
-	// Start loopback-only HTTP listener for local access
-	go startHTTPLoopback(handler, cfg.Addr)
+	// Start loopback-only HTTP listener for local access (skip when HTTP and HTTPS
+	// share one port — HTTPS already occupies it).
+	if !samePort(cfg.Addr, cfg.TLSAddr) {
+		go startHTTPLoopback(handler, cfg.Addr)
+	}
 
 	if err := tlsSrv.ListenAndServeTLS("", ""); err != nil {
 		logger.Error("tls", "HTTPS server failed (autocert)", map[string]any{"error": err.Error()})
 	}
 }
+
+// serveLoopbackHTTP is the mandatory-HTTPS fallback: when no certificate can be
+// loaded, public HTTPS is unavailable and this serves plain HTTP bound to loopback
+// (127.0.0.1) ONLY on the panel port. Plaintext HTTP is never exposed off-host —
+// an admin reaches it locally (on a bare-metal host directly; in Docker via
+// `docker exec` or the koris CLI) to fix the certificate. This blocks (final call).
+func serveLoopbackHTTP(handler http.Handler, addr string) {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		port = "2096"
+	}
+	httpAddr := "127.0.0.1:" + port
+	logger.Warn("http", "serving loopback-only HTTP fallback on the panel port (cert unavailable) — local access only; fix the certificate and restart", map[string]any{"addr": httpAddr})
+	srv := &http.Server{
+		Addr:              httpAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
+		logger.Error("http", "loopback HTTP fallback server failed", map[string]any{"error": err.Error()})
+	}
+}
+
+// generateSelfSignedCert writes a self-signed ECDSA cert/key pair to certPath and
+// keyPath (creating parent dirs). DEV ONLY — browsers will warn. The cert includes
+// localhost, 127.0.0.1 and ::1, plus the given host (domain or IP) if provided.
+func generateSelfSignedCert(certPath, keyPath, host string) error {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate key: %w", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return fmt.Errorf("serial: %w", err)
+	}
+	tmpl := x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: "koris-panel (self-signed, dev)"},
+		NotBefore:             notBeforeEpoch(),
+		NotAfter:              notBeforeEpoch().AddDate(1, 0, 0),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+	}
+	if host != "" && host != "localhost" {
+		if ip := net.ParseIP(host); ip != nil {
+			tmpl.IPAddresses = append(tmpl.IPAddresses, ip)
+		} else {
+			tmpl.DNSNames = append(tmpl.DNSNames, host)
+		}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
+	if err != nil {
+		return fmt.Errorf("create cert: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o755); err != nil {
+		return fmt.Errorf("mkdir cert dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o755); err != nil {
+		return fmt.Errorf("mkdir key dir: %w", err)
+	}
+	certOut, err := os.Create(certPath)
+	if err != nil {
+		return fmt.Errorf("create cert file: %w", err)
+	}
+	defer certOut.Close()
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: der}); err != nil {
+		return fmt.Errorf("write cert: %w", err)
+	}
+	keyBytes, err := x509.MarshalECPrivateKey(priv)
+	if err != nil {
+		return fmt.Errorf("marshal key: %w", err)
+	}
+	keyOut, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create key file: %w", err)
+	}
+	defer keyOut.Close()
+	if err := pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}); err != nil {
+		return fmt.Errorf("write key: %w", err)
+	}
+	return nil
+}
+
+// notBeforeEpoch returns a fixed backdated NotBefore. time.Now via the injected
+// clock isn't available here; use the process start reference minus a day of skew.
+func notBeforeEpoch() time.Time { return time.Now().Add(-24 * time.Hour) }
+
+// portOf returns the port portion of an address (":2096" -> "2096",
+// "0.0.0.0:2096" -> "2096"), or "" if it can't be parsed.
+func portOf(addr string) string {
+	if _, port, err := net.SplitHostPort(addr); err == nil {
+		return port
+	}
+	return ""
+}
+
+// samePort reports whether two listen addresses resolve to the same port.
+func samePort(a, b string) bool { return portOf(a) != "" && portOf(a) == portOf(b) }
 
 // startHTTPLoopback starts an HTTP server bound to loopback only (127.0.0.1)
 // with the redirectToHTTPS middleware applied. This ensures:
@@ -632,25 +763,12 @@ func main() {
 		// If we ARE a worker child, fall through to normal server startup.
 	}
 
-	// Auto-tune for available CPU cores (respect env override)
-	if os.Getenv("GOMAXPROCS") == "" {
-		cores := runtime.NumCPU()
-		if cores > 4 {
-			cores = 4 // cap at 4 for a panel process
-		}
-		runtime.GOMAXPROCS(cores)
-	}
-
-	// GC tuning: balance throughput vs memory
-	// GOGC=100 (default) is fine for 4GB — more throughput, less GC overhead
-	// Only reduce for <2GB RAM
-	if os.Getenv("GOGC") == "" {
-		debug.SetGCPercent(100)
-	}
-	// Memory limit: use 512MB on 4GB+ servers, 100MB on 1GB
-	if os.Getenv("GOMEMLIMIT") == "" {
-		debug.SetMemoryLimit(512 * 1024 * 1024) // 512MB
-	}
+	// Runtime resource limits (GOMAXPROCS, GOGC, GOMEMLIMIT) are intentionally
+	// left at the Go runtime defaults. On Go 1.25 the runtime automatically
+	// honors the container's cgroup CPU and memory limits, so overriding them
+	// here would ignore that awareness and either over-subscribe CPUs or force
+	// needless GC pressure. Set GOMAXPROCS/GOGC/GOMEMLIMIT in the environment to
+	// override per-host if required.
 
 	cfg := config.Load()
 
@@ -775,8 +893,8 @@ func main() {
 		}
 		certPath := cfg.TLSCert
 		keyPath := cfg.TLSKey
-		certExists := fileExists(certPath)
-		keyExists := fileExists(keyPath)
+		certExists := safepath.Exists(certPath)
+		keyExists := safepath.Exists(keyPath)
 		tlsActive := certExists && keyExists && r.TLS != nil
 		result := map[string]any{
 			"ok":          true,
@@ -876,11 +994,11 @@ func main() {
 		case http.MethodGet:
 			domain := ""
 			_ = database.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key='panel_domain'`).Scan(&domain)
-			sslActive := fileExists("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
+			sslActive := safepath.Exists("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
 			var expiry, issuer string
 			if sslActive {
 				expiry, issuer = parseCertInfo("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
-			} else if fileExists(cfg.TLSCert) {
+			} else if safepath.Exists(cfg.TLSCert) {
 				expiry, issuer = parseCertInfo(cfg.TLSCert)
 				sslActive = true
 			}
@@ -934,7 +1052,7 @@ func main() {
 					logger.Info("domain", "SSL installed", map[string]any{"domain": in.Domain})
 					certSrc := "/etc/letsencrypt/live/" + in.Domain + "/fullchain.pem"
 					keySrc := "/etc/letsencrypt/live/" + in.Domain + "/privkey.pem"
-					if fileExists(certSrc) && fileExists(keySrc) {
+					if safepath.Exists(certSrc) && safepath.Exists(keySrc) {
 						os.MkdirAll("/etc/panel", 0755)
 						safeexec.MustCommand("cp", certSrc, cfg.TLSCert).Run()
 						safeexec.MustCommand("cp", keySrc, cfg.TLSKey).Run()
@@ -1017,6 +1135,7 @@ func main() {
 			socketLn.Close()
 			os.Remove(socketPath)
 		}
+		limiter.Stop()
 		os.Exit(0)
 	}()
 
@@ -1028,8 +1147,9 @@ func main() {
 		// New built-in TLS mode: autocert or custom cert/key
 		logger.Info("tls", "PANEL_TLS_ENABLED=true — starting built-in TLS", map[string]any{"addr": cfg.TLSAddr})
 
-		// Start loopback-only HTTP listener with redirect middleware
-		if cfg.Addr != cfg.TLSAddr {
+		// Start loopback-only HTTP listener with redirect middleware (skip when HTTP
+		// and HTTPS share one port — startTLSListener owns that port for HTTPS).
+		if !samePort(cfg.Addr, cfg.TLSAddr) {
 			go startHTTPLoopback(limiter.Middleware(handler), cfg.Addr)
 		}
 
@@ -1041,12 +1161,14 @@ func main() {
 		behindProxy := strings.HasPrefix(cfg.Addr, "127.") || strings.HasPrefix(cfg.Addr, "localhost")
 		forceTLS := strings.ToLower(os.Getenv("PANEL_TLS_DIRECT")) == "true"
 
-		if fileExists(tlsCert) && fileExists(tlsKey) && (!behindProxy || forceTLS) {
+		if safepath.Exists(tlsCert) && safepath.Exists(tlsKey) && (!behindProxy || forceTLS) {
 			logger.Info("tls", "TLS enabled (legacy mode)", map[string]any{"cert": tlsCert, "key": tlsKey, "addr": cfg.TLSAddr})
 			logger.Info("tls", "HTTP loopback with redirect configured", map[string]any{"addr": "127.0.0.1:" + strings.TrimPrefix(cfg.Addr, ":")})
 
-			// Start loopback-only HTTP server with redirect middleware
-			go startHTTPLoopback(limiter.Middleware(handler), cfg.Addr)
+			// Start loopback-only HTTP server with redirect middleware (skip on shared port)
+			if !samePort(cfg.Addr, cfg.TLSAddr) {
+				go startHTTPLoopback(limiter.Middleware(handler), cfg.Addr)
+			}
 
 			// Start HTTPS server on all interfaces with min TLS 1.2
 			tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -1080,10 +1202,10 @@ func main() {
 				os.Exit(1)
 			}
 		} else {
-			if fileExists(tlsCert) && fileExists(tlsKey) && behindProxy {
+			if safepath.Exists(tlsCert) && safepath.Exists(tlsKey) && behindProxy {
 				logger.Info("tls", "TLS available but behind reverse proxy", map[string]any{"addr": cfg.Addr})
 				logger.Info("tls", "set PANEL_TLS_DIRECT=true to serve TLS directly from Go")
-			} else if !fileExists(tlsCert) || !fileExists(tlsKey) {
+			} else if !safepath.Exists(tlsCert) || !safepath.Exists(tlsKey) {
 				logger.Info("tls", "TLS disabled: cert/key not found", map[string]any{"cert": tlsCert, "key": tlsKey})
 			}
 			if httpErr := func() error { s := &http.Server{Addr: cfg.Addr, Handler: limiter.Middleware(handler), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}; return s.ListenAndServe() }(); httpErr != nil {

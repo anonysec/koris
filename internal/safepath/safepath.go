@@ -45,6 +45,16 @@ func ReadFileInDir(baseDir, relPath string) ([]byte, error) {
 	return os.ReadFile(absPath) // #nosec G304 -- path confined to baseDir
 }
 
+// Exists reports whether a non-empty path exists on disk. It is the shared
+// helper for the previously duplicated fileExists implementations.
+func Exists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // Create creates a file after validating the path does not contain traversal sequences.
 func Create(path string) (*os.File, error) {
 	clean := filepath.Clean(path)

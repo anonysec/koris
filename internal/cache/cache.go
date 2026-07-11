@@ -8,6 +8,17 @@ import (
 	"time"
 )
 
+// Cache is the interface implemented by both the in-memory QueryCache and the
+// Redis-backed RedisCache, so internal/api can use either without call-site
+// changes. Redis is optional: when REDIS_ADDR is unset, the in-memory
+// implementation is selected.
+type Cache interface {
+	Get(key string) (any, bool)
+	Set(key string, value any)
+	InvalidatePrefix(prefix string)
+	Stats() CacheStats
+}
+
 // QueryCache provides in-memory caching for frequently-read, seldom-written queries.
 // It uses an LRU eviction policy with per-entry TTL expiration.
 type QueryCache struct {
@@ -54,28 +65,63 @@ func NewQueryCache(maxSize int, ttl time.Duration) *QueryCache {
 // Get retrieves a value from the cache. Returns (value, true) on hit, (nil, false) on miss.
 // Expired entries are lazily evicted on access.
 func (c *QueryCache) Get(key string) (any, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	// Fast path: read lock only. The common (hot) read path takes only the
+	// read lock so concurrent Gets do not serialize against each other. The
+	// write lock is acquired solely when we must mutate the list — evicting an
+	// expired entry or bumping an entry's recency. After upgrading the lock we
+	// re-lookup the key, because it may have been replaced, invalidated, or
+	// evicted by another goroutine while we released the read lock; this keeps
+	// the method safe under concurrent Set/Invalidate/Get.
+	c.mu.RLock()
 	elem, ok := c.entries[key]
 	if !ok {
+		c.mu.RUnlock()
 		c.misses.Add(1)
 		return nil, false
 	}
-
 	entry := elem.Value.(*cacheEntry)
+	expired := time.Now().After(entry.expiresAt)
+	c.mu.RUnlock()
 
-	// Check TTL — lazy eviction
-	if time.Now().After(entry.expiresAt) {
+	if expired {
+		c.mu.Lock()
+		if elem, ok = c.entries[key]; ok {
+			entry = elem.Value.(*cacheEntry)
+			if time.Now().After(entry.expiresAt) {
+				c.removeLocked(elem)
+				c.misses.Add(1)
+				c.mu.Unlock()
+				return nil, false
+			}
+			// Replaced/refreshed concurrently — treat as a fresh hit.
+			c.order.MoveToFront(elem)
+			c.hits.Add(1)
+			val := entry.value
+			c.mu.Unlock()
+			return val, true
+		}
+		c.mu.Unlock()
+		return nil, false
+	}
+
+	// Fresh hit: bump recency under the write lock.
+	c.mu.Lock()
+	if elem, ok = c.entries[key]; ok {
+		entry = elem.Value.(*cacheEntry)
+		if !time.Now().After(entry.expiresAt) {
+			c.order.MoveToFront(elem)
+			c.hits.Add(1)
+			val := entry.value
+			c.mu.Unlock()
+			return val, true
+		}
 		c.removeLocked(elem)
 		c.misses.Add(1)
+		c.mu.Unlock()
 		return nil, false
 	}
-
-	// Move to front (most recently used)
-	c.order.MoveToFront(elem)
-	c.hits.Add(1)
-	return entry.value, true
+	c.mu.Unlock()
+	return nil, false
 }
 
 // Set adds or updates a cache entry. If the cache is at capacity, the least

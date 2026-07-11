@@ -85,7 +85,7 @@ func (b *BillingEngine) GetResellerMargin(ctx context.Context, resellerID int64,
 	err = b.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(amount), 0) FROM reseller_transactions
 		WHERE reseller_username = $1 AND type = 'allocation'
-		AND created_at >= $1 AND created_at < $2`,
+		AND created_at >= $2 AND created_at < $3`,
 		username, from, to,
 	).Scan(&totalPurchased)
 	if err != nil {
@@ -98,7 +98,7 @@ func (b *BillingEngine) GetResellerMargin(ctx context.Context, resellerID int64,
 	err = b.db.QueryRowContext(ctx, `
 		SELECT COALESCE(-SUM(amount), 0) FROM reseller_transactions
 		WHERE reseller_username = $1 AND type = 'deduction'
-		AND created_at >= $1 AND created_at < $2`,
+		AND created_at >= $2 AND created_at < $3`,
 		username, from, to,
 	).Scan(&totalSold)
 	if err != nil {
@@ -214,7 +214,7 @@ func (b *BillingEngine) ResellerCreateSubscription(ctx context.Context, reseller
 		desc := fmt.Sprintf("Subscription for %s: %s", custUsername, planName)
 		_, err = b.db.ExecContext(ctx, `
 			INSERT INTO reseller_transactions (reseller_username, amount, type, description, actor)
-			VALUES ($2, $3, 'deduction', $4, $5)`,
+			VALUES ($1, $2, 'deduction', $3, $4)`,
 			username, -planPrice, desc, username,
 		)
 		if err != nil {

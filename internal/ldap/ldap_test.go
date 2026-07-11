@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/anonysec/koris/internal/testutil"
 )
 
 func TestLDAPConfig_Validate_Disabled(t *testing.T) {
@@ -108,7 +109,7 @@ func TestLDAPConfig_Validate_RequiredFields(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !testutil.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("expected error containing %q, got: %v", tt.wantErr, err)
 				}
 			}
@@ -155,7 +156,7 @@ func TestTestConnection_NotEnabled(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when LDAP is not enabled")
 	}
-	if !contains(err.Error(), "not enabled") {
+	if !testutil.Contains(err.Error(), "not enabled") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -167,7 +168,7 @@ func TestTestConnection_InvalidConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if !contains(err.Error(), "server_url is required") {
+	if !testutil.Contains(err.Error(), "server_url is required") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -178,7 +179,7 @@ func TestAuthenticate_NotEnabled(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when LDAP is not enabled")
 	}
-	if !contains(err.Error(), "not enabled") {
+	if !testutil.Contains(err.Error(), "not enabled") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -279,15 +280,3 @@ func TestIsEnabled(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
-}
-
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
