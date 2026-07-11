@@ -13,28 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend · Go
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-          cache: true
-      - name: Verify modules
-        run: go mod verify
-      - name: Vet
-        run: go vet ./...
-      - name: Build (full)
-        run: go build ./cmd/panel
-      - name: Build (lite)
-        run: go build -tags lite ./cmd/panel
-      - name: Test
-        run: go test ./... -count=1 -timeout=120s
-
   frontend:
     name: Frontend · pnpm
     runs-on: ubuntu-latest
@@ -57,10 +35,50 @@ jobs:
           pnpm --filter admin build
           pnpm --filter portal build
           pnpm --filter landing build
+      - name: Upload SPA assets
+        # The Go binary embeds web/{admin,portal,landing}/www at build time
+        # (//go:embed). A fresh checkout has no built assets, so we pass
+        # the freshly-built www/ dirs to the backend job as artifacts.
+        uses: actions/upload-artifact@v4
+        with:
+          name: spa-www
+          if-no-files-found: error
+          path: |
+            web/admin/www
+            web/portal/www
+            web/landing/www
       - name: Test
         # -r runs recursively across workspace packages;
         # --if-present skips packages that don't declare a test script.
         run: pnpm -r --workspace-concurrency=1 --if-present test
+
+  backend:
+    name: Backend · Go
+    runs-on: ubuntu-latest
+    needs: [frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download SPA assets
+        # Populate web/{admin,portal,landing}/www so //go:embed resolves.
+        uses: actions/download-artifact@v4
+        with:
+          name: spa-www
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: Verify modules
+        run: go mod verify
+      - name: Vet
+        run: go vet ./...
+      - name: Build (full)
+        run: go build ./cmd/panel
+      - name: Build (lite)
+        run: go build -tags lite ./cmd/panel
+      - name: Test
+        run: go test ./... -count=1 -timeout=120s
 
   docker:
     name: Docker · build image
