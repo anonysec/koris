@@ -4,6 +4,17 @@ All notable changes to the clean Go + Vue rewrite are tracked here.
 
 ## Unreleased
 
+## 0.93.1 - 2026-07-11
+
+### Fixed
+- **Node edit/save** — editing a node no longer wipes its mTLS certs/keys; the panel now merges provided fields and preserves `api_key`/`client_cert`/`ca_cert`, so the node stays ONLINE after a save. `address` (gRPC dial target) and `domain` (public client endpoint) are edited independently.
+- **Portal `/account/` first-load loop** — the customer router's auth guard re-checked `checkAuth()` on every navigation (including its own redirect), causing an infinite 401 loop on first load. Now resolves auth once per page load.
+- **Root `/` redirect removed** — the landing page now serves for everyone (authenticated or not) instead of bouncing admins/customers away.
+
+### Changed
+- **Landing copy refresh** — hero now leads with the general "run your network services from one dashboard" framing (popular-content tone) instead of VPN-specific jargon. Removed the heavy `three` (WebGL) dependency to shrink the landing bundle.
+- **i18n tests** — landing assertions are now data-driven from the source JSON, so copy changes no longer break CI.
+
 ## 0.93.0 - 2026-07-06
 
 ### Fixed
