@@ -35,6 +35,16 @@ jobs:
           pnpm --filter admin build
           pnpm --filter portal build
           pnpm --filter landing build
+      - name: Stage SPA assets
+        # upload-artifact strips the common parent of the glob paths, which
+        # would drop the leading "web/" and break //go:embed (it expects
+        # web/{admin,portal,landing}/www). Stage the dirs under a temp root
+        # that preserves the web/<app>/www prefix, then upload that root.
+        run: |
+          rm -rf /tmp/spa && mkdir -p /tmp/spa/web
+          cp -r web/admin/www  /tmp/spa/web/admin/www
+          cp -r web/portal/www /tmp/spa/web/portal/www
+          cp -r web/landing/www /tmp/spa/web/landing/www
       - name: Upload SPA assets
         # The Go binary embeds web/{admin,portal,landing}/www at build time
         # (//go:embed). A fresh checkout has no built assets, so we pass
@@ -43,10 +53,7 @@ jobs:
         with:
           name: spa-www
           if-no-files-found: error
-          path: |
-            web/admin/www
-            web/portal/www
-            web/landing/www
+          path: /tmp/spa
       - name: Test
         # -r runs recursively across workspace packages;
         # --if-present skips packages that don't declare a test script.
