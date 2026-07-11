@@ -12,11 +12,11 @@ docker/panel.env
 **/node_modules
 web/node_modules
 
-# Pre-built SPAs are regenerated from source during the build. Excluding the
-# stale www/ dirs guarantees the embed step picks up freshly built assets.
-web/admin/www
-web/portal/www
-web/landing/www
+# NOTE: do NOT exclude web/*/www here. The release image
+# (Dockerfile.release) embeds the pre-built SPAs straight from the build
+# context — they are produced by the `frontend` job and downloaded into
+# web/ before `docker build`. The main Dockerfile rebuilds the SPAs itself,
+# so it does not depend on these being present in the context.
 
 # Editor / OS noise
 .vscode
