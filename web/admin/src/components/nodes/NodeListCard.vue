@@ -11,7 +11,11 @@ const emit = defineEmits<{
   (e: 'select', nodeId: number): void
 }>()
 
-const addressDisplay = computed(() => `${props.node.address}:${props.node.port}`)
+// Prefer the public domain (client-reachable) over the internal gRPC address.
+const addressDisplay = computed(() => {
+  const host = props.node.domain?.trim() || props.node.address
+  return `${host}:${props.node.port}`
+})
 
 const lastSeenDisplay = computed(() => {
   if (!props.node.lastSeenAt) return 'Never'

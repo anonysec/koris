@@ -24,6 +24,7 @@ const MASKED = '••••••••'
 // ─── Form State ─────────────────────────────────────────────────────────────
 const name = ref(props.node.name)
 const address = ref(props.node.address)
+const domain = ref(props.node.domain ?? '')
 const port = ref(props.node.port)
 const apiKey = ref(MASKED)
 const clientCertPem = ref(MASKED)
@@ -37,6 +38,7 @@ const feedback = ref<{ type: 'success' | 'error'; message: string } | null>(null
 watch(() => props.node, (n) => {
   name.value = n.name
   address.value = n.address
+  domain.value = n.domain ?? ''
   port.value = n.port
   apiKey.value = MASKED
   clientCertPem.value = MASKED
@@ -65,6 +67,7 @@ const hasChanges = computed(() => {
   return (
     name.value !== props.node.name ||
     address.value !== props.node.address ||
+    domain.value.trim() !== (props.node.domain ?? '') ||
     Number(port.value) !== props.node.port ||
     apiKey.value !== MASKED ||
     clientCertPem.value !== MASKED ||
@@ -80,6 +83,16 @@ async function handleSubmit() {
   saving.value = true
   feedback.value = null
 
+  const domainChanged = domain.value.trim() !== (props.node.domain ?? '')
+  const coreChanged =
+    name.value !== props.node.name ||
+    address.value !== props.node.address ||
+    Number(port.value) !== props.node.port ||
+    apiKey.value !== MASKED ||
+    clientCertPem.value !== MASKED ||
+    clientKeyPem.value !== MASKED ||
+    caCertPem.value !== MASKED
+
   // Only send changed fields
   const payload: Partial<NodeFormData> = {}
   if (name.value !== props.node.name) payload.name = name.value.trim()
@@ -90,14 +103,17 @@ async function handleSubmit() {
   if (clientKeyPem.value !== MASKED) payload.client_key_pem = clientKeyPem.value
   if (caCertPem.value !== MASKED) payload.ca_cert_pem = caCertPem.value
 
-  const ok = await nodesStore.updateNode(props.node.id, payload)
+  const results: boolean[] = []
+  if (coreChanged) results.push(await nodesStore.updateNode(props.node.id, payload))
+  if (domainChanged) results.push(await nodesStore.setNodeDomain(props.node.id, domain.value))
 
+  const ok = results.length > 0 && results.every(Boolean)
   if (ok) {
     feedback.value = { type: 'success', message: 'Node updated successfully' }
     toast.success('Node updated')
     emit('updated')
   } else {
-    feedback.value = { type: 'error', message: 'Failed to update node. Connection test may have failed.' }
+    feedback.value = { type: 'error', message: 'Failed to update node. Check the values and try again.' }
   }
 
   saving.value = false
@@ -128,6 +144,12 @@ function clearField(field: 'apiKey' | 'clientCertPem' | 'clientKeyPem' | 'caCert
     <FormField name="node-address" label="Address" :error="errors.address">
       <template #default="{ fieldId }">
         <Input :id="fieldId" v-model="address" placeholder="IP or hostname" />
+      </template>
+    </FormField>
+
+    <FormField name="node-domain" label="Public Domain (client endpoint)" hint="What VPN clients connect to, e.g. vpn.example.com or 91.107.164.180">
+      <template #default="{ fieldId }">
+        <Input :id="fieldId" v-model="domain" placeholder="Domain or public IP" />
       </template>
     </FormField>
 

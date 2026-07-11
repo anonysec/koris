@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -116,36 +117,87 @@ func (r *DBRegistry) Create(ctx context.Context, input *NodeInput) (int64, error
 
 // Update validates and updates an existing node record. Credentials are re-encrypted.
 func (r *DBRegistry) Update(ctx context.Context, id int64, input *NodeInput) error {
+	// Load existing secret material so masked fields that the UI does not resend
+	// (API key, client cert/key, CA cert) are preserved instead of being wiped.
+	var (
+		curAPIKeyEnc, curClientCert, curClientKeyEnc, curCACert string
+	)
+	err := r.db.QueryRowContext(ctx,
+		`SELECT api_key_enc, client_cert, client_key_enc, ca_cert FROM knode_connections WHERE id = $1`,
+		id,
+	).Scan(&curAPIKeyEnc, &curClientCert, &curClientKeyEnc, &curCACert)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("node id=%d: %w", id, ErrNodeNotFound)
+		}
+		return fmt.Errorf("load node: %w", err)
+	}
+
+	// Resolve effective values for validation: keep existing when input is empty.
+	// Note: client cert and CA cert are stored as plaintext PEM; the client key is
+	// stored AES-GCM encrypted, so it must be blanked (not reused) for PEM validation.
+	clientCert := input.ClientCertPEM
+	if len(clientCert) == 0 {
+		clientCert = []byte(curClientCert)
+	}
+	clientKey := input.ClientKeyPEM
+	if len(clientKey) == 0 {
+		clientKey = []byte{}
+	}
+	caCert := input.CACertPEM
+	if len(caCert) == 0 {
+		caCert = []byte(curCACert)
+	}
 	record := &NodeRecord{
 		Name:          input.Name,
 		Address:       input.Address,
 		Port:          input.Port,
-		ClientCertPEM: input.ClientCertPEM,
-		ClientKeyEnc:  input.ClientKeyPEM,
-		CACertPEM:     input.CACertPEM,
+		ClientCertPEM: clientCert,
+		ClientKeyEnc:  clientKey,
+		CACertPEM:     caCert,
 	}
 	if err := r.validator.Validate(record); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
-	if len(input.APIKey) == 0 {
-		return ErrEmptyAPIKey
+
+	// Build the UPDATE dynamically: only overwrite secret columns that were provided.
+	setClauses := make([]string, 0, 9)
+	args := make([]any, 0, 9)
+	n := 1
+	add := func(clause string, val any) {
+		n++
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", clause, n))
+		args = append(args, val)
+	}
+	add("name", input.Name)
+	add("address", input.Address)
+	add("grpc_port", input.Port)
+	add("enabled", input.Enabled)
+	add("updated_at", time.Now().UTC())
+	if len(input.APIKey) > 0 {
+		enc, e := r.encryptor.Encrypt(input.APIKey)
+		if e != nil {
+			return fmt.Errorf("encrypt api key: %w", e)
+		}
+		add("api_key_enc", enc)
+	}
+	if len(input.ClientCertPEM) > 0 {
+		add("client_cert", input.ClientCertPEM)
+	}
+	if len(input.ClientKeyPEM) > 0 {
+		enc, e := r.encryptor.Encrypt(input.ClientKeyPEM)
+		if e != nil {
+			return fmt.Errorf("encrypt client key: %w", e)
+		}
+		add("client_key_enc", enc)
+	}
+	if len(input.CACertPEM) > 0 {
+		add("ca_cert", input.CACertPEM)
 	}
 
-	apiKeyEnc, err := r.encryptor.Encrypt(input.APIKey)
-	if err != nil {
-		return fmt.Errorf("encrypt api key: %w", err)
-	}
-	clientKeyEnc, err := r.encryptor.Encrypt(input.ClientKeyPEM)
-	if err != nil {
-		return fmt.Errorf("encrypt client key: %w", err)
-	}
-
-	now := time.Now().UTC()
-	result, err := r.db.ExecContext(ctx,
-		`UPDATE knode_connections SET name = $2, address = $3, grpc_port = $4, api_key_enc = $5, client_cert = $6, client_key_enc = $7, ca_cert = $8, enabled = $9, updated_at = $10
-		 WHERE id = $1`,
-		input.Name, input.Address, input.Port, apiKeyEnc, input.ClientCertPEM, clientKeyEnc, input.CACertPEM, input.Enabled, now, id,
-	)
+	query := fmt.Sprintf(`UPDATE knode_connections SET %s WHERE id = $1`, strings.Join(setClauses, ", "))
+	args = append([]any{id}, args...)
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		log.Printf("[noderegistry] Update failed for id=%d: %v", id, err)
 		return fmt.Errorf("update node: %w", err)

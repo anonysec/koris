@@ -29,9 +29,19 @@ const router = createRouter({
   ]
 })
 
+// Verify the customer session at most once per page load. Re-checking on every
+// navigation (especially when a 401 fires onUnauthorized → push to login →
+// re-guard) produced an unbounded checkAuth→401→redirect loop. One shot is enough.
+let authResolved = false
+
 router.beforeEach(async (to) => {
   const { usePortalAuthStore } = await import('@/stores/auth')
   const auth = usePortalAuthStore()
+
+  // Going to the login page — never re-hit /api/portal/me here.
+  if (to.name === 'portal-login') {
+    return
+  }
 
   // If already authenticated (e.g. just logged in), skip the network check
   if (auth.isAuthenticated) {
@@ -45,8 +55,9 @@ router.beforeEach(async (to) => {
     return // allow navigation
   }
 
-  // Not authenticated yet — try to verify session with the server
-  if (!auth.loading) {
+  // Not authenticated yet — verify the session once, then trust the result.
+  if (!authResolved && !auth.loading) {
+    authResolved = true
     await auth.checkAuth()
   }
 

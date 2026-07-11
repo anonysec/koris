@@ -117,8 +117,13 @@ services:
       - /dev/net/tun:/dev/net/tun
     ports:
       - "${KNODE_PORT:-2083}:2083"      # gRPC management API (panel connects here)
-      # VPN data-plane ports are protocol-specific — publish as needed, e.g.:
-      # - "51820:51820/udp"             # WireGuard
+      # VPN data-plane ports (must be published so external clients can reach the node)
+      - "1194:1194/udp"                 # OpenVPN (UDP)
+      - "8443:8443/tcp"                 # OpenVPN (TCP)
+      - "51820:51820/udp"               # WireGuard
+      - "500:500/udp"                   # IKEv2 / L2TP / Cisco IPsec (IKE)
+      - "4500:4500/udp"                 # IKEv2 / L2TP NAT-T
+      - "443:443/tcp"                   # AnyConnect / SSTP / MTProto
     environment:
       KNODE_LISTEN_ADDR: "${KNODE_LISTEN_ADDR:-:2083}"
       KNODE_API_KEYS: "${KNODE_API_KEYS:-}"            # comma-separated; empty => random key

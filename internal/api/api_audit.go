@@ -29,7 +29,7 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 	if v, _ := strconv.Atoi(r.URL.Query().Get("offset")); v > 0 {
 		offset = v
 	}
-	rows, err := s.DB.Query(`SELECT id,actor,action,entity_type,entity_id,COALESCE(before_json,''),COALESCE(after_json,''),ip,created_at FROM audit_logs ORDER BY id DESC LIMIT $1 OFFSET $2`, limit, offset)
+	rows, err := s.DB.Query(`SELECT id,actor,action,entity_type,entity_id,before_json,after_json,ip,created_at FROM audit_logs ORDER BY id DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return

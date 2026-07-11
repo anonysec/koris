@@ -63,6 +63,9 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
     onUnauthorized: () => {
       // Don't redirect to login if we're already on the login page (during login attempt)
       if (isLoggingIn.value) return
+      // On 401, clear session state and redirect to portal login — but only
+      // when we aren't already there, to avoid a push-to-login redirect loop.
+      if (router.currentRoute.value.name === 'portal-login') return
       // On 401, clear session state and redirect to portal login
       user.value = null
       isAuthenticated.value = false

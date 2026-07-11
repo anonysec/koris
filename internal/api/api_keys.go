@@ -28,7 +28,7 @@ func (s *Server) apiKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listAPIKeys(w http.ResponseWriter, _ *http.Request) {
-	rows, err := s.DB.Query(`SELECT id, name, key_prefix, scopes, COALESCE(last_used_at,''), created_at, COALESCE(created_by,'') FROM api_keys ORDER BY id DESC`)
+	rows, err := s.DB.Query(`SELECT id, name, key_prefix, scopes, last_used_at, created_at, COALESCE(created_by,'') FROM api_keys ORDER BY id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
 		return

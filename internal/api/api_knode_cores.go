@@ -261,7 +261,7 @@ func (s *Server) getKnodeCoreConfig(w http.ResponseWriter, r *http.Request, node
 	var enabled bool
 
 	err := s.DB.QueryRowContext(ctx,
-		`SELECT enabled, port, COALESCE(network,''), COALESCE(extra_json,'') FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`,
+		`SELECT enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=$1 AND protocol=$2`,
 		nodeID, coreType,
 	).Scan(&enabled, &port, &network, &extraJSON)
 	if err != nil {

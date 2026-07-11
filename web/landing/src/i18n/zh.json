@@ -5,9 +5,11 @@
   "header.dashboard": "管理面板",
   "header.login": "登录",
 
-  "hero.headline": "安全、快速的VPN管理",
-  "hero.subheadline": "为VPN服务运营商打造的专业面板。从一个仪表盘管理节点、用户和订阅。",
+  "hero.eyebrow": "一体化控制中心",
+  "hero.headline": "在一个美观的仪表盘中管理您的网络服务",
+  "hero.subheadline": "通过为运营商和客户打造的统一平台，开通、监控并计费您的各项服务。",
   "hero.cta": "立即开始",
+  "hero.cta_secondary": "管理员登录",
 
   "features.title": "运营VPN业务所需的一切",
   "features.subtitle": "VPN服务运营商的完整工具包——从部署到计费。",

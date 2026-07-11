@@ -12,6 +12,7 @@ export interface KnodeNode {
   port: number
   enabled: boolean
   status: 'online' | 'offline' | 'stale'
+  domain?: string
   lastSeenAt: string
   createdAt: string
   updatedAt: string
@@ -93,6 +94,7 @@ export interface CertInfo {
 export interface NodeFormData {
   name: string
   address: string
+  domain?: string
   port: number
   api_key: string
   client_cert_pem: string
@@ -539,6 +541,23 @@ export const useNodesStore = defineStore('nodes', () => {
     }
   }
 
+  /**
+   * Set the public client-facing domain (or IP) for a node.
+   * PUT /api/admin/knode/nodes/{id}/domain → { ok }
+   * This is the endpoint VPN clients use; distinct from `address` (gRPC target).
+   */
+  async function setNodeDomain(nodeId: number, domain: string): Promise<boolean> {
+    try {
+      await put<NodeMutationResponse>(`/api/admin/knode/nodes/${nodeId}/domain`, {
+        domain: domain.trim(),
+      })
+      await loadNodes()
+      return true
+    } catch {
+      return false
+    }
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   return {
     // State
@@ -554,6 +573,7 @@ export const useNodesStore = defineStore('nodes', () => {
     _storeVersion,
     deleteNode,
     testConnection,
+    setNodeDomain,
 
     // Core management
     listCores,

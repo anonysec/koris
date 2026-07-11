@@ -5,6 +5,7 @@ import (
 	"github.com/anonysec/koris/internal/auth"
 	"github.com/anonysec/koris/internal/protocols/wireguard"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -125,8 +126,15 @@ func (s *Server) openVPNEndpoint(r *http.Request) (host string, port int, proto 
 	proto = "udp"
 	_ = s.DB.QueryRow(`SELECT openvpn_port,openvpn_protocol FROM vpn_core_settings WHERE id=1`).Scan(&port, &proto)
 	var address string
-	_ = s.DB.QueryRow(`SELECT name, address FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &address)
+	var nodeDomain sql.NullString
+	// Prefer the node's public domain over the raw gRPC address: `address` is the
+	// panel→knode gRPC dial target (e.g. the internal Docker hostname) and is NOT
+	// reachable by external VPN clients. `domain` is the public client endpoint.
+	_ = s.DB.QueryRow(`SELECT name, address, domain FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &address, &nodeDomain)
 	host = strings.TrimSpace(address)
+	if nodeDomain.Valid && strings.TrimSpace(nodeDomain.String) != "" {
+		host = strings.TrimSpace(nodeDomain.String)
+	}
 	if host == "" {
 		host = r.Host
 		if strings.Contains(host, ":") {

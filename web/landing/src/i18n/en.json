@@ -5,9 +5,11 @@
   "header.dashboard": "Dashboard",
   "header.login": "Login",
 
-  "hero.headline": "Secure, Fast VPN Management",
-  "hero.subheadline": "Professional VPN panel for service operators. Manage nodes, users, and subscriptions from one dashboard.",
+  "hero.eyebrow": "All-in-one control center",
+  "hero.headline": "Run your network services from one beautiful dashboard",
+  "hero.subheadline": "Provision, monitor, and bill your services from a single platform built for operators and their customers.",
   "hero.cta": "Get Started",
+  "hero.cta_secondary": "Admin Login",
 
   "features.title": "Everything You Need to Run a VPN Business",
   "features.subtitle": "A complete toolkit for VPN service operators — from provisioning to billing.",

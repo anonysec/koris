@@ -21,6 +21,7 @@ const toast = useToast()
 // ─── Form State ─────────────────────────────────────────────────────────────
 const name = ref('')
 const address = ref('')
+const domain = ref('')
 const port = ref(2083)
 const apiKey = ref('')
 const certPem = ref('')
@@ -61,6 +62,7 @@ async function handleSubmit() {
   const payload: NodeFormData = {
     name: name.value.trim() || address.value.trim(),
     address: address.value.trim(),
+    domain: domain.value.trim(),
     port: Number(port.value),
     api_key: apiKey.value.trim(),
     client_cert_pem: '',
@@ -85,6 +87,7 @@ async function handleSubmit() {
 function resetForm() {
   name.value = ''
   address.value = ''
+  domain.value = ''
   port.value = 2083
   apiKey.value = ''
   certPem.value = ''
@@ -116,6 +119,12 @@ function resetForm() {
       <FormField name="node-address" :label="t('nodes.address')" :error="errors.address">
         <template #default="{ fieldId }">
           <Input :id="fieldId" v-model="address" placeholder="IP or hostname (e.g. 185.1.2.3)" />
+        </template>
+      </FormField>
+
+      <FormField name="node-domain" :label="t('nodes.domain')" hint="Public client endpoint (domain or IP). Optional.">
+        <template #default="{ fieldId }">
+          <Input :id="fieldId" v-model="domain" placeholder="e.g. vpn.example.com" />
         </template>
       </FormField>
 

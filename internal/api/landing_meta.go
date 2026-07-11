@@ -38,16 +38,6 @@ func (s *Server) landingMetaHandler() http.Handler {
 			return
 		}
 
-		// Check for active sessions — redirect authenticated users
-		if _, _, ok := s.currentAdmin(r); ok {
-			http.Redirect(w, r, "/dashboard/", http.StatusFound)
-			return
-		}
-		if _, ok := s.currentCustomer(r); ok {
-			http.Redirect(w, r, "/portal/", http.StatusFound)
-			return
-		}
-
 		// Check landing_settings enabled flag — if disabled, serve decoy page (no redirect for anonymous visitors)
 		var enabled bool
 		err := s.DB.QueryRow(`SELECT enabled FROM landing_settings WHERE id=1`).Scan(&enabled)

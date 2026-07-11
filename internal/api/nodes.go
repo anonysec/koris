@@ -71,6 +71,7 @@ func (s *Server) handleKnodeNodeByID(w http.ResponseWriter, r *http.Request) {
 type knodeNodeRequest struct {
 	Name          string `json:"name"`
 	Address       string `json:"address"`
+	Domain        string `json:"domain"`
 	Port          int    `json:"port"`
 	APIKey        string `json:"api_key"`
 	ClientCertPEM string `json:"client_cert_pem"`
@@ -171,6 +172,11 @@ func (s *Server) createKnodeNode(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[knode] Create node failed for %q: %v", in.Name, err)
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+
+	// Persist public client-facing domain (empty → client configs fall back to address)
+	if in.Domain != "" {
+		_, _ = s.DB.Exec(`UPDATE knode_connections SET domain = $1 WHERE id = $2`, in.Domain, id)
 	}
 
 	// Create default VPN protocol configs for the new node
