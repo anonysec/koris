@@ -40,11 +40,13 @@ jobs:
         # would drop the leading "web/" and break //go:embed (it expects
         # web/{admin,portal,landing}/www). Stage the dirs under a temp root
         # that preserves the web/<app>/www prefix, then upload that root.
+        # NOTE: this job's working-directory is "web", so the build output is
+        # at admin/www, portal/www, landing/www (relative to here).
         run: |
           rm -rf /tmp/spa && mkdir -p /tmp/spa/web
-          cp -r web/admin/www  /tmp/spa/web/admin/www
-          cp -r web/portal/www /tmp/spa/web/portal/www
-          cp -r web/landing/www /tmp/spa/web/landing/www
+          cp -r admin/www  /tmp/spa/web/admin/www
+          cp -r portal/www /tmp/spa/web/portal/www
+          cp -r landing/www /tmp/spa/web/landing/www
       - name: Upload SPA assets
         # The Go binary embeds web/{admin,portal,landing}/www at build time
         # (//go:embed). A fresh checkout has no built assets, so we pass
