@@ -393,7 +393,7 @@ cmd_uninstall() {
     if [[ "${keep_data}" == "yes" ]]; then
         echo "    • Docker volumes: koris_panel-data, koris_pgadmin-data (DB preserved)"
     else
-        echo "    • Docker volumes: koris_db-data, koris_panel-data, koris_pgadmin-data"
+        echo "    • Docker volumes: koris_panel-data, koris_pgadmin-data"
     fi
     echo "    • Installation directory: /opt/koris"
     echo "    • Configuration: /etc/koris"
@@ -441,7 +441,7 @@ cmd_uninstall() {
             docker volume rm "${vol}" 2>/dev/null || failures+=("remove volume ${vol}")
         done
     else
-        for vol in koris_db-data koris_panel-data koris_pgadmin-data; do
+        for vol in koris_panel-data koris_pgadmin-data; do
             docker volume rm "${vol}" 2>/dev/null || failures+=("remove volume ${vol}")
         done
     fi
@@ -570,12 +570,13 @@ cmd_clean() {
         done
 
         if [[ "${do_include_db}" == "yes" ]]; then
-            local container_using
-            container_using=$(docker ps --filter "volume=koris_db-data" --format '{{.Names}}' 2>/dev/null | head -1)
-            if [[ -n "${container_using}" ]]; then
-                warn "Volume 'koris_db-data' is in use by container '${container_using}' — skipping"
-            elif docker volume rm koris_db-data &>/dev/null; then
-                info "Removed volume: koris_db-data"
+            # The database uses a bind-mounted host directory (not a Docker
+            # volume), so remove that directory instead of a named volume.
+            local db_data_dir="${KORIS_HOME:-/opt/koris}/data"
+            if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx koris-db; then
+                warn "Database container 'koris-db' is still running — stop it before removing data"
+            elif [[ -d "${db_data_dir}" ]]; then
+                rm -rf "${db_data_dir}" && info "Removed database data dir: ${db_data_dir}"
             fi
         fi
     fi
@@ -1868,7 +1869,7 @@ detect_existing() {
       log "Full wipe — removing everything..."
       cd "${INSTALL_DIR}" 2>/dev/null && docker compose down --volumes --remove-orphans 2>/dev/null || true
       docker rm -f koris koris-db koris-pgadmin knode 2>/dev/null || true
-      docker volume rm koris_db-data koris_panel-data koris_pgadmin-data 2>/dev/null || true
+      docker volume rm koris_panel-data koris_pgadmin-data 2>/dev/null || true
       docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | awk '$2 ~ /^koris/ {print $1}' | xargs -r docker rmi -f 2>/dev/null || true
       docker images --filter "label=com.docker.compose.project=koris" -q 2>/dev/null | xargs -r docker rmi -f 2>/dev/null || true
       rm -rf "${INSTALL_DIR}" "${CONFIG_DIR}" /usr/local/bin/koris

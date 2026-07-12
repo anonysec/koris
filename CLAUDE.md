@@ -80,7 +80,7 @@ When modifying shared features, keep both the `_full.go` and `_lite.go` counterp
 
 Docker is the **primary, supported deployment**. `docker-compose.yml` brings up the panel + TimescaleDB + pgAdmin (optional `redis` and `pgadmin` profiles).
 
-`koris.sh` is the **single operations script** (the old `install.sh`/`helpers.sh`/`koris.sh` were merged into it). Subcommands: `install`, `start`, `stop`, `restart`, `status`, `logs`, `follow`, `update`, `config`, `uninstall`, `clean`, `db` (`backup`/`restore`/`migrate`/`reset`/`shell`/`status`), `pgadmin` (`status`/`enable`/`disable`/`url`/`reset-password`/`port`), `reinstall`, `downgrade`, `enable`, `disable`, `node-status`, `node-restart`, `node-logs`, `help`.
+`koris.sh` is the **single operations script** (the old `install.sh`/`helpers.sh`/`koris.sh` were merged into it). Subcommands: `install`, `start`, `stop`, `restart`, `status`, `logs`, `follow`, `update`, `config`, `uninstall`, `clean`, `admin` (`list`/`passwd`/`create` — runs the panel binary against the DB directly, so it works even when the panel is stopped or you are locked out), `db` (`backup`/`restore`/`migrate`/`reset`/`shell`/`status`), `pgadmin` (`status`/`enable`/`disable`/`url`/`reset-password`/`port`), `reinstall`, `downgrade`, `enable`, `disable`, `node-status`, `node-restart`, `node-logs`, `help`.
 
 Install flags of note: `--port=`, `--home=DIR` (KORIS_HOME), `--domain=`, `--ssl=domain|ip|custom|selfsigned`, `--ssl-target=`, `--cert-path=`, `--key-path=`, `--lite`/`--full`, `--no-knode`, `--from-source`/`--from-release`, `--reinstall`. **Native (non-Docker) install was removed** — Docker only.
 

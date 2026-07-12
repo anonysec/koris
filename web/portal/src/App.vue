@@ -5,6 +5,7 @@ import { useTheme, availableThemes } from '@koris/composables/useTheme'
 import { useDirection } from '@koris/composables/useDirection'
 import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 import router from './router'
+import ToastProvider from './components/ToastProvider.vue'
 
 const { get } = useApi()
 const { setMode, setTheme } = useTheme()
@@ -38,6 +39,7 @@ onMounted(async () => {
     <span class="portal-boot__spinner" />
   </div>
   <router-view v-else />
+  <ToastProvider />
 </template>
 
 <style>
