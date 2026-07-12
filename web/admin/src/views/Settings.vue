@@ -9,6 +9,9 @@ import type { Locale } from '@koris/composables/useI18n'
 import Button from '@koris/ui/Button.vue'
 import Input from '@koris/ui/Input.vue'
 import StatusPill from '@koris/ui/StatusPill.vue'
+import Tabs from '@koris/ui/Tabs.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
+import EmptyState from '@koris/ui/EmptyState.vue'
 import SettingsDatabaseSection from '@/components/settings/SettingsDatabaseSection.vue'
 import SettingsTLSSection from '@/components/settings/SettingsTLSSection.vue'
 import SettingsWorkersSection from '@/components/settings/SettingsWorkersSection.vue'
@@ -25,6 +28,27 @@ const toast = useToast()
 // ─── Search ──────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
 const searchFocused = ref(false)
+
+// ─── Category tabs ───────────────────────────────────────────────────────────
+const activeTab = ref('general')
+const sectionCategories: Record<string, string[]> = {
+  general: ['appearance', 'maintenance', 'update'],
+  security: ['apikeys', 'audit'],
+  notifications: ['notifications'],
+  system: ['system', 'backup'],
+  integrations: ['links'],
+}
+const tabs = computed(() => {
+  const list = Object.keys(sectionCategories)
+  if (!searchQuery.value) return list.map(k => ({ key: k, label: t('settings.cat_' + k) }))
+  return list
+    .filter(k => sectionCategories[k].some(id => isVisible(id)))
+    .map(k => ({ key: k, label: t('settings.cat_' + k) }))
+})
+watch(searchQuery, () => {
+  const visible = tabs.value.map(tb => tb.key)
+  if (!visible.includes(activeTab.value) && visible.length) activeTab.value = visible[0]
+})
 
 // ─── Dirty tracking ─────────────────────────────────────────────────────────
 const dirtySections = reactive<Set<string>>(new Set())
@@ -44,10 +68,10 @@ watch(selectedTheme, (v) => setTheme(v))
 watch(selectedMode, (v) => setMode(v))
 watch(panelLang, (v) => { if (v !== currentLocale.value) setLocale(v as Locale) })
 
-const modeOptions: { value: ThemeMode; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
+const modeOptions: { value: ThemeMode; labelKey: string }[] = [
+  { value: 'system', labelKey: 'settings.mode_system' },
+  { value: 'dark', labelKey: 'settings.mode_dark' },
+  { value: 'light', labelKey: 'settings.mode_light' },
 ]
 
 async function loadPanelSettings() {
@@ -87,8 +111,10 @@ async function savePanelSettings() {
 const maintenance = reactive({ enabled: false, reason: '', enabled_by: '', enabled_at: '' })
 const maintenanceReason = ref('')
 const savingMaintenance = ref(false)
+const loadingMaintenance = ref(false)
 
 async function loadMaintenance() {
+  loadingMaintenance.value = true
   try {
     const res = await get<any>('/api/settings/maintenance-mode')
     if (res) {
@@ -98,7 +124,7 @@ async function loadMaintenance() {
       maintenance.enabled_at = res.enabled_at || ''
       maintenanceReason.value = res.reason || ''
     }
-  } catch {}
+  } catch {} finally { loadingMaintenance.value = false }
 }
 
 async function toggleMaintenance() {
@@ -110,8 +136,8 @@ async function toggleMaintenance() {
     })
     maintenance.enabled = !maintenance.enabled
     maintenance.reason = maintenanceReason.value
-    toast.success(maintenance.enabled ? 'Maintenance mode enabled' : 'Maintenance mode disabled')
-  } catch { toast.error('Failed to toggle maintenance mode') }
+    toast.success(maintenance.enabled ? t('settings.maintenance_enabled') : t('settings.maintenance_disabled'))
+  } catch { toast.error(t('settings.maintenance_error')) }
   finally { savingMaintenance.value = false }
 }
 
@@ -142,22 +168,22 @@ async function createApiKey() {
       newKeyName.value = ''
       await loadApiKeys()
     }
-  } catch { toast.error('Failed to create API key') }
+  } catch { toast.error(t('settings.api_key_error')) }
   finally { creatingKey.value = false }
 }
 
 async function deleteApiKey(id: number) {
-  if (!confirm('Revoke this API key? This cannot be undone.')) return
+  if (!confirm(t('settings.revoke_confirm'))) return
   try {
     await del('/api/settings/api-keys', { id })
     await loadApiKeys()
-    toast.success('API key revoked')
-  } catch { toast.error('Failed to revoke key') }
+    toast.success(t('settings.api_key_revoked'))
+  } catch { toast.error(t('settings.revoke_error')) }
 }
 
 function copyKey() {
   navigator.clipboard.writeText(createdKey.value)
-  toast.success('Key copied to clipboard')
+  toast.success(t('settings.copied'))
 }
 
 // ─── Audit Logs ──────────────────────────────────────────────────────────────
@@ -215,8 +241,10 @@ const expiryDays = ref<number[]>([7, 3, 1])
 const connThresholds = ref<number[]>([80, 95])
 const webhookUrl = ref('')
 const savingWarnings = ref(false)
+const loadingWarnings = ref(false)
 
 async function loadWarnings() {
+  loadingWarnings.value = true
   try {
     const res = await get<any>('/api/settings/warning-config')
     if (res?.config) {
@@ -226,7 +254,7 @@ async function loadWarnings() {
     }
     const res2 = await get<any>('/api/settings/data-warning-thresholds')
     if (res2?.thresholds?.length) thresholds.value = res2.thresholds
-  } catch {}
+  } catch {} finally { loadingWarnings.value = false }
 }
 
 async function saveWarnings() {
@@ -238,9 +266,9 @@ async function saveWarnings() {
       webhook_url: webhookUrl.value.trim(),
     })
     await put('/api/settings/data-warning-thresholds', { thresholds: thresholds.value })
-    toast.success('Warning settings saved')
+    toast.success(t('settings.warnings_saved'))
     markClean('warnings')
-  } catch { toast.error('Failed to save warnings') }
+  } catch { toast.error(t('settings.warnings_error')) }
   finally { savingWarnings.value = false }
 }
 
@@ -248,16 +276,18 @@ async function saveWarnings() {
 interface AppLink { name: string; url: string; platform: string; icon: string }
 const appLinks = ref<AppLink[]>([])
 const savingLinks = ref(false)
+const loadingLinks = ref(false)
 const platformIcons: Record<string,string> = { ios:'🍎', android:'🤖', windows:'🪟', mac:'💻', other:'🔗' }
 const platforms = ['ios','android','windows','mac','other']
 
 async function loadAppLinks() {
+  loadingLinks.value = true
   try {
     const res = await get<any>('/api/panel-settings')
     if (res?.settings?.app_links) {
       try { const p = JSON.parse(res.settings.app_links); if (Array.isArray(p)) appLinks.value = p } catch {}
     }
-  } catch {}
+  } catch {} finally { loadingLinks.value = false }
 }
 
 function addLink() { appLinks.value.push({ name: '', url: '', platform: 'other', icon: '🔗' }) }
@@ -268,9 +298,9 @@ async function saveLinks() {
   savingLinks.value = true
   try {
     await patch('/api/panel-settings', { app_links: JSON.stringify(appLinks.value.filter(l => l.name && l.url)) })
-    toast.success('App links saved')
+    toast.success(t('settings.links_saved'))
     markClean('links')
-  } catch { toast.error('Failed to save links') }
+  } catch { toast.error(t('settings.links_error')) }
   finally { savingLinks.value = false }
 }
 
@@ -298,9 +328,9 @@ async function saveTelegram() {
       telegram_bot_token: telegramToken.value,
       telegram_admin_chats: telegramChats.value,
     })
-    toast.success('Telegram settings saved')
+    toast.success(t('settings.telegram_saved'))
     markClean('telegram')
-  } catch { toast.error('Failed to save Telegram settings') }
+  } catch { toast.error(t('settings.telegram_error')) }
   finally { savingTelegram.value = false }
 }
 
@@ -344,7 +374,7 @@ onMounted(() => {
     <Transition name="slide">
       <div v-if="hasUnsaved" class="unsaved-banner">
         <span class="unsaved-dot"></span>
-        <span>You have unsaved changes in {{ dirtySections.size }} section{{ dirtySections.size > 1 ? 's' : '' }}</span>
+        <span>{{ t('settings.unsaved_changes') }} ({{ dirtySections.size }} {{ dirtySections.size === 1 ? t('settings.section') : t('settings.sections') }})</span>
       </div>
     </Transition>
 
@@ -354,322 +384,340 @@ onMounted(() => {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search settings..."
+        :placeholder="t('settings.search_placeholder')"
         class="search-input"
         @focus="searchFocused = true"
         @blur="searchFocused = false"
       />
-      <kbd v-if="!searchQuery && !searchFocused" class="search-kbd">⌘K</kbd>
       <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">✕</button>
     </div>
 
-    <!-- ─── Appearance ─── -->
-    <section v-if="isVisible('appearance')" class="card" id="appearance">
-      <div class="card-header">
-        <div class="card-icon">🎨</div>
-        <div>
-          <h3 class="card-title">Appearance</h3>
-          <p class="card-desc">Theme, language, and display preferences</p>
-        </div>
-        <span v-if="dirtySections.has('appearance')" class="dirty-badge">Modified</span>
-      </div>
-      <div class="card-body">
-        <div class="field-row">
-          <label class="field-label">Panel Name</label>
-          <input v-model="panelName" class="field-input" placeholder="My VPN Panel" @input="markDirty('appearance')" />
-        </div>
-        <div class="field-row">
-          <label class="field-label">Language</label>
-          <select v-model="panelLang" class="field-select" @change="markDirty('appearance')">
-            <option value="en">English</option>
-            <option value="fa">فارسی</option>
-            <option value="ru">Русский</option>
-            <option value="zh">中文</option>
-          </select>
-        </div>
-        <div class="field-row">
-          <label class="field-label">Display Mode</label>
-          <div class="mode-group">
-            <button v-for="m in modeOptions" :key="m.value" class="mode-btn" :class="{ active: selectedMode === m.value }" @click="selectedMode = m.value; markDirty('appearance')">
-              {{ m.label }}
-            </button>
+    <!-- Category tabs -->
+    <Tabs v-model="activeTab" :tabs="tabs" aria-label="Settings categories" class="settings-tabs">
+      <!-- ─── General ─── -->
+      <template #general>
+        <!-- Appearance -->
+        <section v-if="isVisible('appearance')" class="card" id="appearance">
+          <div class="card-header">
+            <div class="card-icon">🎨</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.appearance') }}</h3>
+              <p class="card-desc">{{ t('settings.appearance_desc') }}</p>
+            </div>
+            <span v-if="dirtySections.has('appearance')" class="dirty-badge">{{ t('settings.modified') }}</span>
           </div>
-        </div>
-        <div class="field-row">
-          <label class="field-label">Theme</label>
-          <div class="theme-grid">
-            <button v-for="th in availableThemes" :key="th.id" class="theme-card" :class="{ active: selectedTheme === th.id }" @click="selectedTheme = th.id; markDirty('appearance')">
-              <div class="theme-swatches">
-                <span v-for="(c, ci) in (th as any).swatches || []" :key="ci" class="swatch" :style="{ background: c }"></span>
+          <Skeleton v-if="loadingSettings" variant="rect" width="100%" :height="240" />
+          <div v-else class="card-body">
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.panel_name') }}</label>
+              <input v-model="panelName" class="field-input" :placeholder="t('settings.panel_name')" @input="markDirty('appearance')" />
+            </div>
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.language') }}</label>
+              <select v-model="panelLang" class="field-select" @change="markDirty('appearance')">
+                <option value="en">English</option>
+                <option value="fa">فارسی</option>
+                <option value="ru">Русский</option>
+                <option value="zh">中文</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.display_mode') }}</label>
+              <div class="mode-group">
+                <button v-for="m in modeOptions" :key="m.value" class="mode-btn" :class="{ active: selectedMode === m.value }" @click="selectedMode = m.value; markDirty('appearance')">
+                  {{ t(m.labelKey) }}
+                </button>
               </div>
-              <span class="theme-name">{{ (th as any).name || th.id }}</span>
-            </button>
-          </div>
-        </div>
-        <div class="card-actions">
-          <Button variant="primary" :loading="savingSettings" @click="savePanelSettings">Save</Button>
-          <span v-if="dirtySections.has('appearance')" class="reset-link" @click="loadPanelSettings(); markClean('appearance')">Reset</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─── Maintenance Mode ─── -->
-    <section v-if="isVisible('maintenance')" class="card" id="maintenance">
-      <div class="card-header">
-        <div class="card-icon">🔧</div>
-        <div>
-          <h3 class="card-title">Maintenance Mode</h3>
-          <p class="card-desc">Temporarily disable customer portal access</p>
-        </div>
-        <StatusPill :status="maintenance.enabled ? 'active' : 'inactive'" :label="maintenance.enabled ? 'Active' : 'Inactive'" />
-      </div>
-      <div class="card-body">
-        <div v-if="maintenance.enabled" class="maintenance-info">
-          <div class="info-row"><span class="info-label">Reason</span><span>{{ maintenance.reason || 'No reason provided' }}</span></div>
-          <div class="info-row"><span class="info-label">Enabled by</span><span>{{ maintenance.enabled_by }}</span></div>
-          <div class="info-row"><span class="info-label">Since</span><span>{{ formatTime(maintenance.enabled_at) }}</span></div>
-        </div>
-        <div class="field-row">
-          <label class="field-label">Reason</label>
-          <input v-model="maintenanceReason" class="field-input" placeholder="Scheduled maintenance, upgrades, etc." />
-        </div>
-        <div class="card-actions">
-          <Button :variant="maintenance.enabled ? 'danger' : 'warning'" :loading="savingMaintenance" @click="toggleMaintenance">
-            {{ maintenance.enabled ? 'Disable Maintenance Mode' : 'Enable Maintenance Mode' }}
-          </Button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─── API Keys ─── -->
-    <section v-if="isVisible('apikeys')" class="card" id="apikeys">
-      <div class="card-header">
-        <div class="card-icon">🔑</div>
-        <div>
-          <h3 class="card-title">API Keys</h3>
-          <p class="card-desc">Manage keys for external integrations</p>
-        </div>
-        <span class="card-count">{{ apiKeys.length }} key{{ apiKeys.length !== 1 ? 's' : '' }}</span>
-      </div>
-      <div class="card-body">
-        <!-- Created key banner -->
-        <Transition name="slide">
-          <div v-if="createdKey" class="key-created-banner">
-            <div class="key-created-header">
-              <strong>🔑 New API Key Created</strong>
-              <span class="key-created-hint">Copy it now — it won't be shown again</span>
             </div>
-            <div class="key-created-value">
-              <code>{{ createdKey }}</code>
-              <button class="copy-btn" @click="copyKey">📋 Copy</button>
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.theme') }}</label>
+              <div class="theme-grid">
+                <button v-for="th in availableThemes" :key="th.id" class="theme-card" :class="{ active: selectedTheme === th.id }" @click="selectedTheme = th.id; markDirty('appearance')">
+                  <div class="theme-swatches">
+                    <span v-for="(c, ci) in (th as any).swatches || []" :key="ci" class="swatch" :style="{ background: c }"></span>
+                  </div>
+                  <span class="theme-name">{{ (th as any).name || th.id }}</span>
+                </button>
+              </div>
             </div>
-            <button class="dismiss-btn" @click="createdKey = ''">Dismiss</button>
-          </div>
-        </Transition>
-
-        <!-- Existing keys -->
-        <div v-if="apiKeys.length" class="keys-list">
-          <div v-for="key in apiKeys" :key="key.id" class="key-row">
-            <div class="key-info">
-              <span class="key-name">{{ key.name }}</span>
-              <code class="key-prefix">{{ key.key_prefix }}</code>
-              <span class="key-meta">{{ key.scopes }} · Created {{ formatTime(key.created_at) }}{{ key.last_used_at ? ' · Last used ' + formatTime(key.last_used_at) : '' }}</span>
+            <div class="card-actions">
+              <Button variant="primary" :loading="savingSettings" @click="savePanelSettings">{{ t('settings.save') }}</Button>
+              <span v-if="dirtySections.has('appearance')" class="reset-link" @click="loadPanelSettings(); markClean('appearance')">{{ t('settings.reset') }}</span>
             </div>
-            <button class="revoke-btn" @click="deleteApiKey(key.id)">Revoke</button>
           </div>
-        </div>
-        <div v-else-if="!createdKey" class="empty-state">No API keys yet</div>
+        </section>
 
-        <!-- Create new -->
-        <div class="create-key-form">
-          <input v-model="newKeyName" class="field-input" placeholder="Key name (e.g. Monitoring)" @keyup.enter="createApiKey" />
-          <select v-model="newKeyScopes" class="field-select" style="max-width: 140px">
-            <option value="read">Read only</option>
-            <option value="read,write">Read & Write</option>
-            <option value="admin">Admin</option>
-          </select>
-          <Button variant="primary" :loading="creatingKey" :disabled="!newKeyName.trim()" @click="createApiKey">Create Key</Button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─── Audit Log ─── -->
-    <section v-if="isVisible('audit')" class="card" id="audit">
-      <div class="card-header">
-        <div class="card-icon">📋</div>
-        <div>
-          <h3 class="card-title">Audit Log</h3>
-          <p class="card-desc">Track all admin actions and changes</p>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="audit-toolbar">
-          <input v-model="auditSearch" class="field-input audit-search" placeholder="Filter by actor, action, IP..." />
-          <div class="audit-pager">
-            <button class="pager-btn" :disabled="auditOffset === 0" @click="auditPage(-1)">← Prev</button>
-            <span class="pager-info">{{ auditOffset + 1 }}–{{ auditOffset + filteredAuditLogs.length }}</span>
-            <button class="pager-btn" :disabled="filteredAuditLogs.length < auditLimit" @click="auditPage(1)">Next →</button>
+        <!-- Maintenance Mode -->
+        <section v-if="isVisible('maintenance')" class="card" id="maintenance">
+          <div class="card-header">
+            <div class="card-icon">🔧</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.maintenance') }}</h3>
+              <p class="card-desc">{{ t('settings.maintenance_desc') }}</p>
+            </div>
+            <StatusPill :status="maintenance.enabled ? 'active' : 'inactive'" :label="maintenance.enabled ? t('settings.active') : t('settings.inactive')" />
           </div>
-        </div>
-        <div class="audit-table">
-          <div class="audit-row audit-header-row">
-            <span class="audit-col audit-time">Time</span>
-            <span class="audit-col audit-actor">Actor</span>
-            <span class="audit-col audit-action">Action</span>
-            <span class="audit-col audit-entity">Entity</span>
-            <span class="audit-col audit-ip">IP</span>
+          <Skeleton v-if="loadingMaintenance" variant="rect" width="100%" :height="170" />
+          <div v-else class="card-body">
+            <div v-if="maintenance.enabled" class="maintenance-info">
+              <div class="info-row"><span class="info-label">{{ t('settings.reason') }}</span><span>{{ maintenance.reason || '—' }}</span></div>
+              <div class="info-row"><span class="info-label">{{ t('settings.enabled_by') }}</span><span>{{ maintenance.enabled_by }}</span></div>
+              <div class="info-row"><span class="info-label">{{ t('settings.since') }}</span><span>{{ formatTime(maintenance.enabled_at) }}</span></div>
+            </div>
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.reason') }}</label>
+              <input v-model="maintenanceReason" class="field-input" :placeholder="t('settings.maintenance_reason_ph')" />
+            </div>
+            <div class="card-actions">
+              <Button :variant="maintenance.enabled ? 'danger' : 'warning'" :loading="savingMaintenance" @click="toggleMaintenance">
+                {{ maintenance.enabled ? t('settings.disable_maintenance') : t('settings.enable_maintenance') }}
+              </Button>
+            </div>
           </div>
-          <div v-for="log in filteredAuditLogs" :key="log.id" class="audit-row">
-            <span class="audit-col audit-time">{{ formatTime(log.created_at) }}</span>
-            <span class="audit-col audit-actor">{{ log.actor }}</span>
-            <span class="audit-col audit-action"><code>{{ log.action }}</code></span>
-            <span class="audit-col audit-entity">{{ log.entity_type }}{{ log.entity_id ? ' #' + log.entity_id : '' }}</span>
-            <span class="audit-col audit-ip">{{ log.ip }}</span>
+        </section>
+
+        <!-- Software Update -->
+        <section v-if="isVisible('update')" class="card" id="update">
+          <div class="card-header">
+            <div class="card-icon">🔄</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.software_update') }}</h3>
+              <p class="card-desc">{{ t('settings.software_update_desc') }}</p>
+            </div>
           </div>
-          <div v-if="!filteredAuditLogs.length" class="audit-empty">No audit entries found</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─── Update Channel ─── -->
-    <section v-if="isVisible('update')" class="card" id="update">
-      <div class="card-header">
-        <div class="card-icon">🔄</div>
-        <div>
-          <h3 class="card-title">Software Update</h3>
-          <p class="card-desc">Current version and update availability</p>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="update-grid">
-          <div class="info-row"><span class="info-label">Version</span><code>{{ updateInfo.current_version || 'dev' }}</code></div>
-          <div class="info-row"><span class="info-label">Go</span><span>{{ updateInfo.go_version }}</span></div>
-          <div class="info-row"><span class="info-label">Platform</span><span>{{ updateInfo.os }}/{{ updateInfo.arch }}</span></div>
-          <div class="info-row"><span class="info-label">Uptime</span><span>{{ updateInfo.uptime }}</span></div>
-        </div>
-        <div class="card-actions">
-          <Button variant="secondary" :loading="checkingUpdate" @click="checkUpdate">Check for Updates</Button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─── Notifications ─── -->
-    <section v-if="isVisible('notifications')" class="card" id="notifications">
-      <div class="card-header">
-        <div class="card-icon">🔔</div>
-        <div>
-          <h3 class="card-title">Notifications & Alerts</h3>
-          <p class="card-desc">Warning thresholds, Telegram, and webhook settings</p>
-        </div>
-        <span v-if="dirtySections.has('warnings')" class="dirty-badge">Modified</span>
-      </div>
-      <div class="card-body">
-        <SettingsAlertsSection />
-
-        <div class="divider"></div>
-
-        <h4 class="subsection-title">Data Usage Warnings</h4>
-        <div class="threshold-list">
-          <div v-for="(th, i) in thresholds" :key="i" class="threshold-row">
-            <input type="number" :value="th" class="threshold-input" min="1" max="100" @input="thresholds[i] = parseInt(($event.target as HTMLInputElement).value) || 0; markDirty('warnings')" />
-            <span class="threshold-unit">%</span>
-            <button class="remove-btn" @click="thresholds.splice(i, 1); markDirty('warnings')" v-if="thresholds.length > 1">✕</button>
+          <Skeleton v-if="checkingUpdate" variant="rect" width="100%" :height="150" />
+          <div v-else class="card-body">
+            <div class="update-grid">
+              <div class="info-row"><span class="info-label">{{ t('settings.lbl_version') }}</span><code>{{ updateInfo.current_version || 'dev' }}</code></div>
+              <div class="info-row"><span class="info-label">{{ t('settings.lbl_go') }}</span><span>{{ updateInfo.go_version }}</span></div>
+              <div class="info-row"><span class="info-label">{{ t('settings.lbl_platform') }}</span><span>{{ updateInfo.os }}/{{ updateInfo.arch }}</span></div>
+              <div class="info-row"><span class="info-label">{{ t('settings.lbl_uptime') }}</span><span>{{ updateInfo.uptime }}</span></div>
+            </div>
+            <div class="card-actions">
+              <Button variant="secondary" :loading="checkingUpdate" @click="checkUpdate">{{ t('settings.check_updates') }}</Button>
+            </div>
           </div>
-          <button class="add-btn" @click="thresholds.push(50); markDirty('warnings')">+ Add threshold</button>
-        </div>
+        </section>
+      </template>
 
-        <h4 class="subsection-title">Expiry Warnings (days before)</h4>
-        <div class="threshold-list">
-          <div v-for="(d, i) in expiryDays" :key="i" class="threshold-row">
-            <input type="number" :value="d" class="threshold-input" min="1" @input="expiryDays[i] = parseInt(($event.target as HTMLInputElement).value) || 1; markDirty('warnings')" />
-            <span class="threshold-unit">days</span>
-            <button class="remove-btn" @click="expiryDays.splice(i, 1); markDirty('warnings')" v-if="expiryDays.length > 1">✕</button>
+      <!-- ─── Security ─── -->
+      <template #security>
+        <!-- API Keys -->
+        <section v-if="isVisible('apikeys')" class="card" id="apikeys">
+          <div class="card-header">
+            <div class="card-icon">🔑</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.api_keys') }}</h3>
+              <p class="card-desc">{{ t('settings.api_keys_desc') }}</p>
+            </div>
+            <span class="card-count">{{ apiKeys.length }} {{ apiKeys.length === 1 ? t('settings.key') : t('settings.keys') }}</span>
           </div>
-          <button class="add-btn" @click="expiryDays.push(7); markDirty('warnings')">+ Add</button>
-        </div>
+          <Skeleton v-if="loadingKeys" variant="rect" width="100%" :height="200" />
+          <div v-else class="card-body">
+            <Transition name="slide">
+              <div v-if="createdKey" class="key-created-banner">
+                <div class="key-created-header">
+                  <strong>🔑 {{ t('settings.key_created_title') }}</strong>
+                  <span class="key-created-hint">{{ t('settings.key_created_hint') }}</span>
+                </div>
+                <div class="key-created-value">
+                  <code>{{ createdKey }}</code>
+                  <button class="copy-btn" @click="copyKey">📋 {{ t('settings.copy') }}</button>
+                </div>
+                <button class="dismiss-btn" @click="createdKey = ''">{{ t('settings.dismiss') }}</button>
+              </div>
+            </Transition>
 
-        <h4 class="subsection-title">Webhook URL</h4>
-        <input v-model="webhookUrl" class="field-input" placeholder="https://hooks.example.com/notify" @input="markDirty('warnings')" />
+            <div v-if="apiKeys.length" class="keys-list">
+              <div v-for="key in apiKeys" :key="key.id" class="key-row">
+                <div class="key-info">
+                  <span class="key-name">{{ key.name }}</span>
+                  <code class="key-prefix">{{ key.key_prefix }}</code>
+                  <span class="key-meta">{{ key.scopes }} · {{ formatTime(key.created_at) }}{{ key.last_used_at ? ' · ' + formatTime(key.last_used_at) : '' }}</span>
+                </div>
+                <button class="revoke-btn" @click="deleteApiKey(key.id)">{{ t('settings.revoke') }}</button>
+              </div>
+            </div>
+            <EmptyState v-else-if="!createdKey" icon="🔑" :title="t('settings.no_api_keys')" />
 
-        <div class="divider"></div>
+            <div class="create-key-form">
+              <input v-model="newKeyName" class="field-input" :placeholder="t('settings.key_name_ph')" @keyup.enter="createApiKey" />
+              <select v-model="newKeyScopes" class="field-select" style="max-width: 140px">
+                <option value="read">{{ t('settings.scope_read') }}</option>
+                <option value="read,write">{{ t('settings.scope_read_write') }}</option>
+                <option value="admin">{{ t('settings.scope_admin') }}</option>
+              </select>
+              <Button variant="primary" :loading="creatingKey" :disabled="!newKeyName.trim()" @click="createApiKey">{{ t('settings.create_key') }}</Button>
+            </div>
+          </div>
+        </section>
 
-        <h4 class="subsection-title">Telegram Bot</h4>
-        <div class="field-row">
-          <label class="field-label">Bot Token</label>
-          <input v-model="telegramToken" type="password" class="field-input" placeholder="123456:ABC-DEF..." @input="markDirty('telegram')" />
-        </div>
-        <div class="field-row">
-          <label class="field-label">Admin Chat IDs</label>
-          <input v-model="telegramChats" class="field-input" placeholder="-100123456789, -100987654321" @input="markDirty('telegram')" />
-        </div>
+        <!-- Audit Log -->
+        <section v-if="isVisible('audit')" class="card" id="audit">
+          <div class="card-header">
+            <div class="card-icon">📋</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.audit_log') }}</h3>
+              <p class="card-desc">{{ t('settings.audit_log_desc') }}</p>
+            </div>
+          </div>
+          <Skeleton v-if="loadingAudit" variant="rect" width="100%" :height="220" />
+          <div v-else class="card-body">
+            <div class="audit-toolbar">
+              <input v-model="auditSearch" class="field-input audit-search" :placeholder="t('settings.filter_by_actor')" />
+              <div class="audit-pager">
+                <button class="pager-btn" :disabled="auditOffset === 0" @click="auditPage(-1)">← {{ t('settings.prev') }}</button>
+                <span class="pager-info">{{ auditOffset + 1 }}–{{ auditOffset + filteredAuditLogs.length }}</span>
+                <button class="pager-btn" :disabled="filteredAuditLogs.length < auditLimit" @click="auditPage(1)">{{ t('settings.next') }} →</button>
+              </div>
+            </div>
+            <div class="audit-table">
+              <div class="audit-row audit-header-row">
+                <span class="audit-col audit-time">{{ t('settings.audit_time') }}</span>
+                <span class="audit-col audit-actor">{{ t('settings.audit_actor') }}</span>
+                <span class="audit-col audit-action">{{ t('settings.audit_action') }}</span>
+                <span class="audit-col audit-entity">{{ t('settings.audit_entity') }}</span>
+                <span class="audit-col audit-ip">{{ t('settings.audit_ip') }}</span>
+              </div>
+              <div v-for="log in filteredAuditLogs" :key="log.id" class="audit-row">
+                <span class="audit-col audit-time">{{ formatTime(log.created_at) }}</span>
+                <span class="audit-col audit-actor">{{ log.actor }}</span>
+                <span class="audit-col audit-action"><code>{{ log.action }}</code></span>
+                <span class="audit-col audit-entity">{{ log.entity_type }}{{ log.entity_id ? ' #' + log.entity_id : '' }}</span>
+                <span class="audit-col audit-ip">{{ log.ip }}</span>
+              </div>
+              <div v-if="!filteredAuditLogs.length" class="audit-empty">{{ t('settings.no_audit_entries') }}</div>
+            </div>
+          </div>
+        </section>
+      </template>
 
-        <div class="card-actions">
-          <Button variant="primary" :loading="savingWarnings" @click="saveWarnings(); saveTelegram()">Save All</Button>
-          <span v-if="dirtySections.has('warnings')" class="reset-link" @click="loadWarnings(); markClean('warnings')">Reset</span>
-        </div>
-      </div>
-    </section>
+      <!-- ─── Notifications ─── -->
+      <template #notifications>
+        <section v-if="isVisible('notifications')" class="card" id="notifications">
+          <div class="card-header">
+            <div class="card-icon">🔔</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.notifications_title') }}</h3>
+              <p class="card-desc">{{ t('settings.notifications_desc') }}</p>
+            </div>
+            <span v-if="dirtySections.has('warnings')" class="dirty-badge">{{ t('settings.modified') }}</span>
+          </div>
+          <Skeleton v-if="loadingWarnings" variant="rect" width="100%" :height="340" />
+          <div v-else class="card-body">
+            <SettingsAlertsSection />
 
-    <!-- ─── App Links ─── -->
-    <section v-if="isVisible('links')" class="card" id="links">
-      <div class="card-header">
-        <div class="card-icon">📱</div>
-        <div>
-          <h3 class="card-title">Client App Links</h3>
-          <p class="card-desc">Download links shown on the customer portal</p>
-        </div>
-        <span v-if="dirtySections.has('links')" class="dirty-badge">Modified</span>
-      </div>
-      <div class="card-body">
-        <div v-for="(link, i) in appLinks" :key="i" class="link-row">
-          <span class="link-icon">{{ link.icon }}</span>
-          <select v-model="link.platform" class="field-select link-platform" @change="updateLinkPlatform(i); markDirty('links')">
-            <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
-          </select>
-          <input v-model="link.name" class="field-input link-name" placeholder="App name" @input="markDirty('links')" />
-          <input v-model="link.url" class="field-input link-url" placeholder="https://..." @input="markDirty('links')" />
-          <button class="remove-btn" @click="removeLink(i); markDirty('links')">✕</button>
-        </div>
-        <button class="add-btn" @click="addLink(); markDirty('links')">+ Add link</button>
-        <div class="card-actions">
-          <Button variant="primary" :loading="savingLinks" @click="saveLinks">Save</Button>
-          <span v-if="dirtySections.has('links')" class="reset-link" @click="loadAppLinks(); markClean('links')">Reset</span>
-        </div>
-      </div>
-    </section>
+            <div class="divider"></div>
 
-    <!-- ─── System ─── -->
-    <section v-if="isVisible('system')" class="card" id="system">
-      <div class="card-header">
-        <div class="card-icon">⚙️</div>
-        <div>
-          <h3 class="card-title">System</h3>
-          <p class="card-desc">Infrastructure, database, TLS, and workers</p>
-        </div>
-      </div>
-      <div class="card-body system-grid">
-        <SettingsPanelInfoSection />
-        <SettingsDatabaseSection />
-        <SettingsTLSSection />
-        <SettingsWorkersSection />
-        <SettingsAlertsSection />
-        <SettingsGrpcSection />
-      </div>
-    </section>
+            <h4 class="subsection-title">{{ t('settings.data_warnings') }}</h4>
+            <div class="threshold-list">
+              <div v-for="(th, i) in thresholds" :key="i" class="threshold-row">
+                <input type="number" :value="th" class="threshold-input" min="1" max="100" @input="thresholds[i] = parseInt(($event.target as HTMLInputElement).value) || 0; markDirty('warnings')" />
+                <span class="threshold-unit">%</span>
+                <button class="remove-btn" @click="thresholds.splice(i, 1); markDirty('warnings')" v-if="thresholds.length > 1">✕</button>
+              </div>
+              <button class="add-btn" @click="thresholds.push(50); markDirty('warnings')">{{ t('settings.add_threshold') }}</button>
+            </div>
 
-    <!-- ─── Backup ─── -->
-    <section v-if="isVisible('backup')" class="card" id="backup">
-      <div class="card-header">
-        <div class="card-icon">💾</div>
-        <div>
-          <h3 class="card-title">Backup & Export</h3>
-          <p class="card-desc">Database backup, restore, and data export</p>
-        </div>
-      </div>
-      <div class="card-body">
-        <Backup />
-      </div>
-    </section>
+            <h4 class="subsection-title">{{ t('settings.expiry_warnings') }}</h4>
+            <div class="threshold-list">
+              <div v-for="(d, i) in expiryDays" :key="i" class="threshold-row">
+                <input type="number" :value="d" class="threshold-input" min="1" @input="expiryDays[i] = parseInt(($event.target as HTMLInputElement).value) || 1; markDirty('warnings')" />
+                <span class="threshold-unit">{{ t('settings.days_unit') }}</span>
+                <button class="remove-btn" @click="expiryDays.splice(i, 1); markDirty('warnings')" v-if="expiryDays.length > 1">✕</button>
+              </div>
+              <button class="add-btn" @click="expiryDays.push(7); markDirty('warnings')">{{ t('settings.add') }}</button>
+            </div>
+
+            <h4 class="subsection-title">{{ t('settings.webhook_url') }}</h4>
+            <input v-model="webhookUrl" class="field-input" :placeholder="t('settings.webhook_ph')" @input="markDirty('warnings')" />
+
+            <div class="divider"></div>
+
+            <h4 class="subsection-title">{{ t('settings.telegram_bot') }}</h4>
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.bot_token') }}</label>
+              <input v-model="telegramToken" type="password" class="field-input" :placeholder="t('settings.bot_token')" @input="markDirty('telegram')" />
+            </div>
+            <div class="field-row">
+              <label class="field-label">{{ t('settings.admin_chat_ids') }}</label>
+              <input v-model="telegramChats" class="field-input" :placeholder="'-100123456789, -100987654321'" @input="markDirty('telegram')" />
+            </div>
+
+            <div class="card-actions">
+              <Button variant="primary" :loading="savingWarnings" @click="saveWarnings(); saveTelegram()">{{ t('settings.save_all') }}</Button>
+              <span v-if="dirtySections.has('warnings')" class="reset-link" @click="loadWarnings(); markClean('warnings')">{{ t('settings.reset') }}</span>
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <!-- ─── System ─── -->
+      <template #system>
+        <section v-if="isVisible('system')" class="card" id="system">
+          <div class="card-header">
+            <div class="card-icon">⚙️</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.system') }}</h3>
+              <p class="card-desc">{{ t('settings.system_desc') }}</p>
+            </div>
+          </div>
+          <div class="card-body system-grid">
+            <SettingsPanelInfoSection />
+            <SettingsDatabaseSection />
+            <SettingsTLSSection />
+            <SettingsWorkersSection />
+            <SettingsAlertsSection />
+            <SettingsGrpcSection />
+          </div>
+        </section>
+
+        <!-- Backup -->
+        <section v-if="isVisible('backup')" class="card" id="backup">
+          <div class="card-header">
+            <div class="card-icon">💾</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.backup_restore') }}</h3>
+              <p class="card-desc">{{ t('settings.backup_restore_desc') }}</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <Backup />
+          </div>
+        </section>
+      </template>
+
+      <!-- ─── Integrations ─── -->
+      <template #integrations>
+        <section v-if="isVisible('links')" class="card" id="links">
+          <div class="card-header">
+            <div class="card-icon">📱</div>
+            <div>
+              <h3 class="card-title">{{ t('settings.client_app_links') }}</h3>
+              <p class="card-desc">{{ t('settings.client_app_links_desc') }}</p>
+            </div>
+            <span v-if="dirtySections.has('links')" class="dirty-badge">{{ t('settings.modified') }}</span>
+          </div>
+          <Skeleton v-if="loadingLinks" variant="rect" width="100%" :height="170" />
+          <div v-else class="card-body">
+            <div v-for="(link, i) in appLinks" :key="i" class="link-row">
+              <span class="link-icon">{{ link.icon }}</span>
+              <select v-model="link.platform" class="field-select link-platform" @change="updateLinkPlatform(i); markDirty('links')">
+                <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
+              </select>
+              <input v-model="link.name" class="field-input link-name" :placeholder="t('settings.app_name_ph')" @input="markDirty('links')" />
+              <input v-model="link.url" class="field-input link-url" :placeholder="t('settings.app_url_ph')" @input="markDirty('links')" />
+              <button class="remove-btn" @click="removeLink(i); markDirty('links')">✕</button>
+            </div>
+            <button class="add-btn" @click="addLink(); markDirty('links')">{{ t('settings.add_link') }}</button>
+            <div class="card-actions">
+              <Button variant="primary" :loading="savingLinks" @click="saveLinks">{{ t('settings.save') }}</Button>
+              <span v-if="dirtySections.has('links')" class="reset-link" @click="loadAppLinks(); markClean('links')">{{ t('settings.reset') }}</span>
+            </div>
+          </div>
+        </section>
+      </template>
+    </Tabs>
   </div>
 </template>
 
@@ -687,9 +735,13 @@ onMounted(() => {
 .search-icon { color: var(--color-muted); flex-shrink: 0; }
 .search-input { flex: 1; background: none; border: none; outline: none; color: var(--color-text); font-size: var(--text-base); }
 .search-input::placeholder { color: var(--color-muted); }
-.search-kbd { font-size: var(--text-xs); color: var(--color-muted); background: var(--color-surface-2); padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); font-family: var(--font-mono); }
 .search-clear { background: none; border: none; color: var(--color-muted); cursor: pointer; font-size: var(--text-sm); padding: 2px 6px; }
 .search-clear:hover { color: var(--color-text); }
+
+/* Tabs */
+.settings-tabs { background: transparent; }
+.settings-tabs :deep(.k-tabs__list) { overflow-x: auto; scrollbar-width: thin; }
+.settings-tabs :deep(.k-tabs__tab) { text-transform: capitalize; }
 
 /* Cards */
 .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); overflow: hidden; transition: border-color 0.15s; }
@@ -814,5 +866,6 @@ onMounted(() => {
   .system-grid { grid-template-columns: 1fr; }
   .theme-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
   .link-row { flex-direction: column; align-items: stretch; }
+  .settings-tabs :deep(.k-tabs__list) { flex-wrap: nowrap; }
 }
 </style>

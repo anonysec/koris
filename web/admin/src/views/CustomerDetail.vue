@@ -177,12 +177,12 @@ async function regenerateMTProtoSecret() {
   if (!store.detail) return
 
   const confirmed = await confirm({
-    title: 'Regenerate MTProto Secret',
-    message: 'This will generate a new secret, invalidate the current one, and disconnect all active MTProto sessions for this customer. This action cannot be undone.',
+    title: t('customer.regenerate_mtproto_title'),
+    message: t('customer.regenerate_mtproto_warn'),
     variant: 'danger',
     icon: '⚠',
-    confirmText: 'Regenerate',
-    cancelText: 'Cancel',
+    confirmText: t('customer.regenerate'),
+    cancelText: t('common.cancel'),
   })
   if (!confirmed) return
 
@@ -1030,7 +1030,7 @@ onMounted(() => {
     <!-- Not Found -->
     <div v-else class="empty-state">
       <p class="text-muted">Customer not found.</p>
-      <Button variant="ghost" @click="router.back()">Go Back</Button>
+      <Button variant="ghost" @click="router.back()">{{ t('common.go_back') }}</Button>
     </div>
   </div>
 </template>

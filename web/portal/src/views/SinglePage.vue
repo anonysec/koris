@@ -464,26 +464,26 @@ async function handleRate() {
               <template v-if="profile.info_only">
                 <div v-if="profile.type === 'ssh'" class="sp__ssh-info">
                   <div class="sp__ssh-fields">
-                    <span class="sp__ssh-field" @click="copyValue(profile.remote)" :title="'Click to copy'">
-                      <span class="sp__ssh-label">Host</span>
+                    <span class="sp__ssh-field" @click="copyValue(profile.remote)" :title="t('portal.vpn.clickToCopy')">
+                      <span class="sp__ssh-label">{{ t('portal.vpn.sshHost') }}</span>
                       <span class="sp__ssh-value">{{ profile.remote }}</span>
                     </span>
-                    <span class="sp__ssh-field" @click="copyValue(String(profile.port))" :title="'Click to copy'">
-                      <span class="sp__ssh-label">Port</span>
+                    <span class="sp__ssh-field" @click="copyValue(String(profile.port))" :title="t('portal.vpn.clickToCopy')">
+                      <span class="sp__ssh-label">{{ t('portal.vpn.sshPort') }}</span>
                       <span class="sp__ssh-value">{{ profile.port }}</span>
                     </span>
-                    <span class="sp__ssh-field" @click="copyValue(profile.username || '')" :title="'Click to copy'">
-                      <span class="sp__ssh-label">Username</span>
+                    <span class="sp__ssh-field" @click="copyValue(profile.username || '')" :title="t('portal.vpn.clickToCopy')">
+                      <span class="sp__ssh-label">{{ t('portal.vpn.sshUsername') }}</span>
                       <span class="sp__ssh-value">{{ profile.username }}</span>
                     </span>
                   </div>
-                  <p class="sp__ssh-note">Password is your login password. Click any field to copy.</p>
+                  <p class="sp__ssh-note">{{ t('portal.vpn.sshNote') }}</p>
                 </div>
                 <div v-else-if="profile.type === 'mtproto'" class="sp__ssh-info">
                   <a v-if="profile.tg_url" :href="safeUrl(profile.tg_url)" target="_blank" class="sp__mtproto-link">
                     {{ profile.tg_url }}
                   </a>
-                  <p class="sp__ssh-note">Tap the link or paste in Telegram → Settings → Data and Storage → Proxy.</p>
+                  <p class="sp__ssh-note">{{ t('portal.vpn.mtprotoNote') }}</p>
                 </div>
                 <div v-else class="sp__profile-actions">
                   <Button
@@ -650,7 +650,7 @@ async function handleRate() {
                 {{ t('portal.support.send') }}
               </Button>
               <Button variant="ghost" size="sm" @click="handleCloseTicket">
-                Close Ticket
+                {{ t('portal.support.closeTicket') }}
               </Button>
             </div>
           </form>

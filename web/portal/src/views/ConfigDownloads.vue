@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useClipboard } from '@koris/composables/useClipboard'
 import Button from '@koris/ui/Button.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
+import EmptyState from '@koris/ui/EmptyState.vue'
 
 interface VpnProfile {
   type: string
@@ -81,11 +83,14 @@ onMounted(loadProtocols)
     <h2 class="page-title">Configuration Downloads</h2>
     <p class="page-desc">Download VPN configuration files for your device.</p>
 
-    <div v-if="loading" class="loading-text">Loading available protocols...</div>
+    <Skeleton v-if="loading" type="card" :count="3" />
 
-    <div v-else-if="profiles.length === 0" class="empty-state">
-      <p>No configurations available at this time.</p>
-    </div>
+    <EmptyState
+      v-else-if="profiles.length === 0"
+      title="No configurations available"
+      description="VPN configuration files will appear here when available."
+      icon="📡"
+    />
 
     <div v-else class="protocols-grid">
       <div
@@ -138,17 +143,6 @@ onMounted(loadProtocols)
   font-size: var(--text-sm);
   color: var(--color-muted);
   margin: 0;
-}
-
-.loading-text {
-  font-size: var(--text-sm);
-  color: var(--color-muted);
-}
-
-.empty-state {
-  text-align: center;
-  padding: var(--space-8);
-  color: var(--color-muted);
 }
 
 .protocols-grid {

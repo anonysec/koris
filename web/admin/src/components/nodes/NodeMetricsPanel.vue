@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useMetricsStore, type NodeMetricsState } from '@/stores/metrics'
+import { useI18n } from '@koris/composables/useI18n'
 
 const props = defineProps<{
   nodeId: number
 }>()
 
 const metricsStore = useMetricsStore()
+const { t } = useI18n()
 
 const metrics = computed<NodeMetricsState | undefined>(() => {
   return metricsStore.nodes.get(props.nodeId)
@@ -51,9 +53,9 @@ function formatTimestamp(iso: string): string {
     <!-- Offline Banner -->
     <div v-if="isOffline" class="node-metrics-panel__offline-banner">
       <span class="node-metrics-panel__offline-icon">⚠️</span>
-      <span>Node is {{ metrics?.status || 'offline' }}.</span>
+      <span>{{ t('metrics.node_offline') }} {{ metrics?.status || 'offline' }}.</span>
       <span v-if="metrics?.lastUpdated" class="node-metrics-panel__offline-ts">
-        Last data: {{ formatTimestamp(metrics.lastUpdated) }}
+        {{ t('metrics.last_data') }} {{ formatTimestamp(metrics.lastUpdated) }}
       </span>
     </div>
 
@@ -61,7 +63,7 @@ function formatTimestamp(iso: string): string {
       <!-- Gauges Row -->
       <div class="node-metrics-panel__gauges">
         <div class="node-metrics-panel__gauge">
-          <div class="node-metrics-panel__gauge-label">CPU</div>
+          <div class="node-metrics-panel__gauge-label">{{ t('metrics.cpu') }}</div>
           <div class="node-metrics-panel__progress-bar">
             <div
               class="node-metrics-panel__progress-fill"
@@ -72,7 +74,7 @@ function formatTimestamp(iso: string): string {
         </div>
 
         <div class="node-metrics-panel__gauge">
-          <div class="node-metrics-panel__gauge-label">RAM</div>
+          <div class="node-metrics-panel__gauge-label">{{ t('metrics.ram') }}</div>
           <div class="node-metrics-panel__progress-bar">
             <div
               class="node-metrics-panel__progress-fill"
@@ -83,7 +85,7 @@ function formatTimestamp(iso: string): string {
         </div>
 
         <div class="node-metrics-panel__gauge">
-          <div class="node-metrics-panel__gauge-label">Disk</div>
+          <div class="node-metrics-panel__gauge-label">{{ t('metrics.disk') }}</div>
           <div class="node-metrics-panel__progress-bar">
             <div
               class="node-metrics-panel__progress-fill"
@@ -97,26 +99,26 @@ function formatTimestamp(iso: string): string {
       <!-- Stats Row -->
       <div class="node-metrics-panel__stats">
         <div class="node-metrics-panel__stat">
-          <span class="node-metrics-panel__stat-label">RX</span>
+          <span class="node-metrics-panel__stat-label">{{ t('metrics.rx') }}</span>
           <span class="node-metrics-panel__stat-value">{{ formatBandwidth(metrics.rxBps) }}</span>
         </div>
         <div class="node-metrics-panel__stat">
-          <span class="node-metrics-panel__stat-label">TX</span>
+          <span class="node-metrics-panel__stat-label">{{ t('metrics.tx') }}</span>
           <span class="node-metrics-panel__stat-value">{{ formatBandwidth(metrics.txBps) }}</span>
         </div>
         <div class="node-metrics-panel__stat">
-          <span class="node-metrics-panel__stat-label">Sessions</span>
+          <span class="node-metrics-panel__stat-label">{{ t('metrics.sessions') }}</span>
           <span class="node-metrics-panel__stat-value">{{ metrics.sessions }}</span>
         </div>
         <div class="node-metrics-panel__stat">
-          <span class="node-metrics-panel__stat-label">Uptime</span>
+          <span class="node-metrics-panel__stat-label">{{ t('metrics.uptime') }}</span>
           <span class="node-metrics-panel__stat-value">{{ formatUptime(metrics.uptime) }}</span>
         </div>
       </div>
     </template>
 
     <div v-else class="node-metrics-panel__no-data">
-      No metrics data available
+      {{ t('metrics.no_data') }}
     </div>
   </div>
 </template>

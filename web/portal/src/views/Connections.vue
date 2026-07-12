@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import ConnectionCard from '@/components/ConnectionCard.vue'
 import UsageBar from '@koris/ui/UsageBar.vue'
+import Skeleton from '@koris/ui/Skeleton.vue'
+import EmptyState from '@koris/ui/EmptyState.vue'
 import { sanitizeNumber } from '@/utils/sanitizeNumber'
 
 interface Connection {
@@ -68,26 +70,31 @@ onMounted(loadConnections)
     />
 
     <!-- Loading State -->
-    <div v-if="loading" class="loading-text">Loading...</div>
+    <Skeleton v-if="loading" type="card" :count="3" />
 
-    <!-- Empty State -->
-    <div v-else-if="connections.length === 0" class="empty-state">
-      <p>No active connections</p>
-    </div>
-
-    <!-- Connections Grid -->
-    <div v-else class="connections-grid">
-      <ConnectionCard
-        v-for="(conn, idx) in connections"
-        :key="idx"
-        :protocol="conn.protocol"
-        :node-name="conn.nodeName"
-        :assigned-ip="conn.assignedIp"
-        :duration="conn.duration"
-        :rx-bytes="conn.rxBytes"
-        :tx-bytes="conn.txBytes"
+    <template v-else>
+      <!-- Empty State -->
+      <EmptyState
+        v-if="connections.length === 0"
+        title="No active connections"
+        description="You have no active VPN sessions right now."
+        icon="🔌"
       />
-    </div>
+
+      <!-- Connections Grid -->
+      <div v-else class="connections-grid">
+        <ConnectionCard
+          v-for="(conn, idx) in connections"
+          :key="idx"
+          :protocol="conn.protocol"
+          :node-name="conn.nodeName"
+          :assigned-ip="conn.assignedIp"
+          :duration="conn.duration"
+          :rx-bytes="conn.rxBytes"
+          :tx-bytes="conn.txBytes"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -104,17 +111,6 @@ onMounted(loadConnections)
   font-weight: var(--font-semibold);
   color: var(--color-text);
   margin: 0;
-}
-
-.loading-text {
-  font-size: var(--text-sm);
-  color: var(--color-muted);
-}
-
-.empty-state {
-  text-align: center;
-  padding: var(--space-8);
-  color: var(--color-muted);
 }
 
 .connections-grid {

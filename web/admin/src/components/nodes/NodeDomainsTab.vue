@@ -4,6 +4,7 @@ import { useDomainsStore, type ProtocolBinding } from '@/stores/domains'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useApi } from '@koris/composables/useApi'
+import { useI18n } from '@koris/composables/useI18n'
 import Button from '@koris/ui/Button.vue'
 import Input from '@koris/ui/Input.vue'
 import EmptyState from '@koris/ui/EmptyState.vue'
@@ -23,6 +24,7 @@ const store = useDomainsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { get } = useApi()
+const { t } = useI18n()
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const bindings = ref<ProtocolBinding[]>([])
@@ -70,11 +72,11 @@ onMounted(() => {
 async function addDomain() {
   const name = newDomain.value.trim().toLowerCase()
   if (!name) {
-    toast.warning('Enter a domain name')
+    toast.warning(t('node.toast_enter_domain'))
     return
   }
   if (!isValidDomain(name)) {
-    toast.warning('Invalid domain name (e.g. vpn.example.com)')
+    toast.warning(t('node.toast_invalid_domain'))
     return
   }
 
@@ -95,7 +97,7 @@ async function addDomain() {
   }
 
   if (!domainId) {
-    toast.error('Failed to register domain')
+    toast.error(t('node.toast_register_fail'))
     adding.value = false
     return
   }
@@ -115,18 +117,18 @@ async function addDomain() {
     newDomain.value = ''
     await loadBindings()
   } else {
-    toast.error('Failed to add domain — it may already be assigned')
+    toast.error(t('node.toast_add_fail'))
   }
 }
 
 // ─── Remove Domain ───────────────────────────────────────────────────────────
 async function removeDomain(binding: ProtocolBinding) {
   const confirmed = await confirm({
-    title: 'Remove Domain',
+    title: t('node.remove_domain_title'),
     message: `Remove "${binding.domain_name}" from this node? Configs will fall back to the next domain or the node's raw IP.`,
     variant: 'danger',
-    confirmText: 'Remove',
-    cancelText: 'Cancel',
+    confirmText: t('common.remove'),
+    cancelText: t('common.cancel'),
   })
   if (!confirmed) return
 
@@ -135,7 +137,7 @@ async function removeDomain(binding: ProtocolBinding) {
     toast.success(`Removed "${binding.domain_name}"`)
     await loadBindings()
   } else {
-    toast.error('Failed to remove domain')
+    toast.error(t('node.toast_remove_fail'))
   }
 }
 
@@ -174,17 +176,14 @@ function isValidDomain(name: string): boolean {
   <div class="node-domains-tab">
     <div class="tab-header">
       <div>
-        <h3 class="tab-title">Domains</h3>
-        <p class="tab-subtitle">
-          Domains used in VPN configs. Position 1 = primary, rest = backup (failover order).
-          DNS is managed in Cloudflare.
-        </p>
+        <h3 class="tab-title">{{ t('node.domains') }}</h3>
+        <p class="tab-subtitle">{{ t('node.domains_desc') }}</p>
       </div>
     </div>
 
     <!-- Current node domain (legacy info) -->
     <div v-if="currentNodeDomain" class="legacy-domain">
-      <span class="legacy-domain__label">Current node domain:</span>
+      <span class="legacy-domain__label">{{ t('node.current_domain') }}</span>
       <code class="legacy-domain__value">{{ currentNodeDomain }}</code>
     </div>
 
@@ -192,16 +191,16 @@ function isValidDomain(name: string): boolean {
     <div class="add-domain-form">
       <Input
         v-model="newDomain"
-        placeholder="Enter domain name (e.g. vpn.example.com)"
+        :placeholder="t('node.domain_ph')"
         @keyup.enter="addDomain"
       />
       <Button variant="primary" :loading="adding" @click="addDomain">
-        Add
+        {{ t('node.add_domain') }}
       </Button>
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="loading-state">Loading domains...</div>
+    <div v-if="loading" class="loading-state">{{ t('node.loading_domains') }}</div>
 
     <!-- Domain List -->
     <div v-else-if="sortedDomains.length > 0" class="domain-list">
@@ -218,7 +217,7 @@ function isValidDomain(name: string): boolean {
 
         <div class="domain-item__info">
           <span class="domain-item__name">{{ binding.domain_name }}</span>
-          <span class="domain-item__role">{{ index === 0 ? 'Primary' : 'Backup' }}</span>
+          <span class="domain-item__role">{{ index === 0 ? t('node.primary') : t('node.backup') }}</span>
         </div>
 
         <div class="domain-item__actions">
@@ -254,8 +253,8 @@ function isValidDomain(name: string): boolean {
     <EmptyState
       v-else-if="!loading"
       icon="🌐"
-      title="No domains assigned"
-      description="Add a domain to use in VPN configs instead of the node's raw IP. Clients will connect via the domain name."
+      :title="t('node.no_domains')"
+      :description="t('node.no_domains_desc')"
     />
   </div>
 </template>

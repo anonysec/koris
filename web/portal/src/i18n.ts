@@ -163,6 +163,13 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.support.submitRating': 'Submit Rating',
     'portal.support.ratingSubmitted': 'Thank you for your feedback!',
     'portal.support.yourRating': 'Your rating',
+    'portal.support.closeTicket': 'Close Ticket',
+    'portal.vpn.sshHost': 'Host',
+    'portal.vpn.sshPort': 'Port',
+    'portal.vpn.sshUsername': 'Username',
+    'portal.vpn.sshNote': 'Password is your login password. Click any field to copy.',
+    'portal.vpn.mtprotoNote': 'Tap the link or paste in Telegram → Settings → Data and Storage → Proxy.',
+    'portal.vpn.clickToCopy': 'Click to copy',
   },
   fa: {
     downloadQR: 'Download QR',

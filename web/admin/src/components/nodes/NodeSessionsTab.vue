@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useNodesStore, type VPNSession } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
+import { useI18n } from '@koris/composables/useI18n'
 import Button from '@koris/ui/Button.vue'
 import Skeleton from '@koris/ui/Skeleton.vue'
 
@@ -11,6 +12,7 @@ const props = defineProps<{
 
 const nodesStore = useNodesStore()
 const toast = useToast()
+const { t } = useI18n()
 
 const sessions = ref<VPNSession[]>([])
 const loading = ref(false)
@@ -49,7 +51,7 @@ async function handleDisconnect(username: string) {
     sessions.value = sessions.value.filter(s => s.username !== username)
     toast.success(`Disconnected ${username}`)
   } else {
-    toast.error(`Failed to disconnect ${username}`)
+    toast.error(t('node.toast_disconnect_fail'))
   }
   disconnecting.value = null
 }
@@ -60,29 +62,29 @@ onMounted(loadSessions)
 <template>
   <div class="node-sessions-tab">
     <div class="node-sessions-tab__header">
-      <h4 class="node-sessions-tab__title">Active Sessions</h4>
+      <h4 class="node-sessions-tab__title">{{ t('node.active_sessions') }}</h4>
       <Button variant="ghost" size="sm" :loading="loading" @click="loadSessions">
-        Refresh
+        {{ t('node.refresh') }}
       </Button>
     </div>
 
     <Skeleton v-if="loading" />
 
     <div v-else-if="sessions.length === 0" class="node-sessions-tab__empty">
-      No active sessions
+      {{ t('node.no_active') }}
     </div>
 
     <div v-else class="node-sessions-tab__table-wrap">
       <table class="node-sessions-tab__table">
         <thead>
           <tr>
-            <th>Username</th>
-            <th>Core</th>
-            <th>Client IP</th>
-            <th>Assigned IP</th>
-            <th>Duration</th>
-            <th>RX</th>
-            <th>TX</th>
+            <th>{{ t('node.username') }}</th>
+            <th>{{ t('node.core') }}</th>
+            <th>{{ t('node.client_ip') }}</th>
+            <th>{{ t('node.assigned_ip') }}</th>
+            <th>{{ t('node.duration') }}</th>
+            <th>{{ t('metrics.rx') }}</th>
+            <th>{{ t('metrics.tx') }}</th>
             <th></th>
           </tr>
         </thead>
@@ -102,7 +104,7 @@ onMounted(loadSessions)
                 :loading="disconnecting === session.username"
                 @click="handleDisconnect(session.username)"
               >
-                Disconnect
+                {{ t('node.disconnect') }}
               </Button>
             </td>
           </tr>

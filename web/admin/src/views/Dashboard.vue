@@ -26,10 +26,10 @@ nodes.loadNodes()
 const statCards = computed(() => [
   { label: t('stat.nodes_online') || 'Nodes online', value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
   { label: t('stat.active_users') || 'Active users', value: realtime.stats.active_customers, icon: '👥', route: 'users' },
-  { label: 'Live download', value: formatBps(realtime.stats.total_rx_bps), icon: '⬇️', route: 'metrics' },
-  { label: 'Live upload', value: formatBps(realtime.stats.total_tx_bps), icon: '⬆️', route: 'metrics' },
+  { label: t('stat.live_download'), value: formatBps(realtime.stats.total_rx_bps), icon: '⬇️', route: 'metrics' },
+  { label: t('stat.live_upload'), value: formatBps(realtime.stats.total_tx_bps), icon: '⬆️', route: 'metrics' },
   { label: t('stat.open_tickets') || 'Open tickets', value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
-  { label: 'Pending payments', value: realtime.stats.pending_payments, icon: '💳', route: 'payments' },
+  { label: t('stat.pending_payments'), value: realtime.stats.pending_payments, icon: '💳', route: 'payments' },
 ])
 
 function handleStatClick(routeName: string) {
@@ -221,14 +221,14 @@ function formatDuration(seconds: number): string {
       <div class="chart-panel chart-panel--traffic">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Usage</div>
-            <div class="panel-subtitle">Total this period: <strong style="color: var(--color-text)">{{ formatBytes(totalUsage) }}</strong></div>
+            <div class="panel-title">{{ t('dashboard.usage') }}</div>
+            <div class="panel-subtitle">{{ t('dashboard.total_this_period') }} <strong style="color: var(--color-text)">{{ formatBytes(totalUsage) }}</strong></div>
           </div>
           <select v-model="selectedPeriod" class="period-select" aria-label="Select time period">
-            <option value="1d">24 hours</option>
-            <option value="7d">7 days</option>
-            <option value="30d">30 days</option>
-            <option value="all">All time</option>
+            <option value="1d">{{ t('dashboard.period_24h') }}</option>
+            <option value="7d">{{ t('dashboard.period_7d') }}</option>
+            <option value="30d">{{ t('dashboard.period_30d') }}</option>
+            <option value="all">{{ t('dashboard.period_all') }}</option>
           </select>
         </div>
         <div v-if="bandwidthLoading && !bandwidthData" class="traffic-fallback">
@@ -314,9 +314,9 @@ function formatDuration(seconds: number): string {
         <!-- Footer -->
         <div class="chart-footer">
           <div class="chart-footer__total">
-            Usage During Period: <span class="font-mono">{{ formatBytes(totalUsage) }}</span>
+            {{ t('dashboard.usage_during_period') }} <span class="font-mono">{{ formatBytes(totalUsage) }}</span>
           </div>
-          <div class="chart-footer__desc">Total traffic usage across all servers</div>
+          <div class="chart-footer__desc">{{ t('dashboard.total_traffic_desc') }}</div>
         </div>
       </div>
       <div class="chart-panel chart-panel--donut">
@@ -390,14 +390,14 @@ function formatDuration(seconds: number): string {
             </div>
             <div class="node-health-card__metrics">
               <div class="metric-bar">
-                <span class="metric-bar__label">CPU</span>
+                <span class="metric-bar__label">{{ t('dashboard.cpu') }}</span>
                 <div class="metric-bar__track">
                   <div class="metric-bar__fill" :style="{ width: `${node.status_metrics?.cpu_percent ?? 0}%` }" />
                 </div>
                 <span class="metric-bar__value">{{ node.status_metrics?.cpu_percent ?? 0 }}%</span>
               </div>
               <div class="metric-bar">
-                <span class="metric-bar__label">RAM</span>
+                <span class="metric-bar__label">{{ t('dashboard.ram') }}</span>
                 <div class="metric-bar__track">
                   <div class="metric-bar__fill metric-bar__fill--accent" :style="{ width: `${node.status_metrics?.ram_percent ?? 0}%` }" />
                 </div>

@@ -275,6 +275,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/me", s.requireCustomer(s.portalMe))
 	mux.HandleFunc("/api/portal/impersonate-login", s.portalImpersonateLogin)
 	mux.HandleFunc("/api/portal/usage", s.requireCustomer(s.portalUsage))
+	mux.HandleFunc("/api/portal/usage/ws", s.requireCustomer(s.portalUsageWS))
 	mux.HandleFunc("/api/portal/nodes", s.requireCustomer(s.portalNodes))
 	mux.HandleFunc("/api/portal/profiles", s.requireCustomer(s.portalProfiles))
 	mux.HandleFunc("/api/portal/profiles/", s.requireCustomer(s.portalProfileDownload))

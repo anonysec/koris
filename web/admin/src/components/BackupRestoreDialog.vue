@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import Button from '@koris/ui/Button.vue'
+import { useI18n } from '@koris/composables/useI18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   open: boolean
@@ -67,17 +70,17 @@ function handleOverlayClick(event: MouseEvent) {
       >
         <div class="restore-dialog">
           <h2 id="restore-dialog-title" class="restore-dialog__title">
-            Restore from Backup
+            {{ t('backup.restore_title') }}
           </h2>
 
           <div class="restore-dialog__warning">
             <span class="restore-dialog__warning-icon">⚠️</span>
-            <p>This will overwrite the current database. A safety backup will be created first.</p>
+            <p>{{ t('backup.restore_warning') }}</p>
           </div>
 
           <div class="restore-dialog__upload">
             <label class="restore-dialog__label" for="restore-file-input">
-              Select backup file (.tar.gz)
+              {{ t('backup.select_file') }}
             </label>
             <input
               id="restore-file-input"
@@ -96,12 +99,12 @@ function handleOverlayClick(event: MouseEvent) {
 
           <div v-if="loading" class="restore-dialog__progress">
             <span class="spinner" />
-            <span>Restoring...</span>
+            <span>{{ t('backup.restoring') }}</span>
           </div>
 
           <div class="restore-dialog__actions">
             <Button variant="ghost" :disabled="loading" @click="handleCancel">
-              Cancel
+              {{ t('common.cancel') }}
             </Button>
             <Button
               variant="primary"
@@ -109,7 +112,7 @@ function handleOverlayClick(event: MouseEvent) {
               :loading="loading"
               @click="handleConfirm"
             >
-              Restore
+              {{ t('backup.restore') }}
             </Button>
           </div>
         </div>

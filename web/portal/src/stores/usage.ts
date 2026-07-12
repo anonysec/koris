@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
+import { useWebSocket } from '@koris/composables/useWebSocket'
 
 /**
  * A single usage session
@@ -98,6 +99,29 @@ export const useUsageStore = defineStore('portal-usage', () => {
       }))
   })
 
+  // ─── Live stream (WebSocket) ──────────────────────────────────────────────
+  // Keep usage fresh without polling: the backend streams the same UsageSummary
+  // the REST endpoint returns, every 5s. Same-origin, so the session cookie is
+  // sent automatically. The store is a singleton, so this persists for the app
+  // session (matching the admin realtime store pattern).
+  function handleStreamMessage(data: any): void {
+    if (data && data.type === 'usage' && data.data) {
+      usage.value = data.data
+    }
+  }
+
+  const wsUrl = typeof window !== 'undefined'
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/portal/usage/ws`
+    : 'ws://localhost/api/portal/usage/ws'
+
+  const { connected: streamConnected, connect: connectStream, disconnect: disconnectStream } = useWebSocket({
+    url: wsUrl,
+    autoConnect: true,
+    reconnect: true,
+    maxReconnectAttempts: 10,
+    onMessage: handleStreamMessage,
+  })
+
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   /**
@@ -124,6 +148,11 @@ export const useUsageStore = defineStore('portal-usage', () => {
 
     // API state
     error,
+
+    // Live stream
+    streamConnected,
+    connectStream,
+    disconnectStream,
 
     // Computed
     isOnline,
