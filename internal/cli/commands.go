@@ -6,6 +6,7 @@ func RegisterDefaultCommands(c *CLI) {
 	c.RegisterCommand(StatusCommand(c))
 	c.RegisterCommand(NodesCommand(c))
 	c.RegisterCommand(UsersCommand(c))
+	c.RegisterCommand(AdminCommand(c))
 	c.RegisterCommand(CleanupCommand(c))
 	c.RegisterCommand(WorkersCommand(c))
 	c.RegisterCommand(LogsCommand(c))

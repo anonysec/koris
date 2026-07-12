@@ -5,7 +5,7 @@
 #   Subcommands:
 #     install        Install / repair the Docker deployment (prompts for SSL)
 #     start stop restart status logs follow update
-#     config uninstall reinstall downgrade clean db pgadmin
+#     config uninstall reinstall downgrade clean db admin pgadmin
 #     enable disable node-status node-restart node-logs help
 #
 
@@ -241,6 +241,22 @@ cmd_logs() {
 
 cmd_follow() {
     cd "$INSTALL_DIR" && exec docker compose logs -f
+}
+
+# cmd_admin runs the panel binary's built-in admin management subcommands
+# inside the panel container. These talk to the database directly, so they
+# work even when the panel is stopped or you are locked out.
+cmd_admin() {
+    [[ $EUID -ne 0 ]] && { error "Need root"; exit 1; }
+    [[ ! -d "$INSTALL_DIR" ]] && { error "Koris not installed at $INSTALL_DIR"; exit 1; }
+    cd "$INSTALL_DIR"
+    # Allocate a TTY only when no --password is supplied, so the hidden
+    # password prompt works. Scripted calls pass --password and use -T.
+    if printf '%s\n' "$*" | grep -q -- '--password'; then
+        docker compose exec -T panel /app/koris admin "$@"
+    else
+        docker compose exec panel /app/koris admin "$@"
+    fi
 }
 
 cmd_update() {
@@ -1035,6 +1051,7 @@ show_menu() {
     echo -e "  ${green}7.${plain}  Update              ${green}16.${plain} Reinstall"
     echo -e "  ${green}8.${plain}  Config              ${green}17.${plain} Downgrade"
     echo -e "  ${green}9.${plain}  Enable autostart    ${green}0.${plain}  Exit"
+    echo -e "  ${green}18.${plain} Admin Management   (koris admin list|passwd|create)"
     echo ""
     read -rp "$(echo -e "${cyan}Choose [0-17]: ${plain}")" ch
     case "$ch" in
@@ -1054,6 +1071,7 @@ show_menu() {
         15) menu_pgadmin ;;
         16) menu_reinstall ;;
         17) menu_downgrade ;;
+        18) cmd_admin ;;
         0)  exit 0 ;;
         *)  warn "Invalid selection. Enter a number 0-17." ;;
     esac
@@ -1929,6 +1947,7 @@ case "${1:-}" in
     update)     shift; cmd_update "$@";; config) cmd_config;; uninstall) shift; cmd_uninstall "$@";;
     clean)      shift; cmd_clean "$@";;
     db)         shift; cmd_db "$@";;
+    admin)      shift; cmd_admin "$@";;
     pgadmin)    shift; cmd_pgadmin "$@";;
     reinstall)  shift; cmd_reinstall "$@";;
     downgrade)  shift; cmd_downgrade "$@";;
@@ -1938,7 +1957,7 @@ case "${1:-}" in
     node-restart)  docker restart knode 2>/dev/null && info "Node restarted." || error "Failed to restart knode.";;
     node-logs)     docker logs knode --tail 50 2>/dev/null || error "knode container not found.";;
     help|-h|--help)
-        echo "Usage: koris [install|start|stop|restart|status|logs|follow|update|config|uninstall|reinstall|downgrade|clean|db|pgadmin|enable|disable|node-status|node-restart|node-logs]"
+        echo "Usage: koris [install|start|stop|restart|status|logs|follow|update|config|uninstall|reinstall|downgrade|clean|db|admin|pgadmin|enable|disable|node-status|node-restart|node-logs]"
         echo "Run without args for the interactive menu.";;
     "")
         if [[ -f "${COMPOSE_FILE}" ]]; then show_menu; else do_install; fi;;

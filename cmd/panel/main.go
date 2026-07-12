@@ -366,6 +366,7 @@ func isCLICommand(arg string) bool {
 		"status":  true,
 		"nodes":   true,
 		"users":   true,
+		"admin":   true,
 		"cleanup": true,
 		"workers": true,
 		"logs":    true,
