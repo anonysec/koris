@@ -1,0 +1,7 @@
+# buf.work.yaml — links the local knode proto tree as an input module
+# so `buf generate ../knode/proto` resolves without a buf registry.
+
+version: v1
+directories:
+  - ../knode/proto
+  - .

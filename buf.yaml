@@ -1,0 +1,11 @@
+# buf.yaml — lint/breaking policy for the koris proto-regen workflow.
+# The input proto lives in the sibling knode checkout (../knode/proto),
+# wired via buf.work.yaml. No remote deps are used.
+
+version: v2
+lint:
+  use:
+    - DEFAULT
+breaking:
+  use:
+    - FILE

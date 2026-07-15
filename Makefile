@@ -55,6 +55,14 @@ build: frontend backend ## Build frontends + backend (full)
 .PHONY: build-lite
 build-lite: frontend backend-lite ## Build frontends + backend (lite)
 
+# ─── Proto ──────────────────────────────────────────────────────────
+
+.PHONY: proto
+proto: ## Regenerate internal/knodepb from ../knode/proto
+	@command -v buf >/dev/null 2>&1 || { echo "buf not installed: go install github.com/bufbuild/buf/cmd/buf@latest"; exit 1; }
+	buf generate ../knode/proto
+	@echo "regenerated internal/knodepb from ../knode/proto"
+
 # ─── Quality ──────────────────────────────────────────────────────────
 
 .PHONY: vet

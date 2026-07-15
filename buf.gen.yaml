@@ -1,8 +1,8 @@
 # buf.gen.yaml — Code generation config for Panel's knode proto client.
 #
 # Prerequisites:
-#   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-#   go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+#   go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+#   go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
 #
 # Usage with buf:
 #   buf generate ../knode/proto
@@ -12,17 +12,22 @@
 #          --go-grpc_out=. --go-grpc_opt=paths=source_relative \
 #          --proto_path=../knode/proto \
 #          ../knode/proto/knode/v1/knode.proto
+#
+# IMPORTANT: output lands at internal/knodepb (NOT panel/internal/knodepb).
+# The committed code is imported as github.com/anonysec/koris/internal/knodepb,
+# so both `go_package` and `out` MUST point there. A previous config wrote
+# to panel/internal/knodepb, which does not compile.
 
 version: v2
 managed:
   enabled: true
   override:
     - file_option: go_package
-      value: KorisPanel/panel/internal/knodepb
+      value: github.com/anonysec/koris/internal/knodepb
 plugins:
-  - remote: buf.build/protocolbuffers/go
-    out: panel/internal/knodepb
+  - remote: buf.build/protocolbuffers/go:v1.36.11
+    out: internal/knodepb
     opt: paths=source_relative
-  - remote: buf.build/grpc/go
-    out: panel/internal/knodepb
+  - remote: buf.build/grpc/go:v1.6.2
+    out: internal/knodepb
     opt: paths=source_relative

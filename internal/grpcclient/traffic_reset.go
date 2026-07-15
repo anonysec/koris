@@ -7,6 +7,9 @@ import (
 	"log"
 
 	"github.com/anonysec/koris/internal/dbstore"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"github.com/anonysec/koris/internal/knodepb"
 )
 
 // ResetUserTraffic resets the traffic counters for a user on all relevant nodes.
@@ -169,14 +172,21 @@ func callResetTraffic(ctx context.Context, pool Pool, nodeID int64, username str
 		return fmt.Errorf("node %q is offline, cannot reset traffic", node.NodeName)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.ResetTraffic(ctx, &knodepb.ResetTrafficRequest{
-	//       Username: username,
-	//   })
-	//   if err != nil { return err }
-	log.Printf("[grpc-client] ResetTraffic stub: would reset traffic for user %q on node %q (id=%d)",
-		username, node.NodeName, nodeID)
+	// The generated knodepb client is available; make the real RPC call.
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+	_, err = client.ResetTraffic(ctx, &knodepb.ResetTrafficRequest{
+		Username: username,
+	})
+	if err != nil {
+		// knode returns codes.Unimplemented until its traffic-reset backend
+		// is wired. Treat that as a best-effort no-op (the panel's
+		// TrafficCollector baseline for this user is still cleared below),
+		// but surface any other error to the caller.
+		if status.Code(err) == codes.Unimplemented {
+			log.Printf("[grpc-client] ResetTraffic not supported by node %q yet (Unimplemented)", node.NodeName)
+			return nil
+		}
+		return fmt.Errorf("ResetTraffic RPC on node %q: %w", node.NodeName, err)
+	}
 	return nil
 }
