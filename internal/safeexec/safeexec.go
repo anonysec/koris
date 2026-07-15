@@ -34,8 +34,11 @@ var allowedCommands = map[string]bool{
 	"radclient": true,
 	// Utilities
 	"cat": true, "chmod": true, "cp": true, "mkdir": true, "rm": true,
-	"sh": true, "bash": true,
 }
+
+// NOTE: "sh"/"bash" are intentionally NOT in the allowlist. Permitting a
+// shell here would defeat the entire injection guard — any safeexec call
+// passing attacker-influenced args to a shell becomes an RCE.
 
 // Validate checks that a command name is in the allowlist.
 func Validate(name string) error {
