@@ -64,3 +64,6 @@ web/_shared.bak*
 
 # ── Generated docs site (GitHub Pages) ──
 _site/
+
+# buf regen artifact (symlink created under knodepb during proto gen)
+internal/knodepb/knode
