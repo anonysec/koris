@@ -72,6 +72,11 @@ func (s *Store) DB() *sql.DB {
 	return s.sqlDB
 }
 
+// Pool returns the underlying pgx pool for test access.
+func (s *Store) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // Close shuts down the connection pool and closes the sql.DB.
 func (s *Store) Close() error {
 	s.sqlDB.Close()

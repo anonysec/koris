@@ -438,14 +438,15 @@ func (s *Store) CreateVpnCertificate(ctx context.Context, cert *dbstore.VpnCerti
 	return cert, nil
 }
 
-// GetVpnCertificateByDomain retrieves the most recent active/pending certificate for a domain.
+// GetVpnCertificateByDomain retrieves the most recent certificate for a domain.
+// Returns active, pending, or expired certificates (not just active/pending).
 func (s *Store) GetVpnCertificateByDomain(ctx context.Context, domainID int64) (*dbstore.VpnCertificate, error) {
 	var c dbstore.VpnCertificate
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, node_id, domain_id, cert_type, status, certificate, private_key, ca_chain,
 		       issued_at, expires_at, retry_count, last_error, created_at, updated_at
 		FROM vpn_certificates
-		WHERE domain_id = $1 AND status IN ('active', 'pending')
+		WHERE domain_id = $1
 		ORDER BY created_at DESC
 		LIMIT 1
 	`, domainID).Scan(
