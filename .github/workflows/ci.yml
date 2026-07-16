@@ -103,7 +103,7 @@ jobs:
         run: go build -tags lite ./cmd/panel
       - name: Test
         env:
-          KORIS_TEST_MIGRATIONS: migrations
+          KORIS_TEST_MIGRATIONS: ${{ github.workspace }}/migrations
         run: go test ./... -count=1 -timeout=120s
 
   docker:
