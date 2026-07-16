@@ -371,6 +371,7 @@ func isCLICommand(arg string) bool {
 		"workers": true,
 		"logs":    true,
 		"update":  true,
+		"cert":    true,
 		"help":    true,
 		"--help":  true,
 		"--json":  true,
@@ -430,6 +431,14 @@ func redirectToHTTPS(next http.Handler) http.Handler {
 // or as the final blocking call in main.
 func startTLSListener(handler http.Handler, cfg config.Config) {
 	domain := os.Getenv("PANEL_DOMAIN")
+
+	// Default install mode: plaintext HTTP bound to 127.0.0.1 only. No cert is
+	// generated or required. The operator installs a cert (selfsigned/acme/manual)
+	// to switch to public HTTPS. Public plaintext is never served.
+	if cfg.TLSMode == "disabled" {
+		serveLoopbackHTTP(handler, cfg.TLSAddr)
+		return
+	}
 
 	// Dev-only self-signed mode: generate a self-signed cert if one isn't present.
 	// Browsers will warn — this is for local/dev use only. Production must use a
@@ -1161,6 +1170,14 @@ func main() {
 		tlsKey := cfg.TLSKey
 		behindProxy := strings.HasPrefix(cfg.Addr, "127.") || strings.HasPrefix(cfg.Addr, "localhost")
 		forceTLS := strings.ToLower(os.Getenv("PANEL_TLS_DIRECT")) == "true"
+
+		// Default install mode: plaintext HTTP bound to 127.0.0.1 only, even if
+		// a cert happens to exist on disk. The operator installs a cert to switch
+		// to public HTTPS. Public plaintext is never served.
+		if cfg.TLSMode == "disabled" {
+			serveLoopbackHTTP(limiter.Middleware(handler), cfg.TLSAddr)
+			return
+		}
 
 		if safepath.Exists(tlsCert) && safepath.Exists(tlsKey) && (!behindProxy || forceTLS) {
 			logger.Info("tls", "TLS enabled (legacy mode)", map[string]any{"cert": tlsCert, "key": tlsKey, "addr": cfg.TLSAddr})

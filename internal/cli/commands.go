@@ -11,4 +11,5 @@ func RegisterDefaultCommands(c *CLI) {
 	c.RegisterCommand(WorkersCommand(c))
 	c.RegisterCommand(LogsCommand(c))
 	c.RegisterCommand(UpdateCommand(c))
+	c.RegisterCommand(CertCommand(c))
 }

@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bufio"
 	"github.com/anonysec/koris/internal/safepath"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +66,11 @@ type Config struct {
 }
 
 func Load() Config {
+	// Load the panel env file (KORIS_HOME/.env) if present. This lets `koris cert`
+	// write TLS settings to disk and have them applied on the next restart, and
+	// unifies Docker (mounted at /etc/koris) and bare-metal (/opt/koris) deploys.
+	loadEnvFile()
+
 	devMode := os.Getenv("PANEL_DEV_MODE") == "true"
 
 	setupKey := getenv("PANEL_SETUP_KEY", "")
@@ -166,8 +173,10 @@ func Load() Config {
 	alertRAM := getenvInt("PANEL_ALERT_RAM_THRESHOLD", 85)
 	alertDisk := getenvInt("PANEL_ALERT_DISK_THRESHOLD", 90)
 
-	// TLS mode
-	tlsMode := getenv("PANEL_TLS_MODE", "selfsigned")
+	// TLS mode. Default "disabled" = install serves plaintext HTTP bound to
+	// 127.0.0.1 only (local access). The operator installs a cert later
+	// (selfsigned / acme / manual) to expose HTTPS publicly.
+	tlsMode := getenv("PANEL_TLS_MODE", "disabled")
 
 	// Log format
 	logFormat := getenv("PANEL_LOG_FORMAT", "text")
@@ -280,4 +289,42 @@ func normalizePath(p string) string {
 		p = p + "/"
 	}
 	return p
+}
+
+// loadEnvFile loads a panel .env file into the process environment if it exists.
+// Resolution order: $KORIS_HOME/.env, then /etc/koris/.env (Docker mount),
+// then /opt/koris/.env (bare-metal default). Existing OS env vars take
+// precedence, so compose `environment:` / shell exports are not overridden.
+func loadEnvFile() {
+	candidates := []string{}
+	if home := os.Getenv("KORIS_HOME"); home != "" {
+		candidates = append(candidates, filepath.Join(home, ".env"))
+	}
+	candidates = append(candidates, "/etc/koris/.env", "/opt/koris/.env")
+
+	for _, path := range candidates {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			key, val, ok := strings.Cut(line, "=")
+			key = strings.TrimSpace(key)
+			val = strings.TrimSpace(val)
+			if !ok || key == "" {
+				continue
+			}
+			// Don't clobber already-set env vars (compose/shell win).
+			if os.Getenv(key) == "" {
+				os.Setenv(key, val)
+			}
+		}
+		return
+	}
 }

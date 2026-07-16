@@ -52,7 +52,10 @@ services:
       # Single panel port. HTTPS is mandatory; plain HTTP is only a local
       # (loopback) fallback used when the cert can't load. Let's Encrypt ACME
       # (HTTP-01) needs :80 during issuance — publish it temporarily if you use ACME.
-      - "${PANEL_PORT:-2096}:2096"
+      # Default install = plaintext HTTP. Bind to host loopback only so it is
+      # reachable locally (127.0.0.1:2096) but NOT exposed to the internet.
+      # After installing a cert (HTTPS), you can republish on 0.0.0.0 if desired.
+      - "127.0.0.1:${PANEL_PORT:-2096}:2096"
       # - "80:80"
     environment:
       PANEL_PG_DSN: "postgres://${POSTGRES_USER:-koris}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-koris}?sslmode=disable"
@@ -63,11 +66,10 @@ services:
       # at /etc/koris so certs/config live in one accessible folder on the host.
       PANEL_ADDR: "0.0.0.0:${PANEL_PORT:-2096}"
       PANEL_TLS_ADDR: ":${PANEL_PORT:-2096}"
-      PANEL_TLS_ENABLED: "${PANEL_TLS_ENABLED:-true}"
-      PANEL_TLS_MODE: "${PANEL_TLS_MODE:-selfsigned}"
-      PANEL_TLS_CERT: "/etc/koris/certs/cert.pem"
-      PANEL_TLS_KEY: "/etc/koris/certs/key.pem"
-      PANEL_TLS_CERT_DIR: "/etc/koris/certs"
+      # TLS settings are read from the mounted KORIS_HOME/.env (/etc/koris/.env)
+      # at startup. `koris cert selfsign|letsencrypt|path` writes that file.
+      # Default install = plaintext HTTP bound to 127.0.0.1 only (local access)
+      # until a cert is installed.
       PANEL_SESSION_SECRET: "${PANEL_SESSION_SECRET:-}"
       PANEL_SETUP_KEY: "${PANEL_SETUP_KEY:-}"
       PANEL_RADIUS_SECRET: "${PANEL_RADIUS_SECRET:-}"
@@ -116,16 +118,17 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     ports:
-      - "${KNODE_PORT:-2083}:2083"      # gRPC management API (panel connects here)
+      - "${KNODE_PORT:-2087}:2087"      # gRPC management API (panel connects here)
       # VPN data-plane ports (must be published so external clients can reach the node)
-      - "1194:1194/udp"                 # OpenVPN (UDP)
-      - "8443:8443/tcp"                 # OpenVPN (TCP)
+      - "8443:1194/udp"                 # OpenVPN (UDP) — host 8443 -> container 1194
+      - "8443:1194/tcp"                 # OpenVPN (TCP)  — host 8443 -> container 1194
       - "51820:51820/udp"               # WireGuard
       - "500:500/udp"                   # IKEv2 / L2TP / Cisco IPsec (IKE)
       - "4500:4500/udp"                 # IKEv2 / L2TP NAT-T
-      - "443:443/tcp"                   # AnyConnect / SSTP / MTProto
+      - "1701:1701/udp"                 # L2TP
+      - "2053:443/tcp"                  # MTProxy (MTProto) — host 2053 -> container 443
     environment:
-      KNODE_LISTEN_ADDR: "${KNODE_LISTEN_ADDR:-:2083}"
+      KNODE_LISTEN_ADDR: "${KNODE_LISTEN_ADDR:-:2087}"
       KNODE_API_KEYS: "${KNODE_API_KEYS:-}"            # comma-separated; empty => random key
       KNODE_INSECURE_ALLOW_NO_AUTH: "${KNODE_INSECURE_ALLOW_NO_AUTH:-false}"
       KNODE_ENABLE_REST: "${KNODE_ENABLE_REST:-false}"
