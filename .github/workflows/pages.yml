@@ -9,6 +9,7 @@ on:
     paths:
       - 'docs/**'
       - 'README.md'
+      - 'install.sh'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -38,6 +39,9 @@ jobs:
 
       - name: Build site
         run: python docs/_build.py
+
+      - name: Include install.sh at site root
+        run: cp install.sh _site/install.sh
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
