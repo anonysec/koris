@@ -102,6 +102,8 @@ jobs:
       - name: Build (lite)
         run: go build -tags lite ./cmd/panel
       - name: Test
+        env:
+          KORIS_TEST_MIGRATIONS: migrations
         run: go test ./... -count=1 -timeout=120s
 
   docker:

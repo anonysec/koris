@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,6 +53,29 @@ func newTestPostgresStore(t *testing.T) *Store {
 	}
 
 	return store
+}
+
+func TestMain(m *testing.M) {
+	// Ensure the test database schema exists. The unit tests truncate tables
+	// (panel_sessions, etc.) but never create them, so apply the real
+	// migrations once against koris_test before running the suite.
+	ctx := context.Background()
+	store, err := New(ctx, testDSN)
+	if err != nil {
+		log.Fatalf("TestMain: connect: %v", err)
+	}
+	defer store.Close()
+
+	dir := os.Getenv("KORIS_TEST_MIGRATIONS")
+	if dir == "" {
+		// repo root migrations/ relative to this package (internal/dbstore/postgres)
+		dir = filepath.Join("..", "..", "..", "migrations")
+	}
+	if err := store.Migrate(ctx, dir); err != nil {
+		log.Fatalf("TestMain: migrate %s: %v", dir, err)
+	}
+
+	os.Exit(m.Run())
 }
 
 func TestNew(t *testing.T) {
