@@ -153,7 +153,7 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 		_ = s.DB.QueryRow(`SELECT name, address, domain FROM knode_connections WHERE id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&nodeName, &address, &nodeDomain)
 
 		if host == "" {
-			// Priority 1: Active domain from vpn_protocol_bindings (position-based failover)
+			// Priority 1: node address (position-based failover)
 			// Uses the protocol determined by the caller context (default: openvpn-udp)
 			bindingProtocol := "openvpn-udp"
 			if proto == "tcp" {

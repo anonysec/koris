@@ -359,10 +359,6 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/node-groups", s.requireCustomer(s.handlePortalNodeGroups))
 	mux.HandleFunc("/api/cores", s.requireFullAdmin(s.handleCores))
 
-	// Domain management (VPN domains)
-	mux.HandleFunc("/api/admin/domains", s.requireFullAdmin(s.adminDomains))
-	mux.HandleFunc("/api/admin/domains/", s.requireFullAdmin(s.adminDomainByID))
-
 	// Firewall management via gRPC (knode)
 	mux.HandleFunc("/api/admin/nodes/firewall", s.requireFullAdmin(s.handleNodeFirewall))
 

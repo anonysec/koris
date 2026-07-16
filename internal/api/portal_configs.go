@@ -219,7 +219,7 @@ func (s *Server) wireguardConfig(username string, nodeID int64) string {
 	// Get endpoint — prefer domain binding over node's static domain/IP
 	var endpoint string
 
-	// Priority 1: Active domain from vpn_protocol_bindings for wireguard
+	// Priority 1: node address for wireguard
 	if primary := s.protocolPrimaryDomain(peerNodeID, "wireguard"); primary != "" {
 		endpoint = fmt.Sprintf("%s:%d", primary, wgPort)
 	}

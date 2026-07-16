@@ -174,22 +174,10 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 		_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='openvpn-tcp' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&tcpPort)
 	}
 
-	// Build remote lines for TCP using domain bindings if available.
-	domainEndpoints := s.protocolDomainEndpoints(nodeID, "openvpn-tcp")
+	// Build remote lines for TCP using the node's own address directly
+	// (domain bindings were removed; the panel addresses nodes by IP).
+	remoteLines := fmt.Sprintf("remote %s %d tcp", host, tcpPort)
 
-	var remoteLines string
-	if len(domainEndpoints) > 0 {
-		// Use domain bindings in failover position order
-		for i, ep := range domainEndpoints {
-			if i == 0 {
-				remoteLines = fmt.Sprintf("remote %s %d tcp", ep.DomainName, tcpPort)
-			} else {
-				remoteLines += fmt.Sprintf("\nremote %s %d tcp", ep.DomainName, tcpPort)
-			}
-		}
-	} else {
-		// Fallback: no domain bindings — use node endpoint
-		remoteLines = fmt.Sprintf("remote %s %d tcp", host, tcpPort)
 
 		// Get user's preferred node — put it first if different from default
 		var preferredNodeID int64
@@ -202,15 +190,12 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 					// Preferred node goes first
 					remoteLines = fmt.Sprintf("remote %s %d tcp\nremote %s %d tcp", prefHost, tcpPort, host, tcpPort)
 				}
-			}
-		}
-	}
+				}
+				}
 
-	// Add other active nodes as backup
+				// Add other active nodes as backup
 	var preferredForBackup int64
-	if len(domainEndpoints) == 0 {
-		_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredForBackup)
-	}
+	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredForBackup)
 	rows, err := s.DB.Query(`
 		SELECT n.address
 		FROM knode_connections n
@@ -302,27 +287,9 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 		}
 	}
 
-	// Build remote lines using domain bindings in failover position order.
-	// If domain bindings exist for this protocol on this node, use them instead of raw IPs.
-	bindingProtocol := "openvpn-udp"
-	if proto == "tcp" {
-		bindingProtocol = "openvpn-tcp"
-	}
-	domainEndpoints := s.protocolDomainEndpoints(resolvedNodeID, bindingProtocol)
+	// Remote lines use the node's own address directly (domain bindings removed).
+	remoteLines := fmt.Sprintf("remote %s %d %s", host, port, proto)
 
-	var remoteLines string
-	if len(domainEndpoints) > 0 {
-		// Use domain bindings: primary is first active domain, rest are backups in position order
-		for i, ep := range domainEndpoints {
-			if i == 0 {
-				remoteLines = fmt.Sprintf("remote %s %d %s", ep.DomainName, port, proto)
-			} else {
-				remoteLines += fmt.Sprintf("\nremote %s %d %s", ep.DomainName, port, proto)
-			}
-		}
-	} else {
-		// Fallback: no domain bindings — use node's endpoint (resolved by openVPNEndpointNode)
-		remoteLines = fmt.Sprintf("remote %s %d %s", host, port, proto)
 
 		// Legacy fallback: add backup domains from this node's backup_domains field
 		if resolvedNodeID > 0 {
@@ -336,7 +303,6 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 					}
 				}
 			}
-		}
 	}
 
 	// Add backup remotes from other nodes (prefer domain over IP)

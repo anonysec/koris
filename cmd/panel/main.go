@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/anonysec/koris/internal/safeexec"
 	"github.com/anonysec/koris/internal/safepath"
 	"context"
 	"crypto/ecdsa"
@@ -996,89 +995,6 @@ func main() {
 			"issuer":           issuer,
 			"tls_addr":         cfg.TLSAddr,
 		})
-	}))
-
-	// ─── Domain & TLS Management ─────────────────────────────────────────
-	mux.HandleFunc("/api/admin/domain", srv.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			domain := ""
-			_ = database.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key='panel_domain'`).Scan(&domain)
-			sslActive := safepath.Exists("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
-			var expiry, issuer string
-			if sslActive {
-				expiry, issuer = parseCertInfo("/etc/letsencrypt/live/" + domain + "/fullchain.pem")
-			} else if safepath.Exists(cfg.TLSCert) {
-				expiry, issuer = parseCertInfo(cfg.TLSCert)
-				sslActive = true
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
-				"ok":         true,
-				"domain":     domain,
-				"ssl_active": sslActive,
-				"expiry":     expiry,
-				"issuer":     issuer,
-			})
-
-		case http.MethodPost:
-			var in struct {
-				Domain string `json:"domain"`
-				SSL    bool   `json:"ssl"`
-				Email  string `json:"email"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "bad_json"})
-				return
-			}
-			in.Domain = strings.TrimSpace(in.Domain)
-			if in.Domain == "" {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "domain_required"})
-				return
-			}
-			_, _ = database.Exec(`INSERT INTO panel_settings(setting_key,setting_value) VALUES($1,$2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value`, in.Domain, in.Domain)
-
-			// Koris terminates TLS directly (no nginx). For a public domain we
-			// obtain a certificate with certbot in standalone mode and copy it
-			// into the panel's configured cert/key paths.
-			sslResult := ""
-			if in.SSL {
-				args := []string{"certonly", "--standalone", "-d", in.Domain, "--non-interactive", "--agree-tos"}
-				if in.Email != "" {
-					args = append(args, "--email", in.Email)
-				} else {
-					args = append(args, "--register-unsafely-without-email")
-				}
-				out, err := safeexec.MustCommand("certbot", args...).CombinedOutput()
-				if err != nil {
-					sslResult = "certbot_failed: " + string(out)
-					logger.Error("domain", "certbot failed", map[string]any{"domain": in.Domain, "output": string(out)})
-				} else {
-					sslResult = "ssl_installed"
-					logger.Info("domain", "SSL installed", map[string]any{"domain": in.Domain})
-					certSrc := "/etc/letsencrypt/live/" + in.Domain + "/fullchain.pem"
-					keySrc := "/etc/letsencrypt/live/" + in.Domain + "/privkey.pem"
-					if safepath.Exists(certSrc) && safepath.Exists(keySrc) {
-						os.MkdirAll("/etc/panel", 0755)
-						safeexec.MustCommand("cp", certSrc, cfg.TLSCert).Run()
-						safeexec.MustCommand("cp", keySrc, cfg.TLSKey).Run()
-					}
-				}
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
-				"ok":         true,
-				"domain":     in.Domain,
-				"ssl_result": sslResult,
-			})
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
 	}))
 
 	// ─── Ready Message ─────────────────────────────────────────────────────

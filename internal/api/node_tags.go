@@ -109,16 +109,6 @@ func (s *Server) nodeTagsByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dispatch to protocol bindings handler
-	if parts[1] == "bindings" {
-		nodeID, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil || nodeID <= 0 {
-			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_node_id"})
-			return
-		}
-		s.protocolBindings(w, r)
-		return
-	}
-
 	if parts[1] != "tags" {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return

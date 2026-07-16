@@ -56,10 +56,11 @@ When modifying shared features, keep both the `_full.go` and `_lite.go` counterp
 
 ## Port & TLS model
 
-- **Single port** `:2096` serves **HTTPS** (`PANEL_TLS_ADDR`, default `:2096`). This is the only externally published port; HTTPS is mandatory for external traffic.
-- If the cert can't be loaded, the panel falls back to **loopback-only HTTP on the same port** (`127.0.0.1:2096`) so an admin can fix the cert locally. Plaintext is never exposed off-host.
+- **Single port** `:2096`. **Default install = plaintext HTTP on `127.0.0.1` only** (loopback, not public) — `PANEL_TLS_MODE=disabled`. An admin installs a cert to expose HTTPS.
+- Install a cert via the `koris` binary: `koris cert selfsign|letsencrypt|path`. These write `KORIS_HOME/.env` and apply on the next restart. After installing a cert, republish the port on `0.0.0.0` (compose `2096:2096`) to expose it.
+- Once a cert is present, the panel serves **HTTPS** (`PANEL_TLS_ADDR`, default `:2096`). If the cert can't be loaded, it falls back to **loopback-only HTTP on the same port** (`127.0.0.1:2096`) so an admin can fix the cert locally. Plaintext is never exposed off-host.
 - `PANEL_ADDR` (default `:8080`) is a *separate* loopback HTTP listener, started only when it differs from `PANEL_TLS_ADDR`. In the Docker deployment `PANEL_ADDR=0.0.0.0:2096`, so it is not started — you get one port. It exists for local non-Docker dev.
-- **TLS modes** (`PANEL_TLS_MODE`, default `selfsigned`): `manual` (custom cert at `/etc/koris/certs`), `selfsigned` (dev auto-generated), `acme` (Let's Encrypt/ZeroSSL via acme.sh, driven by `PANEL_DOMAIN`), `disabled`.
+- **TLS modes** (`PANEL_TLS_MODE`, default `disabled`): `disabled` (default HTTP/loopback) | `manual` (custom cert at `/etc/koris/certs`) | `selfsigned` (dev auto-generated) | `acme` (Let's Encrypt/ZeroSSL, driven by `PANEL_DOMAIN`).
 
 ## KORIS_HOME & data layout
 

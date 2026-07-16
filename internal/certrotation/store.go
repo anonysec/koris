@@ -7,7 +7,7 @@ import (
 )
 
 // DBStore implements IKEv2CertStore using a *sql.DB connection.
-// It queries the vpn_protocol_bindings and vpn_certificates tables directly.
+// It queries the vpn_certificates table directly (joined on node id).
 type DBStore struct {
 	db *sql.DB
 }
@@ -17,15 +17,14 @@ func NewDBStore(db *sql.DB) *DBStore {
 	return &DBStore{db: db}
 }
 
-// ListIKEv2Domains returns all domains that have an IKEv2 protocol binding.
-// It queries vpn_protocol_bindings WHERE protocol = 'ikev2' joined with vpn_domains.
+// ListIKEv2Domains returns all nodes that have an active IKEv2 certificate.
+// (Domain mapping was removed; certs are now keyed by node.)
 func (s *DBStore) ListIKEv2Domains(ctx context.Context) ([]IKEv2DomainBinding, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT pb.domain_id, d.name, pb.node_id
-		FROM vpn_protocol_bindings pb
-		JOIN vpn_domains d ON d.id = pb.domain_id
-		WHERE pb.protocol = 'ikev2' AND d.status = 'active'
-		GROUP BY pb.domain_id, d.name, pb.node_id
+		SELECT node_id
+		FROM vpn_certificates
+		WHERE cert_type = 'ikev2' AND status = 'active'
+		GROUP BY node_id
 	`)
 	if err != nil {
 		return nil, err
@@ -35,7 +34,7 @@ func (s *DBStore) ListIKEv2Domains(ctx context.Context) ([]IKEv2DomainBinding, e
 	var bindings []IKEv2DomainBinding
 	for rows.Next() {
 		var b IKEv2DomainBinding
-		if err := rows.Scan(&b.DomainID, &b.DomainName, &b.NodeID); err != nil {
+		if err := rows.Scan(&b.NodeID); err != nil {
 			return nil, err
 		}
 		bindings = append(bindings, b)
@@ -151,10 +150,8 @@ func (s *DBStore) ListExpiringCertificates(ctx context.Context, within time.Dura
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT vc.id, vc.node_id, vc.domain_id, vc.cert_type, vc.status,
 		       vc.certificate, vc.private_key, vc.ca_chain,
-		       vc.issued_at, vc.expires_at, vc.retry_count, vc.last_error,
-		       COALESCE(d.name, '')
+		       vc.issued_at, vc.expires_at, vc.retry_count, vc.last_error
 		FROM vpn_certificates vc
-		LEFT JOIN vpn_domains d ON d.id = vc.domain_id
 		WHERE vc.cert_type = 'ikev2'
 		  AND vc.status = 'active'
 		  AND vc.expires_at <= NOW() + $1::interval
@@ -175,7 +172,6 @@ func (s *DBStore) ListExpiringCertificates(ctx context.Context, within time.Dura
 			&c.ID, &c.NodeID, &c.DomainID, &c.CertType, &c.Status,
 			&certificate, &privateKey, &caChain,
 			&issuedAt, &expiresAt, &c.RetryCount, &lastError,
-			&c.DomainName,
 		); err != nil {
 			return nil, err
 		}
