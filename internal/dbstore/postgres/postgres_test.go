@@ -294,6 +294,16 @@ func TestInsertAndQueryMetrics(t *testing.T) {
 	store := newTestPostgresStore(t)
 	ctx := context.Background()
 
+	// Metrics reference node_metrics_history.node_id FK -> knode_connections(id).
+	// Insert a parent node row (id=1) so the FK constraint is satisfied.
+	_, err := store.Pool().Exec(ctx, `
+		INSERT INTO knode_connections (id, name, address, api_key_enc, client_cert, client_key_enc, ca_cert)
+		VALUES (1, 'test-node', '127.0.0.1', '\x00', 'cert', '\x00', 'ca')
+		ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed node failed: %v", err)
+	}
+
 	now := time.Now().Truncate(time.Second)
 	m := &dbstore.MetricsRow{
 		Time:           now,
