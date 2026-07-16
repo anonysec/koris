@@ -17,36 +17,31 @@ The installer provisions the full stack via `docker compose`: the Koris panel, T
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 ```
 
-Running with **no flags** starts an interactive prompt for:
+Running with **no flags** installs with sensible defaults: edition `full`, port `2096`, `KORIS_HOME=/opt/koris`, and **HTTP on `127.0.0.1` only** (loopback, not public). Tune via env vars before running: `KORIS_SRC`, `KORIS_HOME`, `KORIS_REPO`, `KNODE_REPO`.
 
-| Prompt | Default | Notes |
-|--------|---------|-------|
-| Edition | `full` | `full` or `lite` |
-| Domain | *(none)* | Enables Let's Encrypt ACME when set |
-| Port | `2026` | HTTPS |
-| Database | bundled TimescaleDB | or point at an external Postgres |
-| SSL mode | self-signed | `acme` / `manual` / `selfsigned` |
-| URL routing | path | `/admin/` + `/account/`, or subdomains |
+If an existing install is detected, the script preserves your `.env` files (secrets/DB password kept) and re-deploys.
 
-If an existing install is detected you'll be offered **reinstall / wipe / update / cancel**.
-
-### Non-interactive flags
+### Install & manage
 
 ```bash
-koris.sh install --full                       # Full edition (default)
-koris.sh install --lite                       # Lite edition (smaller, fewer deps)
-koris.sh install --port=2026                  # Custom HTTPS port
-koris.sh install --domain=panel.example.com   # Public domain → ACME TLS
-koris.sh install --admin-path=/manage/        # Custom admin path
-koris.sh install --portal-path=/app/          # Custom portal path
-koris.sh install --admin-host=admin.example.com   # Subdomain routing
-koris.sh install --version=v0.93.0            # Install a specific version tag
-koris.sh install --no-knode                   # Skip bundling the knode agent
-koris.sh install --reinstall                  # Force reinstall (preserves DB)
-koris.sh install --uninstall                  # Remove KorisPanel completely
+# Install (curl-pipeable):
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
+
+# All management is done via the `koris` binary (host wrapper installed above):
+koris status                                       # panel status
+koris cert selfsign                                # self-signed cert → HTTPS
+koris cert letsencrypt --domain=panel.example.com  # Let's Encrypt (ACME)
+koris cert path --cert=/p/cert.pem --key=/p/key.pem # your own cert/key
+koris start | stop | restart                       # stack lifecycle (docker compose)
+koris logs                                         # follow container logs
 ```
 
-Passing `--native` exits with a deprecation error — only Docker deployment is supported.
+### Exposing HTTPS publicly
+
+1. Install a cert: `koris cert selfsign|letsencrypt|path`
+2. Publish the port on the host interface: in `docker-compose.yml` change
+   `127.0.0.1:2096:2096` → `2096:2096`, then `koris restart`.
+3. Point DNS at the host and open `https://<host>:2096/`.
 
 ### Manual Docker deployment (no installer)
 
@@ -185,7 +180,6 @@ Scale worker processes within a single container via `PANEL_WORKERS` (each worke
 ```bash
 koris update                    # Pull latest and rebuild (health-checks after)
 koris update --version=v1.2.3   # Update to a specific version
-koris.sh install --version=v1.2.0     # Fresh install at a specific tag
 koris downgrade v1.1.0          # Roll back
 ```
 
@@ -203,10 +197,9 @@ koris clean --all --force     # Remove everything (no confirmation)
 ### Uninstall
 
 ```bash
-koris.sh install --uninstall
-# or manually:
-docker compose down -v --remove-orphans
-rm -rf /opt/koris /etc/koris /usr/local/bin/koris
+# Remove the stack and data:
+docker compose -f /opt/koris-src/docker-compose.yml down -v --remove-orphans
+rm -rf /opt/koris /opt/koris-src /usr/local/bin/koris
 ```
 
 ### Troubleshooting

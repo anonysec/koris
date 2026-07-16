@@ -49,20 +49,25 @@ docker compose --profile redis   up -d       # optional: shared Redis cache/queu
 docker compose --profile pgadmin  up -d       # optional: pgAdmin UI (binds localhost)
 ```
 
-Then open `https://<host>:2026/admin/` and complete first-run setup. → full details in [docs/installation.md](docs/installation.md).
+Then open the panel. The **default install serves HTTP on `127.0.0.1:2096`** (loopback only, not public). To expose HTTPS run `koris cert selfsign|letsencrypt|path`, then republish the port on `0.0.0.0`. → full details in [docs/installation.md](docs/installation.md).
 
 <details>
-<summary>⚙️ Non-interactive installer flags</summary>
+<summary>⚙️ Install & manage</summary>
 
 ```bash
-koris.sh install --full                       # Full edition (default)
-koris.sh install --lite                       # Lite edition
-koris.sh install --port=2026                  # Custom HTTPS port
-koris.sh install --domain=panel.example.com   # Public domain (enables ACME TLS)
-koris.sh install --no-knode                   # Skip bundling the knode agent
-```
-</details>
+# Install (curl-pipeable, no flags → uses defaults):
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)
 
+# All management is done through the `koris` binary (host wrapper installed by install.sh):
+koris status                                  # panel status
+koris cert selfsign                           # install a self-signed cert (HTTPS)
+koris cert letsencrypt --domain=panel.example.com   # Let's Encrypt
+koris cert path --cert=/p/cert.pem --key=/p/key.pem # your own cert
+koris start | stop | restart                  # stack lifecycle (docker compose)
+koris logs                                    # follow container logs
+```
+
+</details>
 ### 📥 Pre-built binary (no Docker)
 
 ```bash

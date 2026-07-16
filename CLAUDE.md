@@ -76,13 +76,15 @@ When modifying shared features, keep both the `_full.go` and `_lite.go` counterp
 
 `.env.example` is fully commented (`#KEY=default` per line); copy to `.env` and uncomment to override. The live `.env` keeps most lines commented — only compose-required vars, the persistent Postgres credentials, and the knode pairing key stay active (changing those breaks the running DB/node).
 
-## Docker & koris.sh
+## Docker & install.sh
 
 Docker is the **primary, supported deployment**. `docker-compose.yml` brings up the panel + TimescaleDB + pgAdmin (optional `redis` and `pgadmin` profiles).
 
-`koris.sh` is the **single operations script** (the old `install.sh`/`helpers.sh`/`koris.sh` were merged into it). Subcommands: `install`, `start`, `stop`, `restart`, `status`, `logs`, `follow`, `update`, `config`, `uninstall`, `clean`, `admin` (`list`/`passwd`/`create` — runs the panel binary against the DB directly, so it works even when the panel is stopped or you are locked out), `db` (`backup`/`restore`/`migrate`/`reset`/`shell`/`status`), `pgadmin` (`status`/`enable`/`disable`/`url`/`reset-password`/`port`), `reinstall`, `downgrade`, `enable`, `disable`, `node-status`, `node-restart`, `node-logs`, `help`.
+`install.sh` is a small **curl-pipeable installer** (`bash <(curl -Ls https://raw.githubusercontent.com/anonysec/koris/main/install.sh)`). It clones the koris + knode sources, creates `KORIS_HOME` (`/opt/koris`), generates `.env` files, deploys the stack, and installs a host `koris` wrapper. **All management is done through the `koris` binary** (subcommands live in `internal/cli/`): `status`, `nodes`, `users`, `admin`, `cert` (`selfsign`/`letsencrypt`/`path`), `logs`, `update`, etc. The host wrapper also maps `koris start|stop|restart|logs|status` to `docker compose`.
 
-Install flags of note: `--port=`, `--home=DIR` (KORIS_HOME), `--domain=`, `--ssl=domain|ip|custom|selfsigned`, `--ssl-target=`, `--cert-path=`, `--key-path=`, `--lite`/`--full`, `--no-knode`, `--from-source`/`--from-release`, `--reinstall`. **Native (non-Docker) install was removed** — Docker only.
+Default install = plaintext HTTP on `127.0.0.1` only (loopback, not public). Install a cert to expose HTTPS: `koris cert selfsign|letsencrypt|path`.
+
+Install knobs (env vars, not flags): `KORIS_SRC`, `KORIS_HOME`, `KORIS_REPO`, `KNODE_REPO`.
 
 ## Running locally (no Docker)
 
