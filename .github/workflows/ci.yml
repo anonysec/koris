@@ -68,7 +68,7 @@ jobs:
     needs: [frontend]
     services:
       postgres:
-        image: postgres:16-alpine
+        image: timescale/timescaledb:16
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
