@@ -41,8 +41,7 @@ func newTestPostgresStore(t *testing.T) *Store {
 			node_metrics_history,
 			user_traffic_log,
 			customers,
-			vpn_certificates,
-			test_items
+			vpn_certificates
 		RESTART IDENTITY CASCADE
 	`)
 	if err != nil {
