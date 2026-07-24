@@ -20,7 +20,7 @@ Manage your **entire VPN infrastructure** — nodes, customers, subscriptions, p
 ## ✨ Highlights
 
 - 🔌 **6 VPN protocols** — OpenVPN, WireGuard, L2TP/IPsec, IKEv2, SSH Tunnel, MTProto
-- 🌐 **Multi-node fleet** — unlimited [knode](https://github.com/anonysec/knode) agents over gRPC + mTLS
+- 🌐 **Multi-node fleet** — unlimited [knode](https://github.com/anonysec/knode) agents (deployed alongside nodes) over gRPC + mTLS
 - 💳 **Billing built-in** — plans, wallets, invoices, crypto & gateway payments
 - 🧑‍💼 **Reseller system** — sub-accounts, credit allocation, customer provisioning
 - 📊 **Real-time metrics** — live streaming, health checks, bandwidth accounting
