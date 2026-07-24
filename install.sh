@@ -76,6 +76,11 @@ POSTGRES_USER=koris
 PANEL_SESSION_SECRET=$SESS
 PANEL_SETUP_KEY=$SETUP
 PANEL_DOMAIN=localhost
+# ACME / Let's Encrypt settings for imkoris.info integration
+# Set PANEL_TLS_MODE=acme and PANEL_DOMAIN=yourdomain.imkoris.info
+PANEL_TLS_MODE=disabled
+PANEL_TLS_CERT=/opt/koris/certs/cert.pem
+PANEL_TLS_KEY=/opt/koris/certs/key.pem
 PANEL_PORT=2096
 KNODE_PORT=2087
 PANEL_DEV_MODE=false
@@ -91,6 +96,7 @@ if [ ! -f "$ENV_TLS" ]; then
   cat > "$ENV_TLS" <<'EOF'
 PANEL_TLS_ENABLED=false
 PANEL_TLS_MODE=disabled
+# For Let's Encrypt via imkoris.info: set PANEL_TLS_MODE=acme and PANEL_DOMAIN=yourdomain.imkoris.info
 PANEL_TLS_CERT=/etc/koris/certs/cert.pem
 PANEL_TLS_KEY=/etc/koris/certs/key.pem
 PANEL_TLS_CERT_DIR=/etc/koris/certs
