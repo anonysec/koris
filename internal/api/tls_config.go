@@ -3,7 +3,8 @@ package api
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
+	"errors"
+	"os"
 )
 
 // TLSCertificates holds loaded server certificate material.
@@ -23,7 +24,7 @@ func LoadTLSCertificates(certPath, keyPath, caPath string) (*TLSCertificates, er
 	}
 	pool := x509.NewCertPool()
 	if caPath != "" {
-		ca, err := ioutil.ReadFile(caPath)
+		ca, err := os.ReadFile(caPath)
 		if err != nil {
 			return nil, err
 		}
@@ -54,5 +55,5 @@ func (c *TLSCertificates) ToTLSConfig() *tls.Config {
 }
 
 var (
-	ErrInvalidCA = &HTTPError{Code: 500, Message: "invalid CA certificate"}
+	ErrInvalidCA = errors.New("invalid CA certificate")
 )
